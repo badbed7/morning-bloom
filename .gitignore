@@ -1,0 +1,38 @@
+# Godot 4 generated cache and editor state.
+# Keep project.godot, *.tscn, *.tres, *.gd.uid and asset *.import files tracked.
+.godot/
+
+# Build/export output. Keep export_presets.cfg tracked when presets are added.
+/build/
+/builds/
+/exports/
+/dist/
+/*.exe
+/*.pck
+export_credentials.cfg
+
+# Local editor configuration.
+.idea/
+.vs/
+.vscode/
+
+# Credentials and local environment. Safe examples may be committed.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Runtime saves normally live in user://; exclude accidental root copies.
+/garden.json
+/garden.json.bak
+/demo-garden.json
+/demo-garden.json.bak
+
+# Logs, temporary documents, and operating-system files.
+*.tmp
+*.log
+~$*
+.DS_Store
+Thumbs.db
+Desktop.ini

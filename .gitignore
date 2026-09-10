@@ -36,3 +36,12 @@ export_credentials.cfg
 .DS_Store
 Thumbs.db
 Desktop.ini
+
+# Python prototype
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/

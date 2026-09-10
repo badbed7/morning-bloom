@@ -4,7 +4,9 @@
 
 **목표: Python + PySide6 / 2D 전용 / Windows 우선**
 
-현재 코드는 Godot 4.7.2 / GDScript 기반 v0.1 시제품입니다. Python 버전은 아직 구현되지 않았습니다. 아래 실행·테스트 안내는 기존 시제품에 해당합니다.
+**Python 초안 구현 완료:** 루트의 `run-python.bat`으로 실행하세요. [Python 실행 방법·구현 상태](python/README.md)를 확인하세요.
+
+아래 Godot 실행·테스트 안내는 보존된 이전 시제품에 해당합니다.
 
 ## 실행
 

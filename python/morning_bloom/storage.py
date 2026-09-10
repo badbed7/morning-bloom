@@ -1,10 +1,31 @@
 """Atomic saves; malformed or future-version files are never overwritten."""
 import json
 import os
+from copy import deepcopy
 from pathlib import Path
 from .model import Garden
+from .plant_catalog import PLANTS
 
 class SaveError(Exception): pass
+
+
+def migrate(data):
+    """Return current-schema data without mutating the source document."""
+    if not isinstance(data, dict):
+        return data
+    migrated = deepcopy(data)
+    schema = migrated.get('schema')
+    if type(schema) is not int:
+        return migrated
+    if schema == 1:
+        legacy_seeds = migrated.pop('seeds', 0)
+        migrated.update(
+            schema=2,
+            species='daisy' if migrated.get('planted') else None,
+            mist_progress=0,
+            seeds={key: legacy_seeds if key == 'daisy' else 0 for key in PLANTS},
+        )
+    return migrated
 
 class Store:
     def __init__(self, path):
@@ -18,10 +39,14 @@ class Store:
         for path in (self.path, self.backup):
             try:
                 data = json.loads(path.read_text(encoding='utf-8'))
-                if isinstance(data, dict) and type(data.get('schema')) in (int, float) and data['schema'] > 1:
+                if (
+                    isinstance(data, dict)
+                    and type(data.get('schema')) in (int, float)
+                    and data['schema'] > Garden.CURRENT_SCHEMA
+                ):
                     self.blocked = True
                     raise SaveError('새 버전의 저장 파일입니다. 원본을 보존하고 앱을 업데이트하세요.')
-                state = Garden.from_dict(data)
+                state = Garden.from_dict(migrate(data))
                 if path == self.backup: self.notice = '직전 정상 백업에서 복구했습니다.'
                 return state
             except (OSError, ValueError, TypeError):
@@ -38,7 +63,7 @@ class Store:
             if self.path.exists():
                 try:
                     old = self.path.read_text(encoding='utf-8')
-                    Garden.from_dict(json.loads(old))
+                    Garden.from_dict(migrate(json.loads(old)))
                 except (ValueError, TypeError): pass
                 else: self._atomic(self.backup, old)
             self._atomic(self.path, json.dumps(state.to_dict(), ensure_ascii=False, indent=2))

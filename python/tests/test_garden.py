@@ -13,7 +13,7 @@ class Rules(unittest.TestCase):
         self.assertFalse(g.harvest(159))
         self.assertTrue(g.harvest(160))
         self.assertFalse(g.harvest(160))
-        self.assertEqual(g.seeds, 1)
+        self.assertEqual(g.seeds['daisy'], 1)
         self.assertTrue(g.sell())
         self.assertFalse(g.sell())
         self.assertEqual(g.coins, 170)
@@ -60,10 +60,32 @@ class Rules(unittest.TestCase):
         self.assertEqual(g.water_due, 100 + 12 * DAY)
 
     def test_validation(self):
-        for key, value in [('coins', True), ('duration', 0), ('growth', float('nan')), ('seeds', -1), ('schema', 2)]:
+        for key, value in [('coins', True), ('duration', 0), ('growth', float('nan')), ('seeds', -1), ('schema', 3)]:
             data = Garden(100).to_dict()
             data[key] = value
             with self.assertRaises(ValueError): Garden.from_dict(data)
+
+    def test_tulip_uses_catalog_growth_and_prices(self):
+        g = Garden(100, tutorial_used=True, seeds={'daisy': 0, 'tulip': 1})
+        self.assertTrue(g.plant(100, 'tulip'))
+        self.assertEqual(g.duration, 2 * DAY)
+        self.assertEqual(g.species, 'tulip')
+        g.advance(100 + 2 * DAY)
+        self.assertTrue(g.harvest(100 + 2 * DAY))
+        self.assertEqual(g.collection[-1]['species'], 'tulip')
+        self.assertTrue(g.sell())
+        self.assertEqual(g.coins, 220)
+
+    def test_seed_is_bought_at_species_price_when_inventory_is_empty(self):
+        g = Garden(100, tutorial_used=True, seeds={'daisy': 0, 'tulip': 0})
+        self.assertTrue(g.plant(100, 'tulip'))
+        self.assertEqual(g.coins, 85)
+        self.assertFalse(g.plant(100, 'daisy'))
+
+    def test_first_tutorial_plant_must_be_daisy(self):
+        g = Garden(100, seeds={'daisy': 1, 'tulip': 1})
+        self.assertFalse(g.plant(100, 'tulip'))
+        self.assertTrue(g.plant(100, 'daisy'))
 
 class Saving(unittest.TestCase):
     def test_roundtrip_backup_recovery_and_preservation(self):
@@ -87,9 +109,39 @@ class Saving(unittest.TestCase):
             g = Garden(100)
             store.save(g)
             store.save(g)
-            store.path.write_text('{"schema": 2}')
+            store.path.write_text('{"schema": 3}')
             with self.assertRaises(SaveError): store.load(100)
             with self.assertRaises(SaveError): store.save(g)
+            self.assertEqual(json.loads(store.path.read_text())['schema'], 3)
+
+    def test_schema_one_save_is_migrated_without_data_loss(self):
+        legacy = {
+            'last_update': 100,
+            'schema': 1,
+            'planted': True,
+            'growth': 20,
+            'duration': DAY,
+            'water_due': 1000,
+            'mist_due': 1000,
+            'tutorial_used': True,
+            'coins': 145,
+            'seeds': 2,
+            'collection': [
+                {'id': 'legacy-flower', 'species': 'daisy', 'harvested_at': 90}
+            ],
+            'vacation': False,
+            'settings': {'opacity': .8, 'topmost': True, 'x': 10, 'y': 20},
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Store(Path(tmp) / 'garden.json')
+            store.path.write_text(json.dumps(legacy), encoding='utf-8')
+            migrated = store.load(100)
+            self.assertEqual(migrated.schema, 2)
+            self.assertEqual(migrated.species, 'daisy')
+            self.assertEqual(migrated.seeds, {'daisy': 2, 'tulip': 0})
+            self.assertEqual(migrated.coins, 145)
+            self.assertEqual(migrated.collection[0]['id'], 'legacy-flower')
+            store.save(migrated)
             self.assertEqual(json.loads(store.path.read_text())['schema'], 2)
 
     def test_both_corrupt_block_writes(self):

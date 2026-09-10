@@ -47,3 +47,4 @@ __pycache__/
 *.egg-info/
 
 .venv-py312/
+.venv-py311/

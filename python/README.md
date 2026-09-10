@@ -4,19 +4,25 @@ Python 3.11~3.12와 PySide6 6.8.3을 사용하는 2D 데스크톱 시제품입�
 
 ## Windows 실행
 
-1. Python 3.12를 설치합니다(Python Launcher 포함).
+1. Python 3.12 **64비트**를 설치합니다(Python Launcher 포함). 다른 Python 버전과 함께 설치해도 됩니다.
 2. 저장소 전체를 다운로드하고 압축을 풉니다.
 3. 루트의 `run-python.bat`을 더블클릭합니다. 첫 실행은 가상환경과 의존성을 설치하므로 인터넷이 필요합니다.
+
+실행 파일은 Python 3.12를 명시적으로 선택하고 `.venv-py312` 환경을 검사합니다. 이전 `.venv`는 사용하거나 삭제하지 않습니다.
+
+### PySide6 설치 오류가 발생했다면
+
+`PySide6==6.8.3`은 Python 3.14 이상을 지원하지 않습니다. 기존 실행 파일의 `py -3`이 최신 Python을 선택해 발생할 수 있습니다. Python 3.12 64비트를 설치하고 최신 `run-python.bat`으로 다시 실행하세요. pip 업데이트만으로는 해결되지 않습니다. `py -0p`로 설치된 Python을 확인할 수 있습니다.
 
 직접 실행할 수도 있습니다.
 
 ```powershell
 cd python
-py -3.12 -m venv .venv
-.venv\Scripts\python.exe -m pip install -r requirements.txt
-.venv\Scripts\python.exe -m morning_bloom
+py -3.12 -m venv .venv-py312
+.venv-py312\Scripts\python.exe -m pip install -r requirements.txt
+.venv-py312\Scripts\python.exe -m morning_bloom
 # 독립 저장 + 6시간 가속 버튼
-.venv\Scripts\python.exe -m morning_bloom --demo
+.venv-py312\Scripts\python.exe -m morning_bloom --demo
 ```
 
 ## 구현 범위
@@ -43,7 +49,7 @@ Qt의 `AppLocalDataLocation` 아래 `MorningBloomPython` 앱 폴더를 사용합
 ```powershell
 cd python
 $env:QT_QPA_PLATFORM = 'offscreen'
-.venv\Scripts\python.exe -m unittest discover -s tests -v
+.venv-py312\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
 2026-09-10 Linux에서 상태·저장 테스트 9개와 실제 Qt 버튼을 누르는 UI 통합 테스트 1개가 통과했습니다. 오프스크린 화면 렌더링도 확인했습니다. Windows의 실제 창 이동·최상단·불투명도·배율·다중 모니터와 배치 실행은 현지 수동 검증이 필요합니다. CI는 Windows/Python 3.12로 같은 테스트를 실행하도록 추가했습니다.

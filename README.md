@@ -2,7 +2,9 @@
 
 하루 1~3분, 바탕화면 한쪽의 꽃을 돌보는 PC 힐링 육성 게임.
 
-**Godot 4.7.2 / GDScript / Windows 우선 / 1인 개발용 v0.1 시제품**
+**목표: Python + PySide6 / 2D 전용 / Windows 우선**
+
+현재 코드는 Godot 4.7.2 / GDScript 기반 v0.1 시제품입니다. Python 버전은 아직 구현되지 않았습니다. 아래 실행·테스트 안내는 기존 시제품에 해당합니다.
 
 ## 실행
 
@@ -61,13 +63,9 @@ godot --headless --path . --script tests/ui_smoke.gd -- --demo
 
 원본 기획: [꽃 키우기 프로젝트](https://app.notion.com/p/32ca1215692880a58ae2ee9d85ed96a1).
 
-## GitHub 저장소 생성·업로드
+## 저장소
 
-현재 연결의 새 저장소 생성 기능이 없어 자동 업로드는 완료되지 않았습니다. 로컬 작업은 커밋 준비가 끝난 상태입니다.
-
-Git과 [GitHub CLI](https://cli.github.com/)가 설치된 Windows에서는 `gh auth login`으로 `badbed7` 계정에 로그인한 뒤 `publish-github.ps1`을 실행할 수 있습니다. 스크립트는 계정을 확인한 후 **새 비공개 `badbed7/morning-bloom` 저장소**를 만들고 업로드합니다. 기존 저장소·origin이 있으면 자동 변경하지 않고 멈춥니다. 스크립트는 이 환경에서 실행하지 않았습니다.
-
-직접 빈 저장소를 만든 뒤 Codex에 링크를 전달해 이어서 업로드할 수도 있습니다.
+기획서와 초기 시제품은 `badbed7/morning-bloom`에 저장되어 있습니다.
 
 ## 저작물
 

@@ -75,3 +75,8 @@ godot --headless --path . --script tests/ui_smoke.gd -- --demo
 
 
 최신 Python 기능: [상점·가방·화분 2개](python/README.md). 후속 기획: [꽃별 성장 시간과 가격 차별화](docs/next-proposals.ko.md).
+
+
+## Windows 실행 파일과 업데이트
+
+Python 설치 없이 실행하는 배포본은 Releases에 게시합니다. [자동 업데이트·배포 채널 설정](release/README.md)을 확인하세요. 소스 저장소는 비공개이며 일반 사용자용 자동 업데이트는 공개 배포 저장소 연결이 필요합니다.

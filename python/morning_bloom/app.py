@@ -516,7 +516,8 @@ def main():
     args = parser.parse_args()
     app = QApplication(sys.argv[:1])
     app.setApplicationName('MorningBloomPython')
-    font = Path(__file__).resolve().parents[2] / 'assets/fonts/NotoSansKR-Subset.otf'
+    asset_root = Path(sys._MEIPASS) if getattr(sys, 'frozen', False) else Path(__file__).resolve().parents[2]
+    font = asset_root / 'assets/fonts/NotoSansKR-Subset.otf'
     if font.exists():
         font_id = QFontDatabase.addApplicationFont(str(font))
         families = QFontDatabase.applicationFontFamilies(font_id)
@@ -540,4 +541,5 @@ def main():
         window.offset = max(0, garden.last_update - time.time())
     window.show()
     return app.exec()
+
 

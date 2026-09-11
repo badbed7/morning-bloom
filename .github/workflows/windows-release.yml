@@ -1,0 +1,80 @@
+name: Windows release
+on:
+  push:
+    branches: [main]
+    paths: ['release/VERSION']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: windows-release
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          architecture: x64
+      - name: Install build dependencies
+        run: python -m pip install -r python/requirements.txt -r release/requirements-build.txt
+      - name: Test game
+        run: python -m unittest discover -s python/tests -v
+        env:
+          PYTHONPATH: python
+          QT_QPA_PLATFORM: offscreen
+      - name: Test updater
+        run: python -m unittest discover -s release/tests -v
+        env:
+          PYTHONPATH: release
+      - name: Build and test native executables
+        run: python release/build_windows.py
+        env:
+          BLOOM_RELEASE_REPO: ${{ vars.BLOOM_RELEASE_REPO || 'badbed7/morning-bloom-releases' }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MorningBloom-Windows
+          path: release-output/*
+          retention-days: 14
+      - name: Publish release in source repository
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_COMMIT: ${{ github.sha }}
+        run: |
+          $version = (Get-Content release/VERSION -Raw).Trim()
+          $tag = "v$version"
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -eq 0) { throw "Release already exists. Bump release/VERSION; existing releases are never overwritten." }
+          gh release create $tag --target $env:RELEASE_COMMIT --title "Morning Bloom $version" --notes-file release-output/release-notes.md --draft
+          if ($LASTEXITCODE -ne 0) { throw 'Could not create release' }
+          gh release upload $tag release-output/*.zip release-output/update.json
+          if ($LASTEXITCODE -ne 0) { throw 'Could not upload release assets' }
+          gh release edit $tag --draft=false --latest
+          if ($LASTEXITCODE -ne 0) { throw 'Could not publish release' }
+      - name: Publish binary-only public distribution when connected
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.BLOOM_RELEASE_TOKEN }}
+          GH_REPO: ${{ vars.BLOOM_RELEASE_REPO || 'badbed7/morning-bloom-releases' }}
+        run: |
+          if (-not $env:GH_TOKEN) {
+            'Public distribution is not connected. Private release and build artifacts are ready.' >> $env:GITHUB_STEP_SUMMARY
+            exit 0
+          }
+          $version = (Get-Content release/VERSION -Raw).Trim()
+          $tag = "v$version"
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -eq 0) { throw 'Public release already exists; do not overwrite' }
+          gh release create $tag --title "Morning Bloom $version" --notes-file release-output/release-notes.md --draft
+          if ($LASTEXITCODE -ne 0) { throw 'Could not create public release' }
+          gh release upload $tag release-output/*.zip release-output/update.json
+          if ($LASTEXITCODE -ne 0) { throw 'Could not upload public assets' }
+          gh release edit $tag --draft=false --latest
+          if ($LASTEXITCODE -ne 0) { throw 'Could not publish public release' }

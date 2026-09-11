@@ -27,7 +27,7 @@ def main():
     (ROOT / 'release/release_config.py').write_text(f'REPOSITORY = {repo!r}\n')
     common = [sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean', '--windowed', '--distpath', 'dist', '--workpath', 'build', '--specpath', 'build']
     run(*common, '--onedir', '--name', 'MorningBloomGame', '--paths', 'python',
-        '--add-data', 'assets/fonts:assets/fonts', 'release/game_entry.py')
+        '--add-data', str(ROOT / 'assets/fonts') + ';assets/fonts', 'release/game_entry.py')
     run(*common, '--onefile', '--name', 'MorningBloom', '--paths', 'release', 'release/launcher.py')
     game = ROOT / 'dist/MorningBloomGame'
     licenses = game / 'licenses'
@@ -66,6 +66,7 @@ def main():
         'Updates are checked on launch. Offline mode uses the installed game.\n'
         'Update feed: https://github.com/' + repo + '/releases\n'
         'This prototype uses HTTPS and SHA-256 integrity checks; executables are not Authenticode signed.\n', encoding='utf-8')
+    run(bootstrap / 'MorningBloom.exe', '--verify-bundle')
     zip_folder(bootstrap, output / f'MorningBloom-{release_version}-Windows-x64.zip')
     (output / 'release-notes.md').write_text(
         f'Morning Bloom {release_version}\n\nDownload the Windows-x64 ZIP, extract all files and run MorningBloom.exe.\n'

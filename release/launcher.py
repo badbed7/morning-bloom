@@ -63,6 +63,13 @@ def main():
     if '--self-test' in sys.argv:
         version('0.3.0')
         return 0
+    if '--verify-bundle' in sys.argv:
+        bundle = Path(sys.executable).parent
+        with tempfile.TemporaryDirectory() as temp:
+            installer = Installer(temp)
+            data = manifest(json.loads((bundle / 'bundled-update.json').read_text()), REPOSITORY)
+            installer.install(bundle / 'MorningBloom-game.zip', data, health_check)
+        return 0
     root = tk.Tk()
     root.title('Morning Bloom')
     root.geometry('400x120')

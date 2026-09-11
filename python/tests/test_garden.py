@@ -60,9 +60,10 @@ class Rules(unittest.TestCase):
         self.assertEqual(g.water_due, 100 + 12 * DAY)
 
     def test_validation(self):
-        for key, value in [('coins', True), ('duration', 0), ('growth', float('nan')), ('seeds', -1), ('schema', 3)]:
+        for key, value in [('coins', True), ('duration', 0), ('growth', float('nan')), ('seeds', -1), ('schema', 4)]:
             data = Garden(100).to_dict()
-            data[key] = value
+            if key in ('duration', 'growth'): data['pots'][0][key] = value
+            else: data[key] = value
             with self.assertRaises(ValueError): Garden.from_dict(data)
 
     def test_tulip_uses_catalog_growth_and_prices(self):
@@ -76,8 +77,11 @@ class Rules(unittest.TestCase):
         self.assertTrue(g.sell())
         self.assertEqual(g.coins, 220)
 
-    def test_seed_is_bought_at_species_price_when_inventory_is_empty(self):
+    def test_seed_is_bought_explicitly_at_species_price(self):
         g = Garden(100, tutorial_used=True, seeds={'daisy': 0, 'tulip': 0})
+        self.assertFalse(g.plant(100, 'tulip'))
+        self.assertEqual(g.coins, 120)
+        self.assertTrue(g.buy_seed('tulip'))
         self.assertTrue(g.plant(100, 'tulip'))
         self.assertEqual(g.coins, 85)
         self.assertFalse(g.plant(100, 'daisy'))
@@ -109,10 +113,10 @@ class Saving(unittest.TestCase):
             g = Garden(100)
             store.save(g)
             store.save(g)
-            store.path.write_text('{"schema": 3}')
+            store.path.write_text('{"schema": 4}')
             with self.assertRaises(SaveError): store.load(100)
             with self.assertRaises(SaveError): store.save(g)
-            self.assertEqual(json.loads(store.path.read_text())['schema'], 3)
+            self.assertEqual(json.loads(store.path.read_text())['schema'], 4)
 
     def test_schema_one_save_is_migrated_without_data_loss(self):
         legacy = {
@@ -136,13 +140,13 @@ class Saving(unittest.TestCase):
             store = Store(Path(tmp) / 'garden.json')
             store.path.write_text(json.dumps(legacy), encoding='utf-8')
             migrated = store.load(100)
-            self.assertEqual(migrated.schema, 2)
+            self.assertEqual(migrated.schema, 3)
             self.assertEqual(migrated.species, 'daisy')
             self.assertEqual(migrated.seeds, {'daisy': 2, 'tulip': 0})
             self.assertEqual(migrated.coins, 145)
             self.assertEqual(migrated.collection[0]['id'], 'legacy-flower')
             store.save(migrated)
-            self.assertEqual(json.loads(store.path.read_text())['schema'], 2)
+            self.assertEqual(json.loads(store.path.read_text())['schema'], 3)
 
     def test_both_corrupt_block_writes(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -152,3 +156,4 @@ class Saving(unittest.TestCase):
             with self.assertRaises(SaveError): store.save(Garden(100))
 
 if __name__ == '__main__': unittest.main()
+

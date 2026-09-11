@@ -3,7 +3,7 @@ import json
 import os
 from copy import deepcopy
 from pathlib import Path
-from .model import Garden
+from .model import Garden, SingleGarden, POT_FIELDS
 from .plant_catalog import PLANTS
 
 class SaveError(Exception): pass
@@ -25,6 +25,10 @@ def migrate(data):
             mist_progress=0,
             seeds={key: legacy_seeds if key == 'daisy' else 0 for key in PLANTS},
         )
+    if migrated.get('schema') == 2:
+        SingleGarden.from_dict(migrated)
+        pot = {key: migrated.pop(key) for key in POT_FIELDS}
+        migrated.update(schema=3, pots=[pot], selected=0)
     return migrated
 
 class Store:
@@ -77,3 +81,4 @@ class Store:
             f.flush()
             os.fsync(f.fileno())
         os.replace(tmp, path)
+

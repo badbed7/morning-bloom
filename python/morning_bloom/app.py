@@ -10,6 +10,8 @@ from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
     QComboBox,
+    QListWidget,
+    QListWidgetItem,
     QHBoxLayout,
     QLabel,
     QMessageBox,
@@ -32,7 +34,8 @@ class Flower(QWidget):
         self.garden = garden
         self.phase = 0
         self.drops = 0
-        self.setMinimumHeight(118)
+        self.setMinimumHeight(0)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Ignored)
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.animate)
         self.timer.start(50)
@@ -45,7 +48,9 @@ class Flower(QWidget):
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
-        painter.scale(self.width() / 380, self.height() / 180)
+        scale = min(self.width() / 380, self.height() / 180)
+        painter.translate((self.width() - 380 * scale) / 2, 0)
+        painter.scale(scale, scale)
         painter.setPen(Qt.NoPen)
         painter.setBrush(QColor('#e8efdf'))
         painter.drawEllipse(QRectF(75, 144, 230, 24))
@@ -174,6 +179,10 @@ class Window(QWidget):
         self.title.mousePressEvent = self.drag
         top.addWidget(self.title)
         top.addStretch()
+        self.navigation = QComboBox()
+        self.navigation.addItems(['화분', '설정', '상점', '가방'])
+        self.navigation.currentIndexChanged.connect(lambda index: self.pages.setCurrentIndex(index))
+        top.addWidget(self.navigation)
         close = QPushButton('X')
         close.setFixedSize(34, 30)
         close.clicked.connect(self.close)
@@ -184,12 +193,18 @@ class Window(QWidget):
         root.addWidget(self.pages, 1)
         self._build_garden_page()
         self._build_settings_page()
+        self._build_shop_page()
+        self._build_bag_page()
+        self.pages.currentChanged.connect(self.navigation.setCurrentIndex)
 
     def _build_garden_page(self):
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
+        self.pot_picker = QComboBox()
+        self.pot_picker.currentIndexChanged.connect(lambda index: self.act(lambda: self.garden.select(index)))
+        layout.addWidget(self.pot_picker)
         self.flower = Flower(self.garden)
         layout.addWidget(self.flower, 1)
         self.status = QLabel()
@@ -228,7 +243,7 @@ class Window(QWidget):
         self.inventory.setMinimumWidth(0)
         self.inventory.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         row.addWidget(self.inventory, 1)
-        self.sell_button = self.button(row, '꽃 판매', self.garden.sell)
+        self.button(row, '가방', lambda: self.pages.setCurrentIndex(3))
         settings = self.button(row, '설정', lambda: self.pages.setCurrentIndex(1))
         settings.setFixedWidth(48)
         if self.demo:
@@ -289,6 +304,61 @@ class Window(QWidget):
         back.clicked.connect(lambda: self.pages.setCurrentIndex(0))
         layout.addWidget(back)
         self.pages.addWidget(page)
+
+    def _build_shop_page(self):
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        self.shop_wallet = QLabel()
+        layout.addWidget(self.shop_wallet)
+        self.shop_picker = QComboBox()
+        for item in PLANTS.values(): self.shop_picker.addItem(item.name, item.key)
+        layout.addWidget(self.shop_picker)
+        self.shop_info = QLabel()
+        layout.addWidget(self.shop_info)
+        self.buy_seed_button = self.button(layout, '씨앗 구매', lambda: self.garden.buy_seed(self.shop_picker.currentData()))
+        layout.addWidget(QLabel('화분 확장 · 씨앗은 별도 구매'))
+        self.buy_pot_button = self.button(layout, '두 번째 화분 구매 · 150G', self.garden.buy_pot)
+        layout.addStretch()
+        self.pages.addWidget(page)
+        self.shop_picker.currentIndexChanged.connect(self.refresh)
+
+    def _build_bag_page(self):
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setSpacing(4)
+        self.bag_seed_info = QLabel()
+        self.bag_seed_info.setWordWrap(True)
+        layout.addWidget(self.bag_seed_info)
+        row = QHBoxLayout()
+        self.bag_picker = QComboBox()
+        for item in PLANTS.values(): self.bag_picker.addItem(item.name, item.key)
+        row.addWidget(self.bag_picker)
+        self.bag_plant_button = self.button(row, '선택 화분에 심기', self.plant_from_bag)
+        layout.addLayout(row)
+        self.bag_list = QListWidget()
+        layout.addWidget(self.bag_list, 1)
+        self.sell_button = self.button(layout, '꽃을 선택하세요', self.sell_selected)
+        self.bag_list.itemSelectionChanged.connect(self.update_sell_button)
+        self.bag_picker.currentIndexChanged.connect(self.refresh)
+        self.pages.addWidget(page)
+
+    def update_sell_button(self):
+        row = self.bag_list.currentItem()
+        self.sell_button.setEnabled(row is not None)
+        if row:
+            item = next((item for item in self.garden.collection if item['id'] == row.data(Qt.UserRole)), None)
+            self.sell_button.setText(f"선택한 꽃 판매 · {plant_definition(item['species']).sale_price}G" if item else '꽃을 선택하세요')
+        else:
+            self.sell_button.setText('판매할 꽃을 선택하세요')
+
+    def sell_selected(self):
+        row = self.bag_list.currentItem()
+        return self.garden.sell(row.data(Qt.UserRole)) if row else False
+
+    def plant_from_bag(self):
+        result = self.garden.plant(self.now(), self.bag_picker.currentData())
+        if result: self.pages.setCurrentIndex(0)
+        return result
 
     def _place_window(self):
         position = QPointF(self.garden.settings['x'], self.garden.settings['y']).toPoint()
@@ -365,7 +435,7 @@ class Window(QWidget):
         selected = self.species_picker.currentData()
         definition = plant_definition(selected)
         count = garden.seed_count(selected)
-        self.plant_button.setText('씨앗 심기' if count else f'구매해 심기 · {definition.seed_price}G')
+        self.plant_button.setText('씨앗 심기' if count else '씨앗 없음')
         self.plant_button.setEnabled(garden.can_plant(selected))
         self.species_picker.setEnabled(not garden.planted and not garden.vacation)
         for button in (self.water_button, self.mist_button):
@@ -376,12 +446,38 @@ class Window(QWidget):
         self.inventory.setText(f'{garden.coins}G · 씨앗 {seed_total} · 꽃 {len(garden.collection)}')
         seeds = ' / '.join(f'{item.name} {garden.seed_count(key)}' for key, item in PLANTS.items())
         self.inventory.setToolTip(f'씨앗 {seeds} · 보관 꽃 {len(garden.collection)}')
-        if garden.collection:
-            last = plant_definition(garden.collection[-1]['species'])
-            self.sell_button.setText(f'판매 {last.sale_price}G')
-        else:
-            self.sell_button.setText('꽃 판매')
-        self.sell_button.setEnabled(bool(garden.collection))
+        self.pot_picker.blockSignals(True)
+        self.pot_picker.clear()
+        garden._save_active()
+        for i, pot in enumerate(garden.pots):
+            name = plant_definition(pot['species']).name if pot['species'] else '빈 화분'
+            self.pot_picker.addItem(f'화분 {i + 1} · {name}')
+        self.pot_picker.setCurrentIndex(garden.selected)
+        self.pot_picker.blockSignals(False)
+        self.shop_wallet.setText(f'보유 {garden.coins}G · 화분 {len(garden.pots)}/2개')
+        species = self.shop_picker.currentData()
+        item = plant_definition(species)
+        self.shop_info.setText(f'성장 {item.growth_seconds // 3600}시간 · 판매 {item.sale_price}G')
+        self.buy_seed_button.setText(f'{item.name} 씨앗 구매 · {item.seed_price}G')
+        self.buy_seed_button.setEnabled(garden.coins >= item.seed_price)
+        self.buy_pot_button.setEnabled(len(garden.pots) < 2 and garden.coins >= 150)
+        self.buy_pot_button.setText('두 번째 화분 보유 중' if len(garden.pots) == 2 else '두 번째 화분 구매 · 150G')
+        self.bag_seed_info.setText(f'{seeds} · 화분 {garden.selected + 1} 선택 중')
+        self.bag_plant_button.setEnabled(garden.can_plant(self.bag_picker.currentData()))
+        ids = [item['id'] for item in garden.collection]
+        existing = [self.bag_list.item(i).data(Qt.UserRole) for i in range(self.bag_list.count())]
+        if ids != existing:
+            current = self.bag_list.currentItem()
+            selected_id = current.data(Qt.UserRole) if current else None
+            self.bag_list.clear()
+            for i, item in enumerate(garden.collection):
+                definition = plant_definition(item['species'])
+                row = QListWidgetItem(f'{definition.name} {i + 1} · {definition.sale_price}G')
+                row.setData(Qt.UserRole, item['id'])
+                self.bag_list.addItem(row)
+                if item['id'] == selected_id:
+                    self.bag_list.setCurrentItem(row)
+        self.update_sell_button()
         self.flower.update()
 
     def persist(self):
@@ -397,7 +493,7 @@ class Window(QWidget):
     def resizeEvent(self, event):
         compact = self.width() < 360
         self.message.setVisible(not compact)
-        self.flower.setMinimumHeight(88 if compact else 118)
+        self.flower.setMinimumHeight(0)
         super().resizeEvent(event)
 
     def closeEvent(self, event):
@@ -444,3 +540,4 @@ def main():
         window.offset = max(0, garden.last_update - time.time())
     window.show()
     return app.exec()
+

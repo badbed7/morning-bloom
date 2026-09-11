@@ -72,3 +72,6 @@ godot --headless --path . --script tests/ui_smoke.gd -- --demo
 ## 저작물
 
 앱 코드는 프로젝트 소유자의 별도 라이선스 결정 전까지 All rights reserved입니다. 꽃·화분은 프로토타입용 코드 도형입니다. 포함된 Noto Sans CJK KR 서브셋은 [SIL Open Font License](assets/fonts/OFL.txt)를 따릅니다. 현재 AI 생성 이미지나 음원은 포함하지 않았습니다.
+
+
+최신 Python 기능: [상점·가방·화분 2개](python/README.md). 후속 기획: [꽃별 성장 시간과 가격 차별화](docs/next-proposals.ko.md).

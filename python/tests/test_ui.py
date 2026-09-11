@@ -27,6 +27,7 @@ class UI(unittest.TestCase):
             window.refresh()
             self.assertTrue(window.harvest_button.isEnabled())
             window.harvest_button.click()
+            window.bag_list.setCurrentRow(0)
             window.sell_button.click()
             self.assertEqual(window.garden.coins, 170)
             window.close()
@@ -47,3 +48,22 @@ class UI(unittest.TestCase):
             self.assertEqual(garden.species, 'tulip')
             self.assertIn('튤립', window.remaining.text())
             window.close()
+
+
+    def test_shop_bag_two_pot_loop(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store=Store(Path(tmp)/'garden.json')
+            w=Window(store,Garden(time.time()),True)
+            w.show();self.app.processEvents()
+            w.plant_button.click();w.offset=61;w.refresh();w.harvest_button.click()
+            w.navigation.setCurrentIndex(3);w.bag_list.setCurrentRow(0);w.sell_button.click()
+            w.navigation.setCurrentIndex(2);w.buy_pot_button.click();w.buy_seed_button.click()
+            self.assertEqual((w.garden.coins,w.garden.seed_count('daisy')),(0,2))
+            self.assertFalse(w.buy_pot_button.isEnabled())
+            w.pot_picker.setCurrentIndex(1);w.navigation.setCurrentIndex(3);w.bag_plant_button.click()
+            self.assertEqual(w.pages.currentIndex(),0)
+            self.assertTrue(w.garden.planted)
+            w.pot_picker.setCurrentIndex(0);self.assertFalse(w.garden.planted);w.plant_button.click()
+            w.close()
+            loaded=store.load(time.time())
+            self.assertTrue(all(p['planted'] for p in loaded.pots))

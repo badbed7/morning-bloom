@@ -28,6 +28,20 @@ from .plant_catalog import PLANTS, plant_definition
 from .storage import SaveError, Store
 
 
+def format_duration(seconds):
+    if seconds is None:
+        return '첫 물주기 후 계산'
+    seconds = max(0, math.ceil(seconds))
+    days, seconds = divmod(seconds, 86400)
+    hours, seconds = divmod(seconds, 3600)
+    minutes, seconds = divmod(seconds, 60)
+    if days:
+        return f'{days}일 {hours}시간'
+    if hours:
+        return f'{hours}시간 {minutes}분'
+    return f'{minutes}분 {seconds}초'
+
+
 class Flower(QWidget):
     def __init__(self, garden):
         super().__init__()
@@ -86,6 +100,8 @@ class Flower(QWidget):
             painter.translate(190 + sway, top)
             if definition.key == 'tulip':
                 self._draw_tulip(painter, definition, stage == 4)
+            elif definition.key == 'starflower':
+                self._draw_starflower(painter, definition, stage == 4)
             else:
                 self._draw_daisy(painter, definition, stage == 4)
             painter.restore()
@@ -120,6 +136,25 @@ class Flower(QWidget):
         painter.drawPath(flower)
         painter.setBrush(QColor(definition.center_color))
         painter.drawEllipse(QRectF(-5, -8, 10, 8))
+
+    @staticmethod
+    def _draw_starflower(painter, definition, open_flower):
+        count = 5
+        length = 24 if open_flower else 15
+        for index in range(count):
+            painter.save()
+            painter.rotate(index * (360 / count))
+            petal = QPainterPath()
+            petal.moveTo(0, -3)
+            petal.lineTo(-7, -length)
+            petal.lineTo(0, -length - 7)
+            petal.lineTo(7, -length)
+            petal.closeSubpath()
+            painter.setBrush(QColor(definition.petal_color))
+            painter.drawPath(petal)
+            painter.restore()
+        painter.setBrush(QColor(definition.center_color))
+        painter.drawEllipse(QRectF(-7, -7, 14, 14))
 
 
 class Window(QWidget):
@@ -218,12 +253,16 @@ class Window(QWidget):
         self.remaining.setAlignment(Qt.AlignCenter)
         self.remaining.setObjectName('small')
         layout.addWidget(self.remaining)
+        self.care_info = QLabel()
+        self.care_info.setAlignment(Qt.AlignCenter)
+        self.care_info.setObjectName('small')
+        layout.addWidget(self.care_info)
 
         row = QHBoxLayout()
         self.species_picker = QComboBox()
         for definition in PLANTS.values():
             self.species_picker.addItem(
-                f'{definition.name} · {definition.growth_seconds // 86400}일',
+                f'{definition.name} · {format_duration(definition.growth_seconds)}',
                 definition.key,
             )
         self.species_picker.currentIndexChanged.connect(self.refresh)
@@ -292,7 +331,8 @@ class Window(QWidget):
         catalog = QLabel(
             '식물 카탈로그\n'
             + '\n'.join(
-                f'• {item.name}: {item.growth_seconds // 86400}일 · 씨앗 {item.seed_price}G · 판매 {item.sale_price}G'
+                f'• {item.name}: {format_duration(item.growth_seconds)} · 씨앗 {item.seed_price}G · 판매 {item.sale_price}G'
+                f' (+분무 {item.mist_bonus}G)'
                 for item in PLANTS.values()
             )
         )
@@ -311,7 +351,8 @@ class Window(QWidget):
         self.shop_wallet = QLabel()
         layout.addWidget(self.shop_wallet)
         self.shop_picker = QComboBox()
-        for item in PLANTS.values(): self.shop_picker.addItem(item.name, item.key)
+        for item in PLANTS.values():
+            self.shop_picker.addItem(f'{item.name} · {format_duration(item.growth_seconds)}', item.key)
         layout.addWidget(self.shop_picker)
         self.shop_info = QLabel()
         layout.addWidget(self.shop_info)
@@ -331,7 +372,8 @@ class Window(QWidget):
         layout.addWidget(self.bag_seed_info)
         row = QHBoxLayout()
         self.bag_picker = QComboBox()
-        for item in PLANTS.values(): self.bag_picker.addItem(item.name, item.key)
+        for item in PLANTS.values():
+            self.bag_picker.addItem(f'{item.name} · {format_duration(item.growth_seconds)}', item.key)
         row.addWidget(self.bag_picker)
         self.bag_plant_button = self.button(row, '선택 화분에 심기', self.plant_from_bag)
         layout.addLayout(row)
@@ -347,7 +389,8 @@ class Window(QWidget):
         self.sell_button.setEnabled(row is not None)
         if row:
             item = next((item for item in self.garden.collection if item['id'] == row.data(Qt.UserRole)), None)
-            self.sell_button.setText(f"선택한 꽃 판매 · {plant_definition(item['species']).sale_price}G" if item else '꽃을 선택하세요')
+            price = item['base_sale_g'] + item['bonus_g'] if item else 0
+            self.sell_button.setText(f'선택한 꽃 판매 · {price}G' if item else '꽃을 선택하세요')
         else:
             self.sell_button.setText('판매할 꽃을 선택하세요')
 
@@ -386,20 +429,33 @@ class Window(QWidget):
         return button
 
     def act(self, callback):
+        before = self.garden.to_dict()
         result = callback()
         if result is False:
             self.message.setText('지금은 할 수 없는 행동이에요.')
         self.refresh()
-        self.persist()
+        if result is not False and not self.persist():
+            error = self.message.text()
+            self.garden.restore(before)
+            self.refresh()
+            self.message.setText(error + ' · 행동을 되돌렸습니다.')
 
     def plant_selected(self):
         return self.garden.plant(self.now(), self.species_picker.currentData())
 
     def care(self, kind):
+        previous_status = self.garden.water_status
         done = self.garden.care(kind, self.now())
         if done:
             self.flower.drops = 30
-            self.message.setText('돌봤어요. 이른 돌봄은 효과만 보여주며 성장을 가속하지 않아요.')
+            if kind == 'mist':
+                self.message.setText(f'분무 완료 · 수확한 꽃의 판매가에 {self.garden.pot["mist_bonus_g"]}G가 더해져요.')
+            elif previous_status == 'initial':
+                self.message.setText('첫 물주기 완료 · 지금부터 성장 시간이 흐릅니다.')
+            elif previous_status == 'slow':
+                self.message.setText('물주기 완료 · 지금부터 원래 속도로 자랍니다.')
+            else:
+                self.message.setText('물주기 완료 · 성장 속도는 그대로 유지됩니다.')
         return done
 
     def fast_forward(self):
@@ -422,15 +478,13 @@ class Window(QWidget):
         garden.advance(self.now())
         self.status.setText(garden.health)
         self.progress.setValue(int(garden.ratio * 100))
-        seconds = max(0, math.ceil(garden.duration - garden.growth))
         stage = ('씨앗', '새싹', '자라는 중', '봉오리', '개화')[garden.stage]
         if garden.planted:
-            self.remaining.setText(
-                f'{garden.definition.name} · {stage} · {seconds // 3600}시간 '
-                f'{(seconds % 3600) // 60}분 {seconds % 60}초'
-            )
+            self.remaining.setText(f'{garden.definition.name} · {stage} · 예상 {format_duration(garden.remaining_seconds())}')
+            self.care_info.setText(self._care_text())
         else:
             self.remaining.setText('빈 화분 · 키울 식물을 선택하세요')
+            self.care_info.setText('모든 꽃은 심은 뒤 첫 물주기를 해야 성장해요')
 
         selected = self.species_picker.currentData()
         definition = plant_definition(selected)
@@ -438,8 +492,20 @@ class Window(QWidget):
         self.plant_button.setText('씨앗 심기' if count else '씨앗 없음')
         self.plant_button.setEnabled(garden.can_plant(selected))
         self.species_picker.setEnabled(not garden.planted and not garden.vacation)
-        for button in (self.water_button, self.mist_button):
-            button.setEnabled(garden.planted and not garden.bloomed and not garden.vacation)
+        water_status = garden.water_status
+        water_labels = {
+            'initial': '첫 물주기', 'early': '미리 물주기',
+            'due': '물주기 권장', 'slow': '회복 물주기',
+        }
+        self.water_button.setText(water_labels.get(water_status, '물주기 완료'))
+        self.water_button.setEnabled(water_status in water_labels and not garden.vacation)
+        can_mist = (
+            garden.planted and garden.pot['initial_watered'] and not garden.pot['misted']
+            and not garden.bloomed and not garden.vacation
+        )
+        mist_bonus = garden.pot['mist_bonus_g'] if garden.planted else 0
+        self.mist_button.setText('분무 완료' if garden.planted and garden.pot['misted'] else f'분무 +{mist_bonus}G')
+        self.mist_button.setEnabled(can_mist)
         self.harvest_button.setEnabled(garden.bloomed)
 
         seed_total = sum(garden.seeds.values())
@@ -448,21 +514,28 @@ class Window(QWidget):
         self.inventory.setToolTip(f'씨앗 {seeds} · 보관 꽃 {len(garden.collection)}')
         self.pot_picker.blockSignals(True)
         self.pot_picker.clear()
-        garden._save_active()
         for i, pot in enumerate(garden.pots):
             name = plant_definition(pot['species']).name if pot['species'] else '빈 화분'
-            self.pot_picker.addItem(f'화분 {i + 1} · {name}')
+            self.pot_picker.addItem(f'화분 {i + 1} · {name} · {self._pot_state(pot)}')
         self.pot_picker.setCurrentIndex(garden.selected)
         self.pot_picker.blockSignals(False)
         self.shop_wallet.setText(f'보유 {garden.coins}G · 화분 {len(garden.pots)}/2개')
         species = self.shop_picker.currentData()
         item = plant_definition(species)
-        self.shop_info.setText(f'성장 {item.growth_seconds // 3600}시간 · 판매 {item.sale_price}G')
+        care = '첫 물만 필요' if item.care_profile == 'start_only' else '24시간 물 권장 · 30시간부터 감속'
+        self.shop_info.setText(
+            f'{item.shop_tag}\n성장 {format_duration(item.growth_seconds)} · {care}\n'
+            f'판매 {item.sale_price}G · 분무 시 {item.sale_price + item.mist_bonus}G'
+        )
         self.buy_seed_button.setText(f'{item.name} 씨앗 구매 · {item.seed_price}G')
         self.buy_seed_button.setEnabled(garden.coins >= item.seed_price)
         self.buy_pot_button.setEnabled(len(garden.pots) < 2 and garden.coins >= 150)
         self.buy_pot_button.setText('두 번째 화분 보유 중' if len(garden.pots) == 2 else '두 번째 화분 구매 · 150G')
-        self.bag_seed_info.setText(f'{seeds} · 화분 {garden.selected + 1} 선택 중')
+        bag_definition = plant_definition(self.bag_picker.currentData())
+        self.bag_seed_info.setText(
+            f'{seeds} · 화분 {garden.selected + 1} 선택 중\n'
+            f'{bag_definition.name}: {format_duration(bag_definition.growth_seconds)} · 씨앗 {bag_definition.seed_price}G'
+        )
         self.bag_plant_button.setEnabled(garden.can_plant(self.bag_picker.currentData()))
         ids = [item['id'] for item in garden.collection]
         existing = [self.bag_list.item(i).data(Qt.UserRole) for i in range(self.bag_list.count())]
@@ -472,13 +545,51 @@ class Window(QWidget):
             self.bag_list.clear()
             for i, item in enumerate(garden.collection):
                 definition = plant_definition(item['species'])
-                row = QListWidgetItem(f'{definition.name} {i + 1} · {definition.sale_price}G')
+                price = item['base_sale_g'] + item['bonus_g']
+                misted = ' · 분무 보너스' if item['misted'] else ''
+                row = QListWidgetItem(f'{definition.name} {i + 1} · {price}G{misted}')
                 row.setData(Qt.UserRole, item['id'])
                 self.bag_list.addItem(row)
                 if item['id'] == selected_id:
                     self.bag_list.setCurrentItem(row)
         self.update_sell_button()
         self.flower.update()
+
+    def _care_text(self):
+        garden = self.garden
+        if garden.bloomed:
+            return f'판매가 {garden.pot["base_sale_g"] + (garden.pot["mist_bonus_g"] if garden.pot["misted"] else 0)}G'
+        if not garden.pot['initial_watered']:
+            return '첫 물주기 전 · 성장 정지'
+        status = garden.water_status
+        if status == 'waiting':
+            return f'중간 물주기까지 {format_duration(22 * 3600 - garden.pot["care_elapsed"])}'
+        if status == 'early':
+            return f'미리 물주기 가능 · 권장까지 {format_duration(24 * 3600 - garden.pot["care_elapsed"])}'
+        if status == 'due':
+            return f'정상 성장 중 · 감속까지 {format_duration(30 * 3600 - garden.pot["care_elapsed"])}'
+        if status == 'slow':
+            return (
+                f'50% 속도 · 지금 물주면 {format_duration(garden.remaining_seconds(True))} / '
+                f'그대로면 {format_duration(garden.remaining_seconds())}'
+            )
+        bonus = garden.pot['mist_bonus_g']
+        return '추가 물주기 없음 · ' + ('분무 완료' if garden.pot['misted'] else f'분무 시 +{bonus}G')
+
+    @staticmethod
+    def _pot_state(pot):
+        if not pot['planted']:
+            return '비어 있음'
+        if pot['growth'] >= pot['duration']:
+            return '개화 완료'
+        if not pot['initial_watered']:
+            return '첫 물 필요'
+        if pot['care_profile'] == 'tulip_midwater' and not pot['mid_watered'] and not pot['legacy_care_exempt']:
+            if pot['care_elapsed'] >= 30 * 3600:
+                return '감속 중'
+            if pot['care_elapsed'] >= 24 * 3600:
+                return '물 권장'
+        return '성장 중'
 
     def persist(self):
         self.garden.advance(self.now())
@@ -516,8 +627,8 @@ def main():
     args = parser.parse_args()
     app = QApplication(sys.argv[:1])
     app.setApplicationName('MorningBloomPython')
-    asset_root = Path(sys._MEIPASS) if getattr(sys, 'frozen', False) else Path(__file__).resolve().parents[2]
-    font = asset_root / 'assets/fonts/NotoSansKR-Subset.otf'
+    root = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parents[2]))
+    font = root / 'assets/fonts/NotoSansKR-Subset.otf'
     if font.exists():
         font_id = QFontDatabase.addApplicationFont(str(font))
         families = QFontDatabase.applicationFontFamilies(font_id)
@@ -541,5 +652,3 @@ def main():
         window.offset = max(0, garden.last_update - time.time())
     window.show()
     return app.exec()
-
-

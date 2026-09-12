@@ -4,7 +4,7 @@
 
 **목표: Python + PySide6 / 2D 전용 / Windows 우선**
 
-**Python 초안 구현 완료:** 루트의 `run-python.bat`으로 실행하세요. [Python 실행 방법·구현 상태](python/README.md)를 확인하세요.
+**Python 2D 초안 구현:** 루트의 `run-python.bat`으로 실행하세요. [Python 실행 방법·구현 상태](python/README.md)를 확인하세요.
 
 아래 Godot 실행·테스트 안내는 보존된 이전 시제품에 해당합니다.
 
@@ -26,23 +26,27 @@ godot --path . -- --demo
 
 ## 이번 버전
 
-- 정사각 창, 제목 드래그 이동, 항상 위 표시, 창 불투명도 10~100%, 복구 버튼
-- 데이터 카탈로그 기반 데이지·튤립 5단계 애니메이션과 물방울 피드백
-- 첫 꽃 60초 튜토리얼, 이후 현실 시간 성장, 무료 물주기·분무
-- 테라리움 보관, 품종별 씨앗 구매·파종, 품종별 꽃 판매
-- 72시간 오프라인 상한, 24시간 돌봄 유예, 회복, 휴가 모드
+- 정사각 창, 제목 드래그 이동, 항상 위 표시, 창 불투명도 10~100%
+- 데이터 카탈로그 기반 데이지·별꽃·튤립 5단계 애니메이션과 물방울 피드백
+- 모든 꽃은 첫 물주기 후 성장, 첫 데이지 60초 튜토리얼
+- 별꽃 3시간·데이지 24시간·튤립 48시간의 품종별 성장과 가격
+- 튤립 중간 물주기와 지연 성장, 선택 분무의 판매가 10% 보너스
+- 가방 보관, 품종별 씨앗 구매·파종, 개체별 꽃 판매
+- 72시간 오프라인 상한, 두 화분 독립 성장, 휴가 모드
 - 30초·행동·정상 종료 저장, 임시 파일 교체 및 직전 정상 백업
 - 별도 데모 저장, 실제 게임 저장에 영향을 주지 않는 시간 가속
 
-**아직 구현하지 않은 기능:** 5개 전체 화면, 추가 화분, 나머지 식물 3종, 햇빛·비료 보너스, 온도, 장식장, 꽃꽂이, 교배, 트레이/클릭 통과, OS 알림. [구현 상태](docs/implementation-status.md)에서 기획과 실제 구현을 구분합니다.
+**아직 구현하지 않은 기능:** 세 번째 이후 화분, 햇빛·비료, 온도 효과, 장식장, 꽃꽂이, 교배, 트레이/클릭 통과, OS 알림. [Python 구현 상태](python/README.md)에서 기획과 실제 구현을 구분합니다.
 
-## 저장 데이터
+## Python 저장 데이터
 
-Windows 기본 위치: `%APPDATA%\MorningBloom\` (설정에서 `저장 폴더 열기`로 확인).
+Windows 기본 위치: `%LOCALAPPDATA%\MorningBloomPython\`.
 
 - `garden.json`: 실제 재배
 - `demo-garden.json`: 데모
-- `.bak`: 직전 정상 저장, `.tmp`: 저장 교체용
+- `.json.bak`: 직전 정상 저장
+- `.json.v3-migration.bak`: v1~v3에서 처음 이전할 때의 원문
+- `.tmp`: 저장 교체용 임시 파일
 
 미래 버전 또는 복구 불가능한 저장 파일은 자동으로 덮어쓰지 않습니다. 오류 안내를 확인하고 원본을 백업한 뒤 복구합니다. 창의 X는 **저장 후 완전 종료**이며 트레이 최소화가 아닙니다.
 
@@ -61,6 +65,7 @@ godot --headless --path . --script tests/ui_smoke.gd -- --demo
 - [승인된 게임 기획서 — GitHub 보기](docs/game-design-v0.1.ko.md)
 - [승인된 기획서 DOCX](docs/game-design-v0.1.ko.docx)
 - [현재 구현 범위 및 다음 작업](docs/implementation-status.md)
+- [v0.4 성장·돌봄·경제 상세 기획](docs/game-design-v0.4.ko.md)
 - [구조와 Windows 검증 방법](docs/development.md)
 
 원본 기획: [꽃 키우기 프로젝트](https://app.notion.com/p/32ca1215692880a58ae2ee9d85ed96a1).
@@ -74,9 +79,4 @@ godot --headless --path . --script tests/ui_smoke.gd -- --demo
 앱 코드는 프로젝트 소유자의 별도 라이선스 결정 전까지 All rights reserved입니다. 꽃·화분은 프로토타입용 코드 도형입니다. 포함된 Noto Sans CJK KR 서브셋은 [SIL Open Font License](assets/fonts/OFL.txt)를 따릅니다. 현재 AI 생성 이미지나 음원은 포함하지 않았습니다.
 
 
-최신 Python 기능: [상점·가방·화분 2개](python/README.md). 후속 기획: [꽃별 성장 시간과 가격 차별화](docs/next-proposals.ko.md).
-
-
-## Windows 실행 파일과 업데이트
-
-Python 설치 없이 실행하는 배포본은 Releases에 게시합니다. [자동 업데이트·배포 채널 설정](release/README.md)을 확인하세요. 소스 저장소는 비공개이며 일반 사용자용 자동 업데이트는 공개 배포 저장소 연결이 필요합니다.
+최신 Python 기능: [품종별 성장·돌봄·경제와 상점·가방·화분 2개](python/README.md). 후속 기획: [다음 개발 제안](docs/next-proposals.ko.md).

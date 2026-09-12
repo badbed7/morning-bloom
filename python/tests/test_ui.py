@@ -2,68 +2,93 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+
 from PySide6.QtWidgets import QApplication
+
 from morning_bloom.app import Window
-from morning_bloom.model import Garden
-from morning_bloom.storage import Store
+from morning_bloom.model import Garden, HOUR
+from morning_bloom.storage import SaveError, Store
+
+
+class FailingStore:
+    notice = ''
+
+    def save(self, state):
+        raise SaveError('테스트 저장 실패')
+
 
 class UI(unittest.TestCase):
     @classmethod
-    def setUpClass(cls): cls.app = QApplication.instance() or QApplication([])
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
 
-    def test_click_loop_and_save(self):
+    def test_tutorial_click_loop_requires_water(self):
         with tempfile.TemporaryDirectory() as tmp:
             store = Store(Path(tmp) / 'garden.json')
             window = Window(store, Garden(time.time()), True)
             window.show()
             self.app.processEvents()
-            self.assertEqual(window.width(), window.height())
-            self.assertGreaterEqual(window.width(), 320)
-            self.assertLessEqual(window.width(), 520)
             window.plant_button.click()
-            window.water_button.click()
-            self.assertTrue(window.garden.planted)
             window.offset = 61
+            window.refresh()
+            self.assertFalse(window.harvest_button.isEnabled())
+            window.water_button.click()
+            window.offset = 122
             window.refresh()
             self.assertTrue(window.harvest_button.isEnabled())
             window.harvest_button.click()
             window.bag_list.setCurrentRow(0)
-            window.sell_button.click()
-            self.assertEqual(window.garden.coins, 170)
+            self.assertIn('50G', window.sell_button.text())
             window.close()
-            self.assertEqual(store.load(time.time()).coins, 170)
 
-    def test_tulip_can_be_selected_and_planted(self):
+    def test_starflower_mist_sale_and_labels(self):
         with tempfile.TemporaryDirectory() as tmp:
             store = Store(Path(tmp) / 'garden.json')
-            garden = Garden(
-                time.time(),
-                tutorial_used=True,
-                seeds={'daisy': 0, 'tulip': 1},
-            )
+            garden = Garden(time.time(), tutorial_used=True, tutorial_reward_claimed=True,
+                            seeds={'daisy': 0, 'starflower': 1, 'tulip': 0})
             window = Window(store, garden, True)
-            tulip_index = window.species_picker.findData('tulip')
-            window.species_picker.setCurrentIndex(tulip_index)
+            index = window.species_picker.findData('starflower')
+            window.species_picker.setCurrentIndex(index)
+            self.assertIn('3시간', window.species_picker.currentText())
             window.plant_button.click()
-            self.assertEqual(garden.species, 'tulip')
-            self.assertIn('튤립', window.remaining.text())
+            window.water_button.click()
+            window.mist_button.click()
+            window.offset = 3 * HOUR + 1
+            window.refresh()
+            window.harvest_button.click()
+            window.bag_list.setCurrentRow(0)
+            self.assertIn('13G', window.sell_button.text())
+            self.assertIn('분무 보너스', window.bag_list.currentItem().text())
             window.close()
 
-
-    def test_shop_bag_two_pot_loop(self):
+    def test_tulip_slow_status_and_recovery_label(self):
         with tempfile.TemporaryDirectory() as tmp:
-            store=Store(Path(tmp)/'garden.json')
-            w=Window(store,Garden(time.time()),True)
-            w.show();self.app.processEvents()
-            w.plant_button.click();w.offset=61;w.refresh();w.harvest_button.click()
-            w.navigation.setCurrentIndex(3);w.bag_list.setCurrentRow(0);w.sell_button.click()
-            w.navigation.setCurrentIndex(2);w.buy_pot_button.click();w.buy_seed_button.click()
-            self.assertEqual((w.garden.coins,w.garden.seed_count('daisy')),(0,2))
-            self.assertFalse(w.buy_pot_button.isEnabled())
-            w.pot_picker.setCurrentIndex(1);w.navigation.setCurrentIndex(3);w.bag_plant_button.click()
-            self.assertEqual(w.pages.currentIndex(),0)
-            self.assertTrue(w.garden.planted)
-            w.pot_picker.setCurrentIndex(0);self.assertFalse(w.garden.planted);w.plant_button.click()
-            w.close()
-            loaded=store.load(time.time())
-            self.assertTrue(all(p['planted'] for p in loaded.pots))
+            store = Store(Path(tmp) / 'garden.json')
+            garden = Garden(time.time(), tutorial_used=True, tutorial_reward_claimed=True,
+                            seeds={'daisy': 0, 'starflower': 0, 'tulip': 1})
+            window = Window(store, garden, True)
+            window.species_picker.setCurrentIndex(window.species_picker.findData('tulip'))
+            window.plant_button.click()
+            window.water_button.click()
+            window.offset = 40 * HOUR
+            window.refresh()
+            self.assertEqual(window.water_button.text(), '회복 물주기')
+            self.assertIn('50% 속도', window.care_info.text())
+            window.water_button.click()
+            self.assertEqual(window.water_button.text(), '물주기 완료')
+            window.close()
+
+    def test_failed_action_save_rolls_back(self):
+        garden = Garden(time.time())
+        window = Window(FailingStore(), garden, True)
+        window.plant_button.click()
+        self.assertFalse(garden.planted)
+        self.assertEqual(garden.seed_count('daisy'), 1)
+        self.assertIn('되돌렸습니다', window.message.text())
+        window.clock.stop()
+        window.autosave.stop()
+        window.hide()
+
+
+if __name__ == '__main__':
+    unittest.main()

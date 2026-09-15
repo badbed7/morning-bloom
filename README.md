@@ -35,16 +35,16 @@ godot --path . -- --demo
 - 화분·상점·정원 순환 화살표 메뉴, 오른쪽 아래 별도 설정
 - 72시간 오프라인 상한, 두 화분 독립 성장, 휴가 모드
 - 30초·행동·정상 종료 저장, 임시 파일 교체 및 직전 정상 백업
-- 별도 데모 저장, 실제 게임 저장에 영향을 주지 않는 시간 가속
+- 설정에서 개발자 모드 전환, 별도 테스트 저장의 `+6시간` 시간 가속
 
-**아직 구현하지 않은 기능:** 세 번째 이후 화분, 햇빛·비료, 온도 효과, 장식장, 꽃꽂이, 교배, 트레이/클릭 통과, OS 알림. [Python 구현 상태](python/README.md)에서 기획과 실제 구현을 구분합니다.
+**아직 구현하지 않은 기능:** 햇빛 클릭 수집·꾸미기 상점, 세 번째 이후 화분, 비료, 온도 효과, 장식장, 꽃꽂이, 교배, 트레이/클릭 통과, OS 알림. [햇빛 상호작용 기획](docs/sunlight-interaction.ko.md)과 [Python 구현 상태](python/README.md)에서 기획과 실제 구현을 구분합니다.
 
 ## Python 저장 데이터
 
 Windows 기본 위치: `%LOCALAPPDATA%\MorningBloomPython\`.
 
 - `garden.json`: 실제 재배
-- `demo-garden.json`: 데모
+- `demo-garden.json`: 개발자 모드의 별도 테스트 정원
 - `.json.bak`: 직전 정상 저장
 - `.json.v3-migration.bak`: v1~v3에서 처음 이전할 때의 원문
 - `.tmp`: 저장 교체용 임시 파일
@@ -68,6 +68,7 @@ godot --headless --path . --script tests/ui_smoke.gd -- --demo
 - [현재 구현 범위 및 다음 작업](docs/implementation-status.md)
 - [v0.4 성장·돌봄·경제 상세 기획](docs/game-design-v0.4.ko.md)
 - [정원·순환 메뉴 수정 기획 및 작업본 검증](docs/garden-ui-revision.ko.md)
+- [햇빛 클릭 수집·꾸미기 상점 기획과 개발자 모드](docs/sunlight-interaction.ko.md)
 - [구조와 Windows 검증 방법](docs/development.md)
 
 원본 기획: [꽃 키우기 프로젝트](https://app.notion.com/p/32ca1215692880a58ae2ee9d85ed96a1).
@@ -84,5 +85,7 @@ godot --headless --path . --script tests/ui_smoke.gd -- --demo
 최신 Python 기능: [품종별 성장·돌봄·경제와 상점·정원·화분 2개](python/README.md). 후속 기획: [다음 개발 제안](docs/next-proposals.ko.md).
 
 ## Windows 실행 파일과 업데이트
+
+현재 EXE 빌드·릴리스 게시·자동 업데이트 배포 작업은 보류합니다. 이번 변경은 소스 코드와 기획 문서에만 반영합니다.
 
 Python 설치 없이 실행하는 배포본은 Releases에 게시합니다. [자동 업데이트·배포 채널 설정](release/README.md)을 확인하세요. 소스 저장소는 비공개이며 일반 사용자용 자동 업데이트는 공개 배포 저장소 연결이 필요합니다.

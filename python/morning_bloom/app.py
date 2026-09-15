@@ -90,10 +90,11 @@ class Flower(QWidget):
 
 
 class Window(QWidget):
-    def __init__(self, store, garden, demo=False):
+    def __init__(self, store, garden, demo=False, save_lock=None):
         super().__init__()
         self.store, self.garden, self.demo = store, garden, demo
-        self.offset = 0
+        self.offset = max(0, garden.last_update - time.time()) if demo else 0
+        self._save_lock = save_lock
         self._main_page = POT_PAGE
         self._message_important = False
         self._action_busy = False
@@ -149,7 +150,7 @@ class Window(QWidget):
         root.setSpacing(4)
         top = QHBoxLayout()
         top.setSpacing(3)
-        self.title = QLabel('아침 한 송이' + (' · 데모' if self.demo else ''))
+        self.title = QLabel('개발자 · 테스트 정원' if self.demo else '아침 한 송이')
         self.title.setObjectName('title')
         self.title.setMinimumWidth(0)
         self.title.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
@@ -199,9 +200,6 @@ class Window(QWidget):
         self.inventory.setMinimumWidth(0)
         self.inventory.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         footer.addWidget(self.inventory, 1)
-        if self.demo:
-            demo_button = self.button(footer, '+6h', self.fast_forward)
-            demo_button.setFixedWidth(44)
         self.settings_button = QPushButton('설정')
         self.settings_button.setFixedWidth(72)
         self.settings_button.setAccessibleName('설정 열기 또는 이전 화면으로 돌아가기')
@@ -350,6 +348,28 @@ class Window(QWidget):
         catalog.setObjectName('small')
         catalog.setWordWrap(True)
         layout.addWidget(catalog)
+        developer_title = QLabel('개발자 도구')
+        developer_title.setObjectName('section')
+        layout.addWidget(developer_title)
+        self.developer_mode = QCheckBox('개발자 모드 · 별도 테스트 정원')
+        self.developer_mode.setChecked(self.demo)
+        self.developer_mode.toggled.connect(self.set_developer_mode)
+        layout.addWidget(self.developer_mode)
+        developer_hint = QLabel(
+            '켜면 새 테스트 정원 또는 이전 테스트 저장을 엽니다. '
+            '끄면 원래 정원으로 돌아갑니다. 꽃·재화는 서로 옮겨지지 않습니다.'
+        )
+        developer_hint.setObjectName('small')
+        developer_hint.setWordWrap(True)
+        layout.addWidget(developer_hint)
+        self.developer_status = QLabel()
+        self.developer_status.setObjectName('small')
+        self.developer_status.setWordWrap(True)
+        layout.addWidget(self.developer_status)
+        self.fast_forward_button = QPushButton('시간 +6시간')
+        self.fast_forward_button.setToolTip('테스트 정원의 두 화분을 함께 진행합니다. OS 시각은 바꾸지 않습니다.')
+        self.fast_forward_button.clicked.connect(self.fast_forward)
+        layout.addWidget(self.fast_forward_button)
         layout.addStretch()
         self.pages.addWidget(page)
 
@@ -424,6 +444,7 @@ class Window(QWidget):
             return False
         self._action_busy = True
         before = self.garden.to_dict()
+        before_offset = self.offset
         try:
             result = callback()
             if result is False:
@@ -432,6 +453,7 @@ class Window(QWidget):
                 return False
             if not self.persist():
                 error = self.message.text()
+                self.offset = before_offset
                 self.garden.restore(before)
                 self.refresh()
                 self.notify(error + ' · 행동을 되돌렸습니다.', important=True)
@@ -460,7 +482,97 @@ class Window(QWidget):
         return done
 
     def fast_forward(self):
-        self.offset += 6 * 3600
+        if not self.demo or self._action_busy:
+            return False
+
+        def advance_clock():
+            self.offset += 6 * 3600
+
+        if not self.act(advance_clock):
+            return False
+        message = '테스트 정원만 6시간 이동했습니다.'
+        if self.garden.vacation:
+            message += ' 휴가 중이라 성장·돌봄은 정지합니다.'
+        self.notify(message, important=True)
+        return True
+
+    def _sync_developer_controls(self):
+        self.developer_mode.blockSignals(True)
+        self.developer_mode.setChecked(self.demo)
+        self.developer_mode.blockSignals(False)
+        self.fast_forward_button.setEnabled(self.demo)
+        title = '개발자 · 테스트 정원' if self.demo else '아침 한 송이'
+        self.title.setText(title)
+        self.setWindowTitle(title)
+        self.developer_status.setText(
+            f'테스트 저장 · 실제 시각보다 {format_duration(self.offset)} 앞섬'
+            if self.demo else '일반 정원 · 시간 이동 잠김'
+        )
+
+    def set_developer_mode(self, enabled):
+        """Switch locked save files, retaining the Garden object used by every view."""
+        if enabled == self.demo or self._action_busy:
+            self._sync_developer_controls()
+            return enabled == self.demo
+        self._action_busy = True
+        target_lock = None
+        try:
+            path = getattr(self.store, 'path', None)
+            if path is None:
+                raise SaveError('전환할 저장 위치를 찾을 수 없습니다.')
+            name = 'demo-garden' if enabled else 'garden'
+            target_path = path.with_name(name + '.json')
+            if target_path == path:
+                raise SaveError('일반 정원과 테스트 정원은 서로 다른 파일이어야 합니다.')
+            target_lock = QLockFile(str(target_path.with_suffix('.lock')))
+            if not target_lock.tryLock(0):
+                raise SaveError('전환할 정원이 이미 열려 있거나 저장 잠금을 얻을 수 없습니다.')
+            target_store = Store(target_path)
+            target_garden = target_store.load(time.time())
+            if not self.persist():
+                return False
+            # Verify the destination is writable before replacing the active session.
+            target_store.save(target_garden)
+            self.garden.restore(target_garden.to_dict())
+            self.store, self.demo = target_store, enabled
+            self.offset = max(0, target_garden.last_update - time.time()) if enabled else 0
+            previous_lock = self._save_lock
+            self._save_lock, target_lock = target_lock, None
+            if previous_lock is not None:
+                previous_lock.unlock()
+            self._apply_session_settings()
+            self.refresh()
+            message = (
+                '개발자 모드 · 별도 테스트 정원입니다.' if enabled
+                else '일반 정원으로 돌아왔습니다. 테스트 시간과 재화는 옮겨지지 않습니다.'
+            )
+            if target_store.notice:
+                message += ' ' + target_store.notice
+            self.notify(message, important=True)
+            return True
+        except (SaveError, ValueError, OSError) as exc:
+            self.notify('정원 전환 실패 · ' + str(exc), important=True)
+            return False
+        finally:
+            if target_lock is not None:
+                target_lock.unlock()
+            self._action_busy = False
+            self._sync_developer_controls()
+
+    def _apply_session_settings(self):
+        settings = self.garden.settings
+        self.topmost.blockSignals(True)
+        self.topmost.setChecked(settings['topmost'])
+        self.topmost.blockSignals(False)
+        self.opacity.blockSignals(True)
+        self.opacity.setValue(round(settings['opacity'] * 100))
+        self.opacity.blockSignals(False)
+        position, visible = self.pos(), self.isVisible()
+        self.setWindowFlag(Qt.WindowStaysOnTopHint, settings['topmost'])
+        self.move(position)
+        self.setWindowOpacity(settings['opacity'])
+        if visible:
+            self.show()
 
     def toggle_topmost(self, checked):
         self.garden.settings['topmost'] = checked
@@ -476,6 +588,7 @@ class Window(QWidget):
 
     def refresh(self):
         garden = self.garden
+        self._sync_developer_controls()
         garden.advance(self.now())
         self.status.setToolTip(garden.health)
         self.status.setText(self.status.fontMetrics().elidedText(garden.health, Qt.ElideRight, max(0, self.width() - 24)))
@@ -585,7 +698,7 @@ class Window(QWidget):
         self.garden.settings.update(x=self.x(), y=self.y())
         try:
             self.store.save(self.garden)
-        except (SaveError, ValueError) as exc:
+        except (SaveError, ValueError, OSError) as exc:
             self.notify('저장 실패 · ' + str(exc), important=True)
             return False
         return True
@@ -608,11 +721,17 @@ class Window(QWidget):
                 QMessageBox.No,
             )
             event.accept() if result == QMessageBox.Yes else event.ignore()
+        if event.isAccepted():
+            self.clock.stop()
+            self.autosave.stop()
+            if self._save_lock is not None:
+                self._save_lock.unlock()
+                self._save_lock = None
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--demo', action='store_true', help='별도 저장과 +6시간 버튼')
+    parser.add_argument('--demo', action='store_true', help='별도 테스트 정원과 설정의 +6시간 버튼')
     args = parser.parse_args()
     app = QApplication(sys.argv[:1])
     app.setApplicationName('MorningBloomPython')
@@ -636,8 +755,6 @@ def main():
     except SaveError as exc:
         QMessageBox.critical(None, '저장 파일 보호', str(exc) + '\n' + str(path))
         return 1
-    window = Window(store, garden, args.demo)
-    if args.demo:
-        window.offset = max(0, garden.last_update - time.time())
+    window = Window(store, garden, args.demo, save_lock=lock)
     window.show()
     return app.exec()

@@ -5,27 +5,32 @@ import time
 from pathlib import Path
 
 from PySide6.QtCore import QLockFile, QPointF, QRectF, QStandardPaths, Qt, QTimer
-from PySide6.QtGui import QColor, QFont, QFontDatabase, QPainter, QPainterPath, QPen
+from PySide6.QtGui import QColor, QFont, QFontDatabase, QPainter
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
     QComboBox,
-    QListWidget,
-    QListWidgetItem,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QMessageBox,
     QProgressBar,
     QPushButton,
+    QScrollArea,
     QSizePolicy,
     QSlider,
-    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
 
+from .flower_art import paint_potted_flower
+from .garden_view import CollectionGarden, sale_price
+from .navigation import SlideStack
 from .plant_catalog import PLANTS, plant_definition
 from .storage import SaveError, Store
+
+POT_PAGE, SHOP_PAGE, GARDEN_PAGE, SETTINGS_PAGE = range(4)
+MAIN_PAGE_NAMES = ('화분', '상점', '정원')
 
 
 def format_duration(seconds):
@@ -52,7 +57,15 @@ class Flower(QWidget):
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Ignored)
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.animate)
-        self.timer.start(50)
+        self.timer.setInterval(50)
+
+    def showEvent(self, event):
+        self.timer.start()
+        super().showEvent(event)
+
+    def hideEvent(self, event):
+        self.timer.stop()
+        super().hideEvent(event)
 
     def animate(self):
         self.phase += .08
@@ -68,93 +81,12 @@ class Flower(QWidget):
         painter.setPen(Qt.NoPen)
         painter.setBrush(QColor('#e8efdf'))
         painter.drawEllipse(QRectF(75, 144, 230, 24))
-        definition = self.garden.definition
-        painter.setBrush(QColor(definition.pot_color))
-        painter.drawRoundedRect(QRectF(144, 112, 92, 49), 14, 14)
-        painter.setBrush(QColor('#d99b75'))
-        painter.drawRoundedRect(QRectF(136, 104, 108, 18), 6, 6)
-        painter.setBrush(QColor('#654638'))
-        painter.drawEllipse(QRectF(143, 101, 94, 12))
-        if self.garden.planted:
-            self._draw_plant(painter, definition)
-        if self.drops:
-            painter.setBrush(QColor('#81b8ce'))
-            for index in range(7):
-                y = 24 + ((30 - self.drops) * 4 + index * 13) % 76
-                painter.drawEllipse(QRectF(140 + index * 16, y, 4, 9))
+        paint_potted_flower(
+            painter, self.garden.definition, stage=self.garden.stage,
+            phase=0 if self.garden.vacation else self.phase,
+            planted=self.garden.planted, drops=self.drops,
+        )
         painter.end()
-
-    def _draw_plant(self, painter, definition):
-        stage = self.garden.stage
-        top = 98 - stage * 18
-        sway = math.sin(self.phase) * 3 if not self.garden.vacation else 0
-        painter.setPen(QPen(QColor('#64835b'), 5, Qt.SolidLine, Qt.RoundCap))
-        painter.drawLine(QPointF(190, 106), QPointF(190 + sway, top))
-        painter.setPen(Qt.NoPen)
-        painter.setBrush(QColor(definition.leaf_color))
-        if stage:
-            painter.drawEllipse(QRectF(164 + sway, top + 18, 28, 12))
-            painter.drawEllipse(QRectF(192 + sway, top + 8, 29, 13))
-        if stage >= 3:
-            painter.save()
-            painter.translate(190 + sway, top)
-            if definition.key == 'tulip':
-                self._draw_tulip(painter, definition, stage == 4)
-            elif definition.key == 'starflower':
-                self._draw_starflower(painter, definition, stage == 4)
-            else:
-                self._draw_daisy(painter, definition, stage == 4)
-            painter.restore()
-        else:
-            painter.setBrush(QColor(definition.leaf_color))
-            painter.drawEllipse(QRectF(183 + sway, top - 6, 14, 10))
-
-    @staticmethod
-    def _draw_daisy(painter, definition, open_flower):
-        for index in range(8):
-            painter.save()
-            painter.rotate(index * 45)
-            painter.setBrush(QColor(definition.petal_color))
-            length = 27 if open_flower else 17
-            painter.drawEllipse(QRectF(-8, -30 if open_flower else -18, 16, length))
-            painter.restore()
-        painter.setBrush(QColor(definition.center_color))
-        painter.drawEllipse(QRectF(-10, -10, 20, 20))
-
-    @staticmethod
-    def _draw_tulip(painter, definition, open_flower):
-        width = 25 if open_flower else 18
-        top = -34 if open_flower else -25
-        flower = QPainterPath()
-        flower.moveTo(-width, -3)
-        flower.lineTo(-width + 3, top)
-        flower.lineTo(0, top + (12 if open_flower else 6))
-        flower.lineTo(width - 3, top)
-        flower.lineTo(width, -3)
-        flower.quadTo(0, 13, -width, -3)
-        painter.setBrush(QColor(definition.petal_color))
-        painter.drawPath(flower)
-        painter.setBrush(QColor(definition.center_color))
-        painter.drawEllipse(QRectF(-5, -8, 10, 8))
-
-    @staticmethod
-    def _draw_starflower(painter, definition, open_flower):
-        count = 5
-        length = 24 if open_flower else 15
-        for index in range(count):
-            painter.save()
-            painter.rotate(index * (360 / count))
-            petal = QPainterPath()
-            petal.moveTo(0, -3)
-            petal.lineTo(-7, -length)
-            petal.lineTo(0, -length - 7)
-            petal.lineTo(7, -length)
-            petal.closeSubpath()
-            painter.setBrush(QColor(definition.petal_color))
-            painter.drawPath(petal)
-            painter.restore()
-        painter.setBrush(QColor(definition.center_color))
-        painter.drawEllipse(QRectF(-7, -7, 14, 14))
 
 
 class Window(QWidget):
@@ -162,6 +94,9 @@ class Window(QWidget):
         super().__init__()
         self.store, self.garden, self.demo = store, garden, demo
         self.offset = 0
+        self._main_page = POT_PAGE
+        self._message_important = False
+        self._action_busy = False
         self.setWindowTitle('아침 한 송이')
         self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint)
         self.setWindowFlag(Qt.WindowStaysOnTopHint, garden.settings['topmost'])
@@ -194,7 +129,7 @@ class Window(QWidget):
             QWidget {background:#f8f7ef;color:#334e41;font-size:13px;}
             QPushButton {background:#e5ecde;border:0;border-radius:9px;padding:7px;}
             QPushButton:hover {background:#d5e1cb;} QPushButton:disabled {color:#a7afa3;}
-            QLabel#title {font-size:18px;font-weight:600;} QLabel#small {color:#778575;font-size:11px;}
+            QLabel#title {font-size:15px;font-weight:600;} QLabel#small {color:#778575;font-size:11px;}
             QLabel#section {font-size:16px;font-weight:600;}
             QProgressBar {border:0;background:#e5e9df;border-radius:4px;height:8px;text-align:center;}
             QProgressBar::chunk {background:#8faa79;border-radius:4px;}
@@ -202,64 +137,143 @@ class Window(QWidget):
             QSlider::groove:horizontal {height:5px;background:#dfe5d8;border-radius:2px;}
             QSlider::sub-page:horizontal {background:#8faa79;border-radius:2px;}
             QSlider::handle:horizontal {width:13px;margin:-4px 0;background:#647f5b;border-radius:6px;}
+            QScrollBar:vertical {background:#eef0e5;width:8px;margin:0;}
+            QScrollBar::handle:vertical {background:#9bae83;border-radius:4px;min-height:22px;}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {height:0;}
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {background:transparent;}
         ''')
 
     def _build_ui(self):
         root = QVBoxLayout(self)
-        root.setContentsMargins(14, 10, 14, 12)
-        root.setSpacing(5)
+        root.setContentsMargins(12, 10, 12, 10)
+        root.setSpacing(4)
         top = QHBoxLayout()
+        top.setSpacing(3)
         self.title = QLabel('아침 한 송이' + (' · 데모' if self.demo else ''))
         self.title.setObjectName('title')
+        self.title.setMinimumWidth(0)
+        self.title.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         self.title.mousePressEvent = self.drag
-        top.addWidget(self.title)
-        top.addStretch()
-        self.navigation = QComboBox()
-        self.navigation.addItems(['화분', '설정', '상점', '가방'])
-        self.navigation.currentIndexChanged.connect(lambda index: self.pages.setCurrentIndex(index))
-        top.addWidget(self.navigation)
+        top.addWidget(self.title, 1)
+        self.previous_page = QPushButton('‹')
+        self.previous_page.setFixedSize(26, 28)
+        self.previous_page.setAccessibleName('이전 화면')
+        self.previous_page.clicked.connect(lambda: self.navigate(-1))
+        top.addWidget(self.previous_page)
+        self.page_name = QLabel('화분')
+        self.page_name.setAlignment(Qt.AlignCenter)
+        self.page_name.setFixedWidth(36)
+        top.addWidget(self.page_name)
+        self.next_page = QPushButton('›')
+        self.next_page.setFixedSize(26, 28)
+        self.next_page.setAccessibleName('다음 화면')
+        self.next_page.clicked.connect(lambda: self.navigate(1))
+        top.addWidget(self.next_page)
         close = QPushButton('X')
-        close.setFixedSize(34, 30)
+        close.setFixedSize(28, 28)
+        close.setAccessibleName('저장 후 종료')
         close.clicked.connect(self.close)
         top.addWidget(close)
         root.addLayout(top)
 
-        self.pages = QStackedWidget()
+        self.pages = SlideStack()
         root.addWidget(self.pages, 1)
-        self._build_garden_page()
-        self._build_settings_page()
+        self._build_pot_page()
         self._build_shop_page()
-        self._build_bag_page()
-        self.pages.currentChanged.connect(self.navigation.setCurrentIndex)
+        self.collection_garden = CollectionGarden(self.garden, self.sell_flower)
+        self.pages.addWidget(self.collection_garden)
+        self._build_settings_page()
 
-    def _build_garden_page(self):
+        welcome = '' if self.garden.tutorial_used else '첫 꽃은 첫 물주기 후 60초에 피어요.'
+        self.message = QLabel(self.store.notice or welcome)
+        self.message.setWordWrap(True)
+        self.message.setMaximumHeight(30)
+        self.message.setMinimumWidth(0)
+        self.message.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        self.message.setObjectName('small')
+        root.addWidget(self.message)
+
+        footer = QHBoxLayout()
+        self.inventory = QLabel()
+        self.inventory.setObjectName('small')
+        self.inventory.setMinimumWidth(0)
+        self.inventory.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        footer.addWidget(self.inventory, 1)
+        if self.demo:
+            demo_button = self.button(footer, '+6h', self.fast_forward)
+            demo_button.setFixedWidth(44)
+        self.settings_button = QPushButton('설정')
+        self.settings_button.setFixedWidth(72)
+        self.settings_button.setAccessibleName('설정 열기 또는 이전 화면으로 돌아가기')
+        self.settings_button.clicked.connect(self.toggle_settings_page)
+        footer.addWidget(self.settings_button)
+        root.addLayout(footer)
+        self.pages.currentChanged.connect(self._page_changed)
+        self._page_changed(POT_PAGE)
+
+    def _page_changed(self, index):
+        is_settings = index == SETTINGS_PAGE
+        if not is_settings:
+            self._main_page = index
+        self.page_name.setText('설정' if is_settings else MAIN_PAGE_NAMES[index])
+        self.previous_page.setEnabled(not is_settings)
+        self.next_page.setEnabled(not is_settings)
+        self.settings_button.setText('돌아가기' if is_settings else '설정')
+        if not is_settings:
+            self.previous_page.setToolTip(MAIN_PAGE_NAMES[(index - 1) % 3] + '으로 이동')
+            self.next_page.setToolTip(MAIN_PAGE_NAMES[(index + 1) % 3] + '으로 이동')
+
+    def navigate(self, direction):
+        if self.pages.currentIndex() == SETTINGS_PAGE:
+            return
+        target = (self.pages.currentIndex() + direction) % len(MAIN_PAGE_NAMES)
+        self.pages.slide_to(target, direction)
+
+    def toggle_settings_page(self):
+        if self.pages.currentIndex() == SETTINGS_PAGE:
+            self.pages.slide_to(self._main_page, -1)
+        else:
+            self.pages.slide_to(SETTINGS_PAGE)
+
+    def _build_pot_page(self):
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
         self.pot_picker = QComboBox()
+        self.pot_picker.setMinimumWidth(0)
+        self.pot_picker.setFixedHeight(28)
         self.pot_picker.currentIndexChanged.connect(lambda index: self.act(lambda: self.garden.select(index)))
         layout.addWidget(self.pot_picker)
         self.flower = Flower(self.garden)
         layout.addWidget(self.flower, 1)
         self.status = QLabel()
         self.status.setAlignment(Qt.AlignCenter)
+        self.status.setFixedHeight(18)
+        self.status.setMinimumWidth(0)
+        self.status.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         layout.addWidget(self.status)
         self.progress = QProgressBar()
         self.progress.setRange(0, 100)
         self.progress.setTextVisible(False)
+        self.progress.setFixedHeight(6)
         layout.addWidget(self.progress)
         self.remaining = QLabel()
         self.remaining.setAlignment(Qt.AlignCenter)
         self.remaining.setObjectName('small')
+        self.remaining.setFixedHeight(16)
         layout.addWidget(self.remaining)
         self.care_info = QLabel()
         self.care_info.setAlignment(Qt.AlignCenter)
         self.care_info.setObjectName('small')
+        self.care_info.setFixedHeight(16)
         layout.addWidget(self.care_info)
 
         row = QHBoxLayout()
         self.species_picker = QComboBox()
+        self.species_picker.setMinimumWidth(0)
+        self.species_picker.setFixedHeight(28)
+        self.species_picker.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
         for definition in PLANTS.values():
             self.species_picker.addItem(
                 f'{definition.name} · {format_duration(definition.growth_seconds)}',
@@ -273,32 +287,29 @@ class Window(QWidget):
         row = QHBoxLayout()
         self.water_button = self.button(row, '물주기', lambda: self.care('water'))
         self.mist_button = self.button(row, '분무', lambda: self.care('mist'))
-        self.harvest_button = self.button(row, '꽃 보관', lambda: self.garden.harvest(self.now()))
+        self.harvest_button = self.button(row, '정원 보관', self.harvest_flower)
+        for button in (self.water_button, self.mist_button, self.harvest_button, self.plant_button):
+            button.setFixedHeight(28)
         layout.addLayout(row)
 
-        row = QHBoxLayout()
-        self.inventory = QLabel()
-        self.inventory.setObjectName('small')
-        self.inventory.setMinimumWidth(0)
-        self.inventory.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
-        row.addWidget(self.inventory, 1)
-        self.button(row, '가방', lambda: self.pages.setCurrentIndex(3))
-        settings = self.button(row, '설정', lambda: self.pages.setCurrentIndex(1))
-        settings.setFixedWidth(48)
-        if self.demo:
-            demo_button = self.button(row, '+6h', self.fast_forward)
-            demo_button.setFixedWidth(44)
-        layout.addLayout(row)
-        self.message = QLabel(self.store.notice or '첫 꽃은 60초, 다음 꽃부터 실제 성장 시간을 사용해요.')
-        self.message.setWordWrap(True)
-        self.message.setMaximumHeight(30)
-        self.message.setObjectName('small')
-        layout.addWidget(self.message)
         self.pages.addWidget(page)
 
-    def _build_settings_page(self):
+    def _scrollable_page(self):
         page = QWidget()
-        layout = QVBoxLayout(page)
+        outer = QVBoxLayout(page)
+        outer.setContentsMargins(0, 0, 0, 0)
+        scroll = QScrollArea()
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        content = QWidget()
+        layout = QVBoxLayout(content)
+        scroll.setWidget(content)
+        outer.addWidget(scroll)
+        return page, layout
+
+    def _build_settings_page(self):
+        page, layout = self._scrollable_page()
         layout.setContentsMargins(8, 12, 8, 8)
         layout.setSpacing(12)
         title = QLabel('환경 설정')
@@ -340,14 +351,10 @@ class Window(QWidget):
         catalog.setWordWrap(True)
         layout.addWidget(catalog)
         layout.addStretch()
-        back = QPushButton('정원으로 돌아가기')
-        back.clicked.connect(lambda: self.pages.setCurrentIndex(0))
-        layout.addWidget(back)
         self.pages.addWidget(page)
 
     def _build_shop_page(self):
-        page = QWidget()
-        layout = QVBoxLayout(page)
+        page, layout = self._scrollable_page()
         self.shop_wallet = QLabel()
         layout.addWidget(self.shop_wallet)
         self.shop_picker = QComboBox()
@@ -355,6 +362,8 @@ class Window(QWidget):
             self.shop_picker.addItem(f'{item.name} · {format_duration(item.growth_seconds)}', item.key)
         layout.addWidget(self.shop_picker)
         self.shop_info = QLabel()
+        self.shop_info.setWordWrap(True)
+        self.shop_info.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         layout.addWidget(self.shop_info)
         self.buy_seed_button = self.button(layout, '씨앗 구매', lambda: self.garden.buy_seed(self.shop_picker.currentData()))
         layout.addWidget(QLabel('화분 확장 · 씨앗은 별도 구매'))
@@ -363,45 +372,21 @@ class Window(QWidget):
         self.pages.addWidget(page)
         self.shop_picker.currentIndexChanged.connect(self.refresh)
 
-    def _build_bag_page(self):
-        page = QWidget()
-        layout = QVBoxLayout(page)
-        layout.setSpacing(4)
-        self.bag_seed_info = QLabel()
-        self.bag_seed_info.setWordWrap(True)
-        layout.addWidget(self.bag_seed_info)
-        row = QHBoxLayout()
-        self.bag_picker = QComboBox()
-        for item in PLANTS.values():
-            self.bag_picker.addItem(f'{item.name} · {format_duration(item.growth_seconds)}', item.key)
-        row.addWidget(self.bag_picker)
-        self.bag_plant_button = self.button(row, '선택 화분에 심기', self.plant_from_bag)
-        layout.addLayout(row)
-        self.bag_list = QListWidget()
-        layout.addWidget(self.bag_list, 1)
-        self.sell_button = self.button(layout, '꽃을 선택하세요', self.sell_selected)
-        self.bag_list.itemSelectionChanged.connect(self.update_sell_button)
-        self.bag_picker.currentIndexChanged.connect(self.refresh)
-        self.pages.addWidget(page)
-
-    def update_sell_button(self):
-        row = self.bag_list.currentItem()
-        self.sell_button.setEnabled(row is not None)
-        if row:
-            item = next((item for item in self.garden.collection if item['id'] == row.data(Qt.UserRole)), None)
-            price = item['base_sale_g'] + item['bonus_g'] if item else 0
-            self.sell_button.setText(f'선택한 꽃 판매 · {price}G' if item else '꽃을 선택하세요')
-        else:
-            self.sell_button.setText('판매할 꽃을 선택하세요')
-
-    def sell_selected(self):
-        row = self.bag_list.currentItem()
-        return self.garden.sell(row.data(Qt.UserRole)) if row else False
-
-    def plant_from_bag(self):
-        result = self.garden.plant(self.now(), self.bag_picker.currentData())
-        if result: self.pages.setCurrentIndex(0)
+    def harvest_flower(self):
+        result = self.garden.harvest(self.now())
+        if result:
+            self.notify('꽃을 정원에 보관했어요. 정원에서 확인해 보세요.')
         return result
+
+    def sell_flower(self, item_id):
+        item = next((item for item in self.garden.collection if item['id'] == item_id), None)
+        if item is None:
+            return False
+        name, price = plant_definition(item['species']).name, sale_price(item)
+        if self.act(lambda: self.garden.sell(item_id)):
+            self.notify(f'{name} 판매 +{price}G', important=True)
+            return True
+        return False
 
     def _place_window(self):
         position = QPointF(self.garden.settings['x'], self.garden.settings['y']).toPoint()
@@ -428,17 +413,33 @@ class Window(QWidget):
         layout.addWidget(button)
         return button
 
+    def notify(self, text, important=False):
+        self._message_important = important
+        self.message.setText(text)
+        self.message.setToolTip(text)
+        self.message.setVisible(bool(text) and (important or self.width() >= 360))
+
     def act(self, callback):
+        if self._action_busy:
+            return False
+        self._action_busy = True
         before = self.garden.to_dict()
-        result = callback()
-        if result is False:
-            self.message.setText('지금은 할 수 없는 행동이에요.')
-        self.refresh()
-        if result is not False and not self.persist():
-            error = self.message.text()
-            self.garden.restore(before)
+        try:
+            result = callback()
+            if result is False:
+                self.notify('지금은 할 수 없는 행동이에요.', important=True)
+                self.refresh()
+                return False
+            if not self.persist():
+                error = self.message.text()
+                self.garden.restore(before)
+                self.refresh()
+                self.notify(error + ' · 행동을 되돌렸습니다.', important=True)
+                return False
             self.refresh()
-            self.message.setText(error + ' · 행동을 되돌렸습니다.')
+            return True
+        finally:
+            self._action_busy = False
 
     def plant_selected(self):
         return self.garden.plant(self.now(), self.species_picker.currentData())
@@ -449,13 +450,13 @@ class Window(QWidget):
         if done:
             self.flower.drops = 30
             if kind == 'mist':
-                self.message.setText(f'분무 완료 · 수확한 꽃의 판매가에 {self.garden.pot["mist_bonus_g"]}G가 더해져요.')
+                self.notify(f'분무 완료 · 수확한 꽃의 판매가에 {self.garden.pot["mist_bonus_g"]}G가 더해져요.')
             elif previous_status == 'initial':
-                self.message.setText('첫 물주기 완료 · 지금부터 성장 시간이 흐릅니다.')
+                self.notify('첫 물주기 완료 · 지금부터 성장 시간이 흐릅니다.')
             elif previous_status == 'slow':
-                self.message.setText('물주기 완료 · 지금부터 원래 속도로 자랍니다.')
+                self.notify('물주기 완료 · 지금부터 원래 속도로 자랍니다.')
             else:
-                self.message.setText('물주기 완료 · 성장 속도는 그대로 유지됩니다.')
+                self.notify('물주기 완료 · 성장 속도는 그대로 유지됩니다.')
         return done
 
     def fast_forward(self):
@@ -476,7 +477,8 @@ class Window(QWidget):
     def refresh(self):
         garden = self.garden
         garden.advance(self.now())
-        self.status.setText(garden.health)
+        self.status.setToolTip(garden.health)
+        self.status.setText(self.status.fontMetrics().elidedText(garden.health, Qt.ElideRight, max(0, self.width() - 24)))
         self.progress.setValue(int(garden.ratio * 100))
         stage = ('씨앗', '새싹', '자라는 중', '봉오리', '개화')[garden.stage]
         if garden.planted:
@@ -487,11 +489,19 @@ class Window(QWidget):
             self.care_info.setText('모든 꽃은 심은 뒤 첫 물주기를 해야 성장해요')
 
         selected = self.species_picker.currentData()
-        definition = plant_definition(selected)
         count = garden.seed_count(selected)
         self.plant_button.setText('씨앗 심기' if count else '씨앗 없음')
         self.plant_button.setEnabled(garden.can_plant(selected))
         self.species_picker.setEnabled(not garden.planted and not garden.vacation)
+        self.species_picker.blockSignals(True)
+        for index, item in enumerate(PLANTS.values()):
+            self.species_picker.setItemText(
+                index, f'{item.name} · {format_duration(item.growth_seconds)} · {garden.seed_count(item.key)}개'
+            )
+        self.species_picker.blockSignals(False)
+        self.vacation.blockSignals(True)
+        self.vacation.setChecked(garden.vacation)
+        self.vacation.blockSignals(False)
         water_status = garden.water_status
         water_labels = {
             'initial': '첫 물주기', 'early': '미리 물주기',
@@ -531,28 +541,7 @@ class Window(QWidget):
         self.buy_seed_button.setEnabled(garden.coins >= item.seed_price)
         self.buy_pot_button.setEnabled(len(garden.pots) < 2 and garden.coins >= 150)
         self.buy_pot_button.setText('두 번째 화분 보유 중' if len(garden.pots) == 2 else '두 번째 화분 구매 · 150G')
-        bag_definition = plant_definition(self.bag_picker.currentData())
-        self.bag_seed_info.setText(
-            f'{seeds} · 화분 {garden.selected + 1} 선택 중\n'
-            f'{bag_definition.name}: {format_duration(bag_definition.growth_seconds)} · 씨앗 {bag_definition.seed_price}G'
-        )
-        self.bag_plant_button.setEnabled(garden.can_plant(self.bag_picker.currentData()))
-        ids = [item['id'] for item in garden.collection]
-        existing = [self.bag_list.item(i).data(Qt.UserRole) for i in range(self.bag_list.count())]
-        if ids != existing:
-            current = self.bag_list.currentItem()
-            selected_id = current.data(Qt.UserRole) if current else None
-            self.bag_list.clear()
-            for i, item in enumerate(garden.collection):
-                definition = plant_definition(item['species'])
-                price = item['base_sale_g'] + item['bonus_g']
-                misted = ' · 분무 보너스' if item['misted'] else ''
-                row = QListWidgetItem(f'{definition.name} {i + 1} · {price}G{misted}')
-                row.setData(Qt.UserRole, item['id'])
-                self.bag_list.addItem(row)
-                if item['id'] == selected_id:
-                    self.bag_list.setCurrentItem(row)
-        self.update_sell_button()
+        self.collection_garden.sync()
         self.flower.update()
 
     def _care_text(self):
@@ -597,13 +586,13 @@ class Window(QWidget):
         try:
             self.store.save(self.garden)
         except (SaveError, ValueError) as exc:
-            self.message.setText('저장 실패 · ' + str(exc))
+            self.notify('저장 실패 · ' + str(exc), important=True)
             return False
         return True
 
     def resizeEvent(self, event):
         compact = self.width() < 360
-        self.message.setVisible(not compact)
+        self.message.setVisible(bool(self.message.text()) and (not compact or self._message_important))
         self.flower.setMinimumHeight(0)
         super().resizeEvent(event)
 

@@ -31,7 +31,8 @@ godot --path . -- --demo
 - 모든 꽃은 첫 물주기 후 성장, 첫 데이지 60초 튜토리얼
 - 별꽃 3시간·데이지 24시간·튤립 48시간의 품종별 성장과 가격
 - 튤립 중간 물주기와 지연 성장, 선택 분무의 판매가 10% 보너스
-- 가방 보관, 품종별 씨앗 구매·파종, 개체별 꽃 판매
+- 잔디 정원에 꽃 화분 전시, 돈주머니 영역으로 드래그 판매
+- 화분·상점·정원 순환 화살표 메뉴, 오른쪽 아래 별도 설정
 - 72시간 오프라인 상한, 두 화분 독립 성장, 휴가 모드
 - 30초·행동·정상 종료 저장, 임시 파일 교체 및 직전 정상 백업
 - 별도 데모 저장, 실제 게임 저장에 영향을 주지 않는 시간 가속
@@ -66,6 +67,7 @@ godot --headless --path . --script tests/ui_smoke.gd -- --demo
 - [승인된 기획서 DOCX](docs/game-design-v0.1.ko.docx)
 - [현재 구현 범위 및 다음 작업](docs/implementation-status.md)
 - [v0.4 성장·돌봄·경제 상세 기획](docs/game-design-v0.4.ko.md)
+- [정원·순환 메뉴 수정 기획 및 작업본 검증](docs/garden-ui-revision.ko.md)
 - [구조와 Windows 검증 방법](docs/development.md)
 
 원본 기획: [꽃 키우기 프로젝트](https://app.notion.com/p/32ca1215692880a58ae2ee9d85ed96a1).
@@ -79,7 +81,7 @@ godot --headless --path . --script tests/ui_smoke.gd -- --demo
 앱 코드는 프로젝트 소유자의 별도 라이선스 결정 전까지 All rights reserved입니다. 꽃·화분은 프로토타입용 코드 도형입니다. 포함된 Noto Sans CJK KR 서브셋은 [SIL Open Font License](assets/fonts/OFL.txt)를 따릅니다. 현재 AI 생성 이미지나 음원은 포함하지 않았습니다.
 
 
-최신 Python 기능: [품종별 성장·돌봄·경제와 상점·가방·화분 2개](python/README.md). 후속 기획: [다음 개발 제안](docs/next-proposals.ko.md).
+최신 Python 기능: [품종별 성장·돌봄·경제와 상점·정원·화분 2개](python/README.md). 후속 기획: [다음 개발 제안](docs/next-proposals.ko.md).
 
 ## Windows 실행 파일과 업데이트
 

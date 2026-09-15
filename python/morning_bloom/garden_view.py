@@ -1,0 +1,292 @@
+"""A grassy collection of floating pots, with a local-only sale drop target."""
+import math
+
+from PySide6.QtCore import QEvent, QMimeData, QPoint, QRectF, Qt, QTimer, Signal
+from PySide6.QtGui import QColor, QDrag, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap
+from PySide6.QtWidgets import QApplication, QFrame, QScrollArea, QToolTip, QVBoxLayout, QWidget
+
+from .flower_art import paint_collection_flower
+from .plant_catalog import plant_definition
+
+FLOWER_MIME = 'application/x-morning-bloom-flower'
+
+
+def sale_price(item):
+    return item['base_sale_g'] + item['bonus_g']
+
+
+class Meadow(QWidget):
+    dragChanged = Signal(object)
+    ROW_HEIGHT = 118
+
+    def __init__(self, garden, parent=None):
+        super().__init__(parent)
+        self.garden = garden
+        self.items = []
+        self.phase = 0.0
+        self.dragged_id = None
+        self._pressed_id = None
+        self._press_position = QPoint()
+        self.setMouseTracking(True)
+        self.setAccessibleName('수집한 꽃 정원')
+        self.timer = QTimer(self)
+        self.timer.setInterval(50)
+        self.timer.timeout.connect(self._animate)
+        self.sync()
+
+    @property
+    def columns(self):
+        return max(2, (self.width() - 16) // 84)
+
+    def sync(self):
+        self.items = list(self.garden.collection)
+        self._update_height()
+        self.update()
+
+    def _update_height(self):
+        rows = max(1, math.ceil(len(self.items) / self.columns))
+        self.setMinimumHeight(18 + rows * self.ROW_HEIGHT)
+
+    def item_rect(self, index):
+        row, column = divmod(index, self.columns)
+        cell_width = (self.width() - 16) / self.columns
+        return QRectF(8 + column * cell_width, 10 + row * self.ROW_HEIGHT, cell_width, 106)
+
+    def item_at(self, position):
+        row = int((position.y() - 10) // self.ROW_HEIGHT)
+        for index in range(max(0, row * self.columns), min(len(self.items), (row + 1) * self.columns)):
+            if self.item_rect(index).adjusted(6, 0, -6, 0).contains(position):
+                return self.items[index]
+        return None
+
+    def tooltip_for(self, item):
+        bonus = f' (분무 +{item["bonus_g"]}G)' if item['misted'] else ''
+        return f'{plant_definition(item["species"]).name} · 판매 {sale_price(item)}G{bonus}\n아래 돈주머니로 드래그하면 판매됩니다.'
+
+    def _animate(self):
+        if self.items and not self.garden.vacation:
+            self.phase += .065
+            self.update()
+
+    def showEvent(self, event):
+        self.timer.start()
+        super().showEvent(event)
+
+    def hideEvent(self, event):
+        self.timer.stop()
+        super().hideEvent(event)
+
+    def resizeEvent(self, event):
+        self._update_height()
+        super().resizeEvent(event)
+
+    def event(self, event):
+        if event.type() == QEvent.ToolTip:
+            item = self.item_at(event.pos())
+            if item:
+                QToolTip.showText(event.globalPos(), self.tooltip_for(item), self)
+            else:
+                QToolTip.hideText()
+            return True
+        return super().event(event)
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        bounds = event.rect()
+        gradient = QLinearGradient(0, 0, self.width(), max(280, self.height()))
+        gradient.setColorAt(0, QColor('#c7dfa6'))
+        gradient.setColorAt(1, QColor('#94bd7d'))
+        painter.fillRect(bounds, gradient)
+        # Deterministic tufts only in the visible rows, even for large collections.
+        painter.setPen(QPen(QColor('#85ad70'), 1.3, Qt.SolidLine, Qt.RoundCap))
+        for row in range(max(0, bounds.top() // 30), bounds.bottom() // 30 + 1):
+            for column in range(self.width() // 38 + 1):
+                x = column * 38 + (row % 2) * 15 + 7
+                y = row * 30 + (column * 7) % 14
+                painter.drawLine(x, y, x - 3, y - 5)
+                painter.drawLine(x, y, x + 3, y - 6)
+        if not self.items:
+            painter.setPen(QColor('#42603a'))
+            visible = self.visibleRegion().boundingRect()
+            painter.drawText(visible.adjusted(14, 0, -14, 0), Qt.AlignCenter | Qt.TextWordWrap,
+                             '아직 모은 꽃이 없어요\n화분에서 핀 꽃을 정원에 보관해 보세요')
+        start = max(0, (bounds.top() - 14) // self.ROW_HEIGHT) * self.columns
+        end = min(len(self.items), (bounds.bottom() // self.ROW_HEIGHT + 1) * self.columns)
+        for index in range(start, end):
+            item = self.items[index]
+            rect = self.item_rect(index)
+            phase = 0 if self.garden.vacation else self.phase + index * .8
+            bob = math.sin(phase) * 2.5
+            painter.save()
+            if item['id'] == self.dragged_id:
+                painter.setOpacity(.3)
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(QColor(64, 98, 49, 48))
+            painter.drawEllipse(QRectF(rect.center().x() - 23, rect.bottom() - 5, 46, 8))
+            paint_collection_flower(painter, rect.adjusted(8, -3 + bob, -8, -9 + bob),
+                                    plant_definition(item['species']), phase)
+            painter.restore()
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            item = self.item_at(event.position())
+            self._pressed_id = item['id'] if item else None
+            self._press_position = event.position().toPoint()
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        self.setCursor(Qt.OpenHandCursor if self.item_at(event.position()) else Qt.ArrowCursor)
+        if (event.buttons() & Qt.LeftButton and self._pressed_id
+                and (event.position().toPoint() - self._press_position).manhattanLength()
+                >= QApplication.startDragDistance()):
+            item_id, self._pressed_id = self._pressed_id, None
+            self.start_drag(item_id)
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        self._pressed_id = None
+        super().mouseReleaseEvent(event)
+
+    def start_drag(self, item_id):
+        item = next((flower for flower in self.garden.collection if flower['id'] == item_id), None)
+        if item is None:
+            return
+        mime = QMimeData()
+        mime.setData(FLOWER_MIME, item_id.encode('utf-8'))
+        drag = QDrag(self)
+        drag.setMimeData(mime)
+        scale = self.devicePixelRatioF()
+        pixmap = QPixmap(round(84 * scale), round(108 * scale))
+        pixmap.setDevicePixelRatio(scale)
+        pixmap.fill(Qt.transparent)
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.Antialiasing)
+        paint_collection_flower(painter, QRectF(0, 0, 84, 108), plant_definition(item['species']))
+        painter.end()
+        drag.setPixmap(pixmap)
+        drag.setHotSpot(QPoint(42, 70))
+        self.dragged_id = item_id
+        self.dragChanged.emit(item)
+        self.update()
+        try:
+            drag.exec(Qt.MoveAction)
+        finally:
+            self.dragged_id = None
+            self.dragChanged.emit(None)
+            self.update()
+            drag.deleteLater()
+
+
+class SaleZone(QWidget):
+    def __init__(self, meadow, sell_callback, parent=None):
+        super().__init__(parent)
+        self.meadow, self.sell_callback = meadow, sell_callback
+        self.preview = None
+        self.highlighted = False
+        self.setAcceptDrops(True)
+        self.setFixedHeight(52)
+        self.setAccessibleName('돈주머니 판매 영역')
+        self.setToolTip('정원의 꽃 화분을 여기에 놓으면 표시된 가격으로 즉시 판매합니다.')
+        meadow.dragChanged.connect(self.set_preview)
+
+    def set_preview(self, item):
+        self.preview = item
+        self.highlighted = False
+        self.update()
+
+    def _valid_item(self, event):
+        if event.source() is not self.meadow or not event.mimeData().hasFormat(FLOWER_MIME):
+            return None
+        if not event.possibleActions() & Qt.MoveAction:
+            return None
+        try:
+            item_id = bytes(event.mimeData().data(FLOWER_MIME)).decode('utf-8')
+        except UnicodeDecodeError:
+            return None
+        if item_id != self.meadow.dragged_id:
+            return None
+        return next((item for item in self.meadow.garden.collection if item['id'] == item_id), None)
+
+    def dragEnterEvent(self, event):
+        item = self._valid_item(event)
+        if item:
+            self.preview, self.highlighted = item, True
+            event.setDropAction(Qt.MoveAction)
+            event.accept()
+        else:
+            event.ignore()
+        self.update()
+
+    def dragMoveEvent(self, event):
+        self.dragEnterEvent(event)
+
+    def dragLeaveEvent(self, event):
+        self.highlighted = False
+        self.update()
+        event.accept()
+
+    def dropEvent(self, event):
+        item = self._valid_item(event)
+        if item and self.sell_callback(item['id']):
+            event.setDropAction(Qt.MoveAction)
+            event.accept()
+        else:
+            event.ignore()
+        self.preview, self.highlighted = None, False
+        self.update()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setBrush(QColor('#e5f0cd' if self.highlighted else '#f2ecd9'))
+        painter.setPen(QPen(QColor('#799956' if self.highlighted else '#caba8d'), 1.5,
+                            Qt.SolidLine if self.highlighted else Qt.DashLine))
+        painter.drawRoundedRect(QRectF(self.rect()).adjusted(1, 1, -1, -1), 12, 12)
+        # Money-bag icon is drawn, not an OS-dependent emoji glyph.
+        painter.save()
+        painter.translate(12, 7)
+        bag = QPainterPath()
+        bag.moveTo(12, 10)
+        bag.lineTo(9, 2)
+        bag.quadTo(17, 5, 25, 2)
+        bag.lineTo(22, 10)
+        bag.cubicTo(42, 31, 30, 37, 17, 36)
+        bag.cubicTo(2, 37, -6, 29, 12, 10)
+        painter.setPen(QPen(QColor('#99702e'), 1.4))
+        painter.setBrush(QColor('#e7bd67'))
+        painter.drawPath(bag)
+        painter.drawLine(11, 11, 24, 11)
+        painter.drawText(QRectF(7, 15, 22, 20), Qt.AlignCenter, 'G')
+        painter.restore()
+        painter.setPen(QColor('#4e5638'))
+        title = f'놓으면 +{sale_price(self.preview)}G' if self.preview else '꽃 화분을 놓아 판매'
+        subtitle = plant_definition(self.preview['species']).name if self.preview else '돈주머니까지 드래그하세요'
+        painter.drawText(QRectF(61, 6, self.width() - 69, 20), Qt.AlignVCenter, title)
+        painter.setPen(QColor('#7a8167'))
+        font = painter.font()
+        font.setPixelSize(10)
+        painter.setFont(font)
+        painter.drawText(QRectF(61, 27, self.width() - 69, 16), Qt.AlignVCenter, subtitle)
+
+
+class CollectionGarden(QWidget):
+    def __init__(self, garden, sell_callback, parent=None):
+        super().__init__(parent)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+        self.scroll = QScrollArea()
+        self.scroll.setFrameShape(QFrame.NoFrame)
+        self.scroll.setWidgetResizable(True)
+        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.scroll.setStyleSheet('QScrollArea {background:#bdd69d;border-radius:12px;} '
+                                 'QScrollBar:vertical {width:8px;}')
+        self.meadow = Meadow(garden)
+        self.scroll.setWidget(self.meadow)
+        layout.addWidget(self.scroll, 1)
+        self.sale_zone = SaleZone(self.meadow, sell_callback)
+        layout.addWidget(self.sale_zone)
+
+    def sync(self):
+        self.meadow.sync()

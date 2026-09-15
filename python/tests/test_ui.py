@@ -37,8 +37,8 @@ class UI(unittest.TestCase):
             window.refresh()
             self.assertTrue(window.harvest_button.isEnabled())
             window.harvest_button.click()
-            window.bag_list.setCurrentRow(0)
-            self.assertIn('50G', window.sell_button.text())
+            flower = window.collection_garden.meadow.items[0]
+            self.assertIn('50G', window.collection_garden.meadow.tooltip_for(flower))
             window.close()
 
     def test_starflower_mist_sale_and_labels(self):
@@ -56,9 +56,12 @@ class UI(unittest.TestCase):
             window.offset = 3 * HOUR + 1
             window.refresh()
             window.harvest_button.click()
-            window.bag_list.setCurrentRow(0)
-            self.assertIn('13G', window.sell_button.text())
-            self.assertIn('분무 보너스', window.bag_list.currentItem().text())
+            flower = window.collection_garden.meadow.items[0]
+            tooltip = window.collection_garden.meadow.tooltip_for(flower)
+            self.assertIn('13G', tooltip)
+            self.assertIn('분무 +1G', tooltip)
+            self.assertTrue(window.sell_flower(flower['id']))
+            self.assertEqual(garden.coins, 133)
             window.close()
 
     def test_tulip_slow_status_and_recovery_label(self):

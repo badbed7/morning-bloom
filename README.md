@@ -71,6 +71,7 @@ godot --headless --path . --script tests/ui_smoke.gd -- --demo
 - [v0.4 성장·돌봄·경제 상세 기획](docs/game-design-v0.4.ko.md)
 - [정원·순환 메뉴 수정 기획 및 작업본 검증](docs/garden-ui-revision.ko.md)
 - [햇빛 클릭 수집·꾸미기 상점 기획과 개발자 모드](docs/sunlight-interaction.ko.md)
+- [타이쿤 반복 돌봄·비료 미니게임 변경안 — 미구현](docs/tycoon-care-fertilizer.ko.md)
 - [구조와 Windows 검증 방법](docs/development.md)
 
 원본 기획: [꽃 키우기 프로젝트](https://app.notion.com/p/32ca1215692880a58ae2ee9d85ed96a1).

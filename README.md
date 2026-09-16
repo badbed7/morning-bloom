@@ -96,7 +96,7 @@ godot --headless --path . --script tests/ui_smoke.gd -- --demo
 
 ## Windows 실행 파일과 업데이트
 
-v0.4.0부터 네 화분·비료 미니게임·코티지 UI·아이콘 선택·햇빛 화분 스킨을 Windows 실행 파일에 포함합니다. [v0.4.0 Release](https://github.com/badbed7/morning-bloom/releases/tag/v0.4.0)에서 전체 ZIP을 받아 압축을 풀고 실행하세요.
+v0.5.0은 분무 미니게임·Windows 바탕화면 꽃·랜덤 씨앗·고대 꽃과 개선된 비료 보상을 포함합니다. [v0.5.0 Release](https://github.com/badbed7/morning-bloom/releases/tag/v0.5.0)에서 전체 ZIP을 받아 압축을 풀고 실행하세요.
 
 Smart App Control이 켜진 일반 사용자 PC에는 Microsoft Store MSIX를 사용합니다. Store용 자동 빌드와 제출 순서는 [Microsoft Store MSIX 배포](release/README.md#microsoft-store-msix)를 확인하세요. 현재 Store 등록 전이며 Partner Center의 제품 ID를 연결해야 합니다.
 

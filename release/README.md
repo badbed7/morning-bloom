@@ -13,7 +13,7 @@ Smart App Control이 켜진 PC에는 Microsoft Store 배포를 권장합니다. 
 5. 완료된 `MorningBloom-Store-MSIX` artifact의 `.msix`를 내려받아 Partner Center 제출의 **Packages**에 올립니다.
 6. 가격·카테고리·연령 등급·스토어 설명·스크린샷·지원 정보를 채운 뒤 인증을 제출합니다.
 
-`release/VERSION`의 `0.4.0`은 Store용 `1.4.0.0`으로 변환합니다. MSIX 네 번째 버전은 Store 예약 값인 `0`으로 유지합니다. 이후 제출은 `release/VERSION`을 올려 더 높은 패키지 버전을 만듭니다.
+`release/VERSION`의 `0.5.0`은 Store용 `1.5.0.0`으로 변환합니다. MSIX 네 번째 버전은 Store 예약 값인 `0`으로 유지합니다. 이후 제출은 `release/VERSION`을 올려 더 높은 패키지 버전을 만듭니다.
 
 로컬 수동 패키징은 Windows 10/11 SDK의 `MakeAppx.exe`가 필요합니다. 먼저 `python release/build_windows.py`를 실행한 뒤 다음 환경 변수를 설정하고 실행합니다.
 

@@ -80,7 +80,14 @@ def main():
         raise SystemExit('Packaged launcher startup check failed')
     zip_folder(bootstrap, output / f'MorningBloom-{release_version}-Windows-x64.zip')
     (output / 'release-notes.md').write_text(
-        f'Morning Bloom {release_version}\n\nDownload the Windows-x64 ZIP, extract all files and run MorningBloom.exe.\n'
+        f'Morning Bloom {release_version}\n\n'
+        'New in this release:\n'
+        '- Spray-care minigame with three animated plant clicks.\n'
+        '- Interactive flowers attached to the Windows desktop, with independent opacity and sunlight.\n'
+        '- 20G mystery seeds, including a 0.1% ancient flower worth 500G.\n'
+        '- Fertilizer rewards every 3 minutes, a five-item cap, and immediate input handling.\n'
+        '- Save-schema migration that preserves existing gardens and excess fertilizer.\n\n'
+        'Download the Windows-x64 ZIP, extract all files and run MorningBloom.exe.\n'
         'Includes Python and Qt. Automatic game updates are checked on launch.\n'
         'If the public distribution feed is not connected yet, this package works offline and updates will be unavailable.\n'
         'Unsigned prototype; native executable startup and isolated game smoke test passed in Windows CI.\n', encoding='utf-8')

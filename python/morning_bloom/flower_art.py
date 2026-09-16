@@ -42,7 +42,15 @@ def paint_potted_flower(painter, definition, stage=4, phase=0, planted=True, dro
         if stage >= 3:
             painter.save()
             painter.translate(190 + sway, top)
-            if definition.key == 'tulip':
+            if definition.key == 'ancient':
+                painter.setPen(QPen(QColor('#d8bc6b'), 1.5))
+                painter.drawEllipse(QRectF(-33, -33, 66, 66))
+                painter.setPen(Qt.NoPen)
+                _starflower(painter, definition, stage == 4)
+                painter.rotate(36)
+                painter.scale(.65, .65)
+                _starflower(painter, definition, stage == 4)
+            elif definition.key == 'tulip':
                 _tulip(painter, definition, stage == 4)
             elif definition.key == 'starflower':
                 _starflower(painter, definition, stage == 4)

@@ -4,9 +4,10 @@ from dataclasses import asdict, dataclass, field
 from typing import ClassVar
 from uuid import uuid4
 import math
+import secrets
 
 from .cosmetics import POT_SKINS, THEMES, garden_theme, pot_skin
-from .plant_catalog import DAY, HOUR, PLANTS, plant_definition
+from .plant_catalog import DAY, HOUR, PLANTS, REGULAR_PLANTS, RANDOM_SEED_PRICE, plant_definition, roll_mystery_seed
 
 OFFLINE_CAP = 3 * DAY
 MID_WATER_EARLY = 22 * HOUR
@@ -20,8 +21,9 @@ TYCOON_RULE = 'tycoon-v1'
 WATER_INTERVAL = 30 * 60
 MIST_INTERVAL = 15 * 60
 FERTILIZER_SECONDS = 10 * 60
-FERTILIZER_CAP = 10
-REWARD_INTERVAL = 30 * 60
+FERTILIZER_CAP = 5
+REWARD_INTERVAL = 3 * 60
+V8_FIELDS = {'fertilizer_reserve', 'mystery_seeds', 'mystery_plants', 'desktop_flowers', 'desktop_opacity'}
 TYCOON_POT_DEFAULTS = dict(water_wait=0.0, mist_wait=0.0, water_count=0,
                            mist_count=0, fertilizer_used=0, fertilizer_limit=0)
 LEGACY_SPECIES = ('daisy', 'tulip')
@@ -160,14 +162,18 @@ def _validate_legacy_collection(items):
 @dataclass
 class Garden:
     """Shared inventory with up to four independently simulated pots."""
-    CURRENT_SCHEMA: ClassVar[int] = 7
+    CURRENT_SCHEMA: ClassVar[int] = 8
 
     last_update: float
     schema: int = CURRENT_SCHEMA
     tutorial_used: bool = False
     tutorial_reward_claimed: bool = False
     coins: int = 120
-    seeds: dict = field(default_factory=lambda: {key: int(key == 'daisy') for key in PLANTS})
+    seeds: dict = field(default_factory=lambda: {key: int(key == 'daisy') for key in REGULAR_PLANTS})
+    mystery_seeds: list = field(default_factory=list)
+    mystery_plants: list = field(default_factory=list)
+    desktop_flowers: dict = field(default_factory=dict)
+    desktop_opacity: float = 1.0
     collection: list = field(default_factory=list)
     sunlight: int = 0
     sun_tokens: list = field(default_factory=list)
@@ -179,6 +185,7 @@ class Garden:
     owned_skins: list = field(default_factory=lambda: ['terracotta'])
     equipped_skin: str = 'terracotta'
     fertilizer: int = 0
+    fertilizer_reserve: int = 0
     reward_wait: float = 0.0
     last_reward_id: str | None = None
     vacation: bool = False
@@ -223,6 +230,14 @@ class Garden:
         return plant_definition(self.species or 'daisy')
 
     @property
+    def mystery_hidden(self):
+        return self.pot['plant_id'] in self.mystery_plants and not self.bloomed
+
+    @property
+    def display_name(self):
+        return '신비한 식물' if self.mystery_hidden else self.definition.name
+
+    @property
     def bloomed(self):
         return self.planted and self.growth >= self.duration
 
@@ -250,7 +265,7 @@ class Garden:
             return '물주기를 권장해요 · 지금은 정상 속도로 자라고 있어요'
         if self.water_status == 'early':
             return '미리 물을 줄 수 있어요'
-        return f'{self.definition.name}가 건강하게 자라고 있어요'
+        return f'{self.display_name}이 건강하게 자라고 있어요'
 
     @property
     def water_status(self):
@@ -303,6 +318,9 @@ class Garden:
         if not self.can_use_fertilizer:
             return False
         self.fertilizer -= 1
+        if self.fertilizer_reserve:
+            self.fertilizer_reserve -= 1
+            self.fertilizer += 1
         self.pot['fertilizer_used'] += 1
         self.growth = min(self.duration, self.growth + FERTILIZER_SECONDS)
         return True
@@ -318,10 +336,12 @@ class Garden:
         return True
 
     def seed_count(self, species):
+        if species == 'random':
+            return len(self.mystery_seeds)
         return self.seeds.get(species, 0)
 
     def can_plant(self, species):
-        if species not in PLANTS or self.planted or self.vacation:
+        if species not in (*REGULAR_PLANTS, 'random') or self.planted or self.vacation:
             return False
         if not self.tutorial_used and species != 'daisy':
             return False
@@ -393,9 +413,13 @@ class Garden:
         self.advance(now)
         if not self.can_plant(species):
             return False
+        mystery = species == 'random'
+        if mystery:
+            species = self.mystery_seeds.pop(0)
+        else:
+            self.seeds[species] -= 1
         definition = plant_definition(species)
         is_tutorial = not self.tutorial_used
-        self.seeds[species] -= 1
         self.pots[self.selected] = {
             'planted': True, 'plant_id': str(uuid4()), 'species': species,
             'growth': 0.0, 'duration': float(60 if is_tutorial else definition.growth_seconds),
@@ -409,6 +433,8 @@ class Garden:
             **TYCOON_POT_DEFAULTS,
             'fertilizer_limit': 0 if is_tutorial else definition.growth_seconds // 2400,
         }
+        if mystery:
+            self.mystery_plants.append(self.pot['plant_id'])
         self.tutorial_used = True
         return True
 
@@ -471,6 +497,8 @@ class Garden:
             return False
         was_empty = not self.collection
         self.collection.append(item)
+        if item['id'] in self.mystery_plants:
+            self.mystery_plants.remove(item['id'])
         if was_empty:
             self.sun_elapsed = 0.0
         if not self.sun_intro_claimed and len(self.sun_tokens) < SUN_PENDING_CAP:
@@ -487,13 +515,32 @@ class Garden:
         return True
 
     def buy_seed(self, species='daisy'):
-        if species not in PLANTS:
+        if species not in (*REGULAR_PLANTS, 'random'):
             return False
-        price = plant_definition(species).seed_price
+        price = RANDOM_SEED_PRICE if species == 'random' else plant_definition(species).seed_price
         if self.coins < price:
             return False
         self.coins -= price
-        self.seeds[species] += 1
+        if species == 'random':
+            self.mystery_seeds.append(roll_mystery_seed(secrets.randbelow))
+        else:
+            self.seeds[species] += 1
+        return True
+
+    def place_desktop(self, item_id, x, y):
+        if (not any(item['id'] == item_id for item in self.collection)
+                or not _number(x) or not _number(y)):
+            return False
+        self.desktop_flowers[item_id] = {'x': round(x), 'y': round(y)}
+        return True
+
+    def return_desktop(self, item_id):
+        return self.desktop_flowers.pop(item_id, None) is not None
+
+    def set_desktop_opacity(self, value):
+        if not _number(value) or not .1 <= value <= 1:
+            return False
+        self.desktop_opacity = value
         return True
 
     def buy_pot(self):
@@ -513,6 +560,7 @@ class Garden:
             if item['id'] == item_id:
                 self.coins += item['base_sale_g'] + item['bonus_g']
                 self.collection.pop(index)
+                self.desktop_flowers.pop(item_id, None)
                 if not self.collection:
                     self.sun_elapsed = 0.0
                 return True
@@ -590,7 +638,7 @@ class Garden:
                 raise ValueError(key)
         if data['tutorial_reward_claimed'] and not data['tutorial_used']:
             raise ValueError('첫 재배 보상')
-        if not isinstance(data['seeds'], dict) or set(data['seeds']) != set(PLANTS):
+        if not isinstance(data['seeds'], dict) or set(data['seeds']) != set(REGULAR_PLANTS):
             raise ValueError('씨앗')
         if any(type(value) is not int or value < 0 for value in data['seeds'].values()):
             raise ValueError('씨앗')
@@ -598,6 +646,19 @@ class Garden:
             raise ValueError('햇빛')
         if type(data['fertilizer']) is not int or not 0 <= data['fertilizer'] <= FERTILIZER_CAP:
             raise ValueError('비료 재고')
+        if type(data['fertilizer_reserve']) is not int or not 0 <= data['fertilizer_reserve'] <= 5:
+            raise ValueError('이전 비료 예비 재고')
+        if data['fertilizer_reserve'] and data['fertilizer'] != FERTILIZER_CAP:
+            raise ValueError('예비 비료는 사용 시 자동 보충')
+        if (not isinstance(data['mystery_seeds'], list)
+                or any(type(key) is not str or key not in PLANTS for key in data['mystery_seeds'])):
+            raise ValueError('랜덤 씨앗')
+        if (not isinstance(data['mystery_plants'], list)
+                or any(type(key) is not str for key in data['mystery_plants'])
+                or len(set(data['mystery_plants'])) != len(data['mystery_plants'])):
+            raise ValueError('랜덤 재배 식별')
+        if not _number(data['desktop_opacity']) or not .1 <= data['desktop_opacity'] <= 1:
+            raise ValueError('바탕화면 꽃 불투명도')
         if not _number(data['reward_wait']) or not 0 <= data['reward_wait'] <= REWARD_INTERVAL:
             raise ValueError('비료 보상 대기')
         if data['last_reward_id'] is not None and (
@@ -643,6 +704,14 @@ class Garden:
         collection_ids = cls._validate_collection(data['collection'])
         if active_ids & collection_ids:
             raise ValueError('중복 꽃 ID')
+        if not set(data['mystery_plants']) <= active_ids:
+            raise ValueError('존재하지 않는 랜덤 재배')
+        if not isinstance(data['desktop_flowers'], dict) or not set(data['desktop_flowers']) <= collection_ids:
+            raise ValueError('바탕화면 꽃 식별')
+        for position in data['desktop_flowers'].values():
+            if (not isinstance(position, dict) or set(position) != {'x', 'y'}
+                    or any(not _number(v) or abs(v) > 100000 for v in position.values())):
+                raise ValueError('바탕화면 꽃 위치')
         return cls(**deepcopy(data))
 
     @staticmethod

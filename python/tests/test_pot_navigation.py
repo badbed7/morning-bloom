@@ -60,7 +60,7 @@ class PotNavigation(unittest.TestCase):
             self.window.pages.widget(POT_PAGE).findChildren(QComboBox),
             [],
         )
-        self.assertEqual(set(self.window.species_picker.buttons), {'daisy', 'starflower', 'tulip'})
+        self.assertEqual(set(self.window.species_picker.buttons), {'daisy', 'starflower', 'tulip', 'random'})
         self.assertTrue(all(not button.icon().isNull() for button in self.window.species_picker.buttons.values()))
         self.assertEqual(self.window.pot_name.text(), '화분 1 / 2 · 데이지')
         self.assertIn('성장 중', self.window.pot_name.toolTip())
@@ -142,6 +142,12 @@ class PotNavigation(unittest.TestCase):
         self.window.pot_slides.finish_transition()
         QTest.mouseClick(self.window.water_button, Qt.LeftButton)
         QTest.mouseClick(self.window.mist_button, Qt.LeftButton)
+        canvas = self.window._mist_game.canvas
+        for _ in range(3):
+            QTest.mouseClick(canvas, Qt.LeftButton, pos=canvas.plant_rect().center().toPoint())
+            for _ in range(12):
+                canvas.animate()
+        self.window._mist_game.accept()
         self.assertTrue(self.garden.pots[1]['initial_watered'])
         self.assertTrue(self.garden.pots[1]['misted'])
         self.assertFalse(self.garden.pots[0]['misted'])

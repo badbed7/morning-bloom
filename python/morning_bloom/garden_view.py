@@ -3,7 +3,7 @@ import math
 
 from PySide6.QtCore import QEvent, QMimeData, QPoint, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QDrag, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap
-from PySide6.QtWidgets import QApplication, QFrame, QLabel, QScrollArea, QToolTip, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QApplication, QFrame, QLabel, QMenu, QScrollArea, QToolTip, QVBoxLayout, QWidget
 
 from .flower_art import paint_collection_flower
 from .cosmetics import garden_theme
@@ -19,6 +19,7 @@ def sale_price(item):
 
 class Meadow(QWidget):
     dragChanged = Signal(object)
+    desktopRequested = Signal(str)
     ROW_HEIGHT = 118
 
     def __init__(self, garden, collect_callback=None, parent=None):
@@ -27,6 +28,7 @@ class Meadow(QWidget):
         self.collect_callback = collect_callback
         self.items = []
         self.tokens = []
+        self.desktop_ids = set()
         self.bursts = []
         self.phase = 0.0
         self.dragged_id = None
@@ -54,7 +56,8 @@ class Meadow(QWidget):
 
     def sync(self):
         self.items = list(self.garden.collection)
-        self.tokens = list(self.garden.sun_tokens)
+        self.tokens = [token for token in self.garden.sun_tokens
+                       if token['source_flower_id'] not in self.desktop_ids]
         self._update_height()
         self.update()
 
@@ -90,7 +93,18 @@ class Meadow(QWidget):
 
     def tooltip_for(self, item):
         bonus = f' (분무 +{item["bonus_g"]}G)' if item['misted'] else ''
-        return f'{plant_definition(item["species"]).name} · 판매 {sale_price(item)}G{bonus}\n아래 돈주머니로 드래그하면 판매됩니다.'
+        desktop = '바탕화면에 배치 중 · 우클릭으로 복귀' if item['id'] in self.garden.desktop_flowers else '우클릭으로 바탕화면에 배치'
+        return f'{plant_definition(item["species"]).name} · 판매 {sale_price(item)}G{bonus}\n돈주머니로 드래그하면 판매 · {desktop}'
+
+    def contextMenuEvent(self, event):
+        item = self.item_at(event.pos())
+        if not item:
+            return
+        menu = QMenu(self)
+        label = '정원으로 돌려놓기' if item['id'] in self.garden.desktop_flowers else 'Windows 바탕화면에 배치'
+        action = menu.addAction(label)
+        if menu.exec(event.globalPos()) is action:
+            self.desktopRequested.emit(item['id'])
 
     def _animate(self):
         if self.items and not self.garden.vacation:
@@ -165,6 +179,9 @@ class Meadow(QWidget):
             paint_collection_flower(painter, rect.adjusted(8, -3 + bob, -8, -9 + bob),
                                     plant_definition(item['species']), phase, skin=self.garden.equipped_skin)
             painter.restore()
+            if item['id'] in self.garden.desktop_flowers:
+                painter.setPen(QColor(theme.text))
+                painter.drawText(rect.adjusted(0, 88, 0, 0), Qt.AlignCenter, '바탕화면')
         for index, token in enumerate(self.tokens):
             rect = self.sun_rect(index)
             pulse = 1 + math.sin(self.phase * 1.4 + index) * .08

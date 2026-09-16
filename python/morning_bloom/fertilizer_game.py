@@ -104,15 +104,14 @@ class FertilizerGame(QDialog):
         layout.addWidget(self.result)
         row = QHBoxLayout()
         self.start_button = QPushButton('섞기 시작')
-        self.start_button.clicked.connect(self.start)
-        self.stop_button = QPushButton('멈추기 · 스페이스')
-        self.stop_button.setEnabled(False)
-        self.stop_button.setVisible(False)
-        self.stop_button.clicked.connect(self.stop_round)
+        # Keep one physical button: replacing the focused button during the
+        # initiating click can lose the next input on Windows.
+        self.stop_button = self.start_button
+        self.start_button.clicked.connect(lambda: self.stop_round() if self.running else self.start())
         self.return_button = QPushButton('정원으로 돌아가기')
         self.return_button.clicked.connect(self.accept)
         self.return_button.setVisible(False)
-        for button in (self.start_button, self.stop_button, self.return_button):
+        for button in (self.start_button, self.return_button):
             button.setObjectName('gameAction')
             button.setFixedHeight(36)
             button.setAutoDefault(False)
@@ -141,10 +140,7 @@ class FertilizerGame(QDialog):
         if self.running or self.finished_game:
             return
         self.running = True
-        self.start_button.setEnabled(False)
-        self.start_button.hide()
-        self.stop_button.setEnabled(True)
-        self.stop_button.show()
+        self.stop_button.setText('멈추기 · 스페이스')
         self.stop_button.setFocus()
         self.space.setEnabled(True)
         self.next_round()
@@ -176,9 +172,6 @@ class FertilizerGame(QDialog):
         if not self.running:
             return
         now = time.monotonic()
-        # ponytail: inputs within the OS double-click interval are ignored; use release tracking for faster rounds.
-        if now - self.last_input <= QApplication.doubleClickInterval() / 1000:
-            return
         self.last_input = now
         elapsed = max(0.0, now - self.round_start)
         if elapsed >= 4:
@@ -214,6 +207,11 @@ class FertilizerGame(QDialog):
         self.completed.emit(self.game_id, success, self.rewarded)
 
     def eventFilter(self, watched, event):
+        if watched is self.stop_button and event.type() == QEvent.MouseButtonDblClick:
+            # Ignore the second press of an OS double-click, not every valid
+            # keyboard/mouse input inside a global half-second dead period.
+            self.stop_button.setDown(False)
+            return True
         if event.type() == QEvent.ApplicationDeactivate and self.running:
             self.reject()
         return super().eventFilter(watched, event)

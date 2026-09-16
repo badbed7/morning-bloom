@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 from morning_bloom.cosmetics import POT_SKINS
-from morning_bloom.model import Garden, SUN_INTERVAL, SUN_PENDING_CAP, TYCOON_POT_DEFAULTS
+from morning_bloom.model import Garden, SUN_INTERVAL, SUN_PENDING_CAP, TYCOON_POT_DEFAULTS, V8_FIELDS
 from morning_bloom.storage import SaveError, Store
 
 
@@ -17,6 +17,8 @@ def flower(index=0, species='daisy'):
 
 def v4_data(garden):
     data = garden.to_dict()
+    for key in V8_FIELDS:
+        data.pop(key)
     for key in (
         'sunlight', 'sun_tokens', 'sun_elapsed', 'sun_cursor',
         'sun_intro_claimed', 'owned_themes', 'equipped_theme',
@@ -146,6 +148,7 @@ class CosmeticsAndMigration(unittest.TestCase):
     def test_v6_migration_preserves_inventory_and_creates_original_backup(self):
         data = Garden(100, coins=432, sunlight=30, fertilizer=2, collection=[flower()],
                       owned_themes=['grass', 'sky'], equipped_theme='sky').to_dict()
+        additions = {key: data.pop(key) for key in V8_FIELDS}
         data.pop('owned_skins')
         data.pop('equipped_skin')
         data['schema'] = 6
@@ -154,7 +157,7 @@ class CosmeticsAndMigration(unittest.TestCase):
             store = Store(Path(tmp) / 'garden.json')
             store.path.write_text(raw, encoding='utf-8')
             garden = store.load(100)
-            self.assertEqual(garden.to_dict(), {**data, 'schema': Garden.CURRENT_SCHEMA,
+            self.assertEqual(garden.to_dict(), {**data, **additions, 'schema': Garden.CURRENT_SCHEMA,
                                               'owned_skins': ['terracotta'], 'equipped_skin': 'terracotta'})
             store.save(garden)
             self.assertEqual(store.migration_backup.name, 'garden.json.v6-migration.bak')

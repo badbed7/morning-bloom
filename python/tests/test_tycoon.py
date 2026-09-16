@@ -12,7 +12,7 @@ from PySide6.QtWidgets import QApplication
 from morning_bloom.app import Window
 from morning_bloom.model import (
     FERTILIZER_CAP, Garden, HOUR, MIST_INTERVAL, POT_PRICES,
-    REWARD_INTERVAL, TYCOON_POT_DEFAULTS, TYCOON_RULE, WATER_INTERVAL,
+    REWARD_INTERVAL, TYCOON_POT_DEFAULTS, TYCOON_RULE, WATER_INTERVAL, V8_FIELDS,
 )
 from morning_bloom.storage import SaveError, Store, migrate
 
@@ -29,6 +29,8 @@ def growing(species='starflower', now=NOW):
 
 def v5_data(garden):
     data = garden.to_dict()
+    for key in V8_FIELDS:
+        data.pop(key)
     for key in ('fertilizer', 'reward_wait', 'last_reward_id', 'owned_skins', 'equipped_skin'):
         data.pop(key)
     for pot in data['pots']:
@@ -128,11 +130,11 @@ class TycoonRules(unittest.TestCase):
             garden = growing(species)
             self.assertEqual(garden.pot['fertilizer_limit'], limit)
         garden = growing()
-        garden.fertilizer = 10
+        garden.fertilizer = 5
         for _ in range(4):
             self.assertTrue(garden.use_fertilizer(NOW))
         self.assertFalse(garden.use_fertilizer(NOW))
-        self.assertEqual(garden.fertilizer, 6)
+        self.assertEqual(garden.fertilizer, 1)
         garden = growing()
         garden.fertilizer = 1
         garden.growth = garden.duration - 7 * 60
@@ -169,7 +171,7 @@ class TycoonRules(unittest.TestCase):
         before = garden.to_dict()
         garden.advance(NOW)
         self.assertEqual(garden.to_dict(), before)
-        self.assertEqual(garden.reward_wait, REWARD_INTERVAL - 300)
+        self.assertEqual(garden.reward_wait, max(0, REWARD_INTERVAL - 300))
 
     def test_planned_starflower_timing_matches_design(self):
         for fertilizers, bloom_seconds in ((0, 9240), (1, 8880), (4, 7200)):
@@ -279,7 +281,7 @@ class TycoonUI(unittest.TestCase):
         self.window.open_fertilizer_game()
         game = self.window._fertilizer_game
         self.play_success(game)
-        self.assertEqual((self.garden.fertilizer, self.garden.reward_wait), (3, 1800))
+        self.assertEqual((self.garden.fertilizer, self.garden.reward_wait), (3, 180))
         game.stop_round()
         self.assertEqual(self.garden.fertilizer, 3)
         game.reject()
@@ -317,7 +319,7 @@ class TycoonUI(unittest.TestCase):
             QTest.keyClick(game, Qt.Key_Space)
             self.assertEqual(game.round, 2)
             clock.return_value = 100.6
-            game.stop_round()
+            QTest.mouseDClick(game.stop_button, Qt.LeftButton)
             self.assertEqual(game.round, 2)
             clock.return_value = 113
             game.tick()
@@ -338,7 +340,7 @@ class TycoonUI(unittest.TestCase):
         self.assertEqual(self.garden.fertilizer, 0)
         self.assertTrue(self.window.set_developer_mode(False))
         self.assertEqual(self.garden.fertilizer, 2)
-        self.garden.fertilizer = 10
+        self.garden.fertilizer = 5
         self.window.open_fertilizer_game()
         self.assertFalse(self.window._fertilizer_game.rewarded)
 

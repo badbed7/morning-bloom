@@ -11,12 +11,13 @@ from .model import (
     LEGACY_SPECIES,
     SingleGarden,
     TYCOON_POT_DEFAULTS,
+    V8_FIELDS,
     _number,
     _validate_legacy_collection,
     _validate_settings,
     empty_pot,
 )
-from .plant_catalog import PLANTS, plant_definition
+from .plant_catalog import REGULAR_PLANTS, plant_definition
 
 
 class SaveError(Exception):
@@ -78,7 +79,7 @@ def _v3_to_v4(data):
         'tutorial_used': data['tutorial_used'],
         'tutorial_reward_claimed': data['tutorial_used'],
         'coins': data['coins'],
-        'seeds': {key: data['seeds'].get(key, 0) for key in PLANTS},
+        'seeds': {key: data['seeds'].get(key, 0) for key in REGULAR_PLANTS},
         'collection': [], 'vacation': data['vacation'],
         'settings': deepcopy(data['settings']), 'pots': [],
         'selected': data['selected'],
@@ -151,7 +152,7 @@ def _v4_to_v5(data):
 
 
 def _v5_to_v6(data):
-    expected = set(Garden(0).to_dict()) - {'fertilizer', 'reward_wait', 'last_reward_id', 'owned_skins', 'equipped_skin'}
+    expected = set(Garden(0).to_dict()) - V8_FIELDS - {'fertilizer', 'reward_wait', 'last_reward_id', 'owned_skins', 'equipped_skin'}
     old_pot_fields = set(empty_pot()) - set(TYCOON_POT_DEFAULTS)
     if (not isinstance(data, dict) or set(data) != expected or type(data.get('schema')) is not int
             or data['schema'] != 5 or not isinstance(data['pots'], list) or not 1 <= len(data['pots']) <= 2):
@@ -169,12 +170,32 @@ def _v5_to_v6(data):
 
 
 def _v6_to_v7(data):
-    expected = set(Garden(0).to_dict()) - {'owned_skins', 'equipped_skin'}
+    expected = set(Garden(0).to_dict()) - V8_FIELDS - {'owned_skins', 'equipped_skin'}
     if (not isinstance(data, dict) or set(data) != expected
             or type(data.get('schema')) is not int or data['schema'] != 6):
         raise ValueError('v6 저장 항목 오류')
     migrated = deepcopy(data)
     migrated.update(schema=7, owned_skins=['terracotta'], equipped_skin='terracotta')
+    _v7_to_v8(migrated)
+    return migrated
+
+
+def _v7_to_v8(data):
+    expected = set(Garden(0).to_dict()) - V8_FIELDS
+    if not isinstance(data, dict) or set(data) != expected or type(data.get('schema')) is not int or data['schema'] != 7:
+        raise ValueError('v7 저장 항목 오류')
+    if type(data['fertilizer']) is not int or not 0 <= data['fertilizer'] <= 10:
+        raise ValueError('v7 비료 재고')
+    if not _number(data['reward_wait']) or not 0 <= data['reward_wait'] <= 1800:
+        raise ValueError('v7 비료 대기')
+    if data['reward_wait'] > 0 and data['last_reward_id'] is None:
+        raise ValueError('v7 비료 지급 기록 없음')
+    migrated = deepcopy(data)
+    defaults = Garden(0).to_dict()
+    migrated.update({key: defaults[key] for key in V8_FIELDS})
+    migrated.update(schema=8, fertilizer=min(5, data['fertilizer']),
+                    fertilizer_reserve=max(0, data['fertilizer'] - 5),
+                    reward_wait=max(0.0, data['reward_wait'] - 1620))
     Garden.from_dict(migrated)
     return migrated
 
@@ -205,6 +226,8 @@ def migrate(data):
         migrated = _v5_to_v6(migrated)
     if migrated.get('schema') == 6:
         migrated = _v6_to_v7(migrated)
+    if migrated.get('schema') == 7:
+        migrated = _v7_to_v8(migrated)
     return migrated
 
 
@@ -233,11 +256,11 @@ class Store:
                     raise SaveError('새 버전의 저장 파일입니다. 원본을 보존하고 앱을 업데이트하세요.')
                 migrated = migrate(data)
                 state = Garden.from_dict(migrated)
-                if isinstance(data, dict) and data.get('schema') in (1, 2, 3, 4, 5, 6):
+                if isinstance(data, dict) and data.get('schema') in (1, 2, 3, 4, 5, 6, 7):
                     self._migration_source = raw
-                    if data['schema'] in (5, 6):
+                    if data['schema'] in (5, 6, 7):
                         self.migration_backup = self.path.with_suffix(f'.json.v{data["schema"]}-migration.bak')
-                    self.notice = '기존 저장을 v7로 이전했습니다. 꽃·재화·꾸미기를 그대로 유지합니다.'
+                    self.notice = '기존 저장을 v8로 이전했습니다. 꽃·재화·꾸미기 보존 · 초과 비료는 예비 재고로 보관합니다.'
                 elif path == self.backup:
                     self.notice = '직전 정상 백업에서 복구했습니다.'
                 state.advance(now)

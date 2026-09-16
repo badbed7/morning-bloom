@@ -55,6 +55,12 @@ class UI(unittest.TestCase):
             window.plant_button.click()
             window.water_button.click()
             window.mist_button.click()
+            canvas = window._mist_game.canvas
+            for _ in range(3):
+                QTest.mouseClick(canvas, Qt.LeftButton, pos=canvas.plant_rect().center().toPoint())
+                for _ in range(12):
+                    canvas.animate()
+            window._mist_game.accept()
             window.offset = 3 * HOUR + 1
             window.refresh()
             window.harvest_button.click()

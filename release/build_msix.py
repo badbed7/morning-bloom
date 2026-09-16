@@ -94,6 +94,7 @@ def generate_assets(directory):
 
     directory.mkdir(parents=True, exist_ok=True)
     sizes = {
+        'Square44x44Logo.png': 44, 'Square150x150Logo.png': 150, 'StoreLogo.png': 50,
         'Square44x44Logo.scale-100.png': 44, 'Square44x44Logo.scale-200.png': 88,
         'Square44x44Logo.scale-400.png': 176, 'Square150x150Logo.scale-100.png': 150,
         'Square150x150Logo.scale-200.png': 300, 'Square150x150Logo.scale-400.png': 600,

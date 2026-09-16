@@ -15,6 +15,15 @@ MID_WATER_SLOW = 30 * HOUR
 SLOW_RATE = .5
 SUN_INTERVAL = 20 * 60
 SUN_PENDING_CAP = 9
+POT_PRICES = (0, 150, 200, 300)
+TYCOON_RULE = 'tycoon-v1'
+WATER_INTERVAL = 30 * 60
+MIST_INTERVAL = 15 * 60
+FERTILIZER_SECONDS = 10 * 60
+FERTILIZER_CAP = 10
+REWARD_INTERVAL = 30 * 60
+TYCOON_POT_DEFAULTS = dict(water_wait=0.0, mist_wait=0.0, water_count=0,
+                           mist_count=0, fertilizer_used=0, fertilizer_limit=0)
 LEGACY_SPECIES = ('daisy', 'tulip')
 LEGACY_POT_FIELDS = ('planted', 'species', 'growth', 'duration', 'water_due', 'mist_due', 'mist_progress')
 
@@ -32,6 +41,7 @@ def empty_pot():
         'legacy_care_exempt': False, 'ruleset_id': None,
         'base_sale_g': 0, 'mist_bonus_g': 0,
         'care_profile': None, 'is_tutorial': False,
+        **TYCOON_POT_DEFAULTS,
     }
 
 
@@ -149,8 +159,8 @@ def _validate_legacy_collection(items):
 
 @dataclass
 class Garden:
-    """Shared inventory with one or two independently simulated pots."""
-    CURRENT_SCHEMA: ClassVar[int] = 5
+    """Shared inventory with up to four independently simulated pots."""
+    CURRENT_SCHEMA: ClassVar[int] = 6
 
     last_update: float
     schema: int = CURRENT_SCHEMA
@@ -166,6 +176,9 @@ class Garden:
     sun_intro_claimed: bool = False
     owned_themes: list = field(default_factory=lambda: ['grass'])
     equipped_theme: str = 'grass'
+    fertilizer: int = 0
+    reward_wait: float = 0.0
+    last_reward_id: str | None = None
     vacation: bool = False
     settings: dict = field(default_factory=lambda: dict(opacity=1.0, topmost=True, x=-99999, y=-99999))
     pots: list = field(default_factory=list)
@@ -239,11 +252,20 @@ class Garden:
 
     @property
     def water_status(self):
-        pot = self.pot
-        if not pot['planted'] or self.bloomed:
+        return self.care_status('water')
+
+    def care_status(self, kind, pot=None):
+        pot = self.pot if pot is None else pot
+        if kind not in ('water', 'mist') or not pot['planted'] or pot['growth'] >= pot['duration']:
             return 'unavailable'
         if not pot['initial_watered']:
-            return 'initial'
+            return 'initial' if kind == 'water' else 'unavailable'
+        if pot['ruleset_id'] == TYCOON_RULE:
+            if pot['is_tutorial'] or not self.tutorial_reward_claimed:
+                return 'done' if kind == 'water' else 'unavailable'
+            return 'waiting' if pot[kind + '_wait'] > 0 else 'ready'
+        if kind == 'mist':
+            return 'done' if pot['misted'] else 'ready'
         if pot['care_profile'] != 'tulip_midwater' or pot['legacy_care_exempt'] or pot['mid_watered']:
             return 'done'
         age = pot['care_elapsed']
@@ -254,6 +276,44 @@ class Garden:
         if age < MID_WATER_SLOW:
             return 'due'
         return 'slow'
+
+    def can_care(self, kind):
+        return not self.vacation and self.care_status(kind) in ('initial', 'ready', 'early', 'due', 'slow')
+
+    @property
+    def next_pot_price(self):
+        return POT_PRICES[len(self.pots)] if len(self.pots) < len(POT_PRICES) else None
+
+    @property
+    def can_reward_fertilizer(self):
+        return (self.tutorial_reward_claimed and not self.vacation
+                and self.fertilizer < FERTILIZER_CAP and self.reward_wait <= 0)
+
+    @property
+    def can_use_fertilizer(self):
+        return (self.tutorial_reward_claimed and not self.vacation and self.fertilizer > 0
+                and self.planted and not self.bloomed and self.pot['initial_watered']
+                and self.pot['ruleset_id'] == TYCOON_RULE and not self.pot['is_tutorial']
+                and self.pot['fertilizer_used'] < self.pot['fertilizer_limit'])
+
+    def use_fertilizer(self, now):
+        self.advance(now)
+        if not self.can_use_fertilizer:
+            return False
+        self.fertilizer -= 1
+        self.pot['fertilizer_used'] += 1
+        self.growth = min(self.duration, self.growth + FERTILIZER_SECONDS)
+        return True
+
+    def reward_fertilizer(self, game_id, now):
+        self.advance(now)
+        if (not isinstance(game_id, str) or not game_id or len(game_id) > 128
+                or game_id == self.last_reward_id or not self.can_reward_fertilizer):
+            return False
+        self.fertilizer += 1
+        self.reward_wait = float(REWARD_INTERVAL)
+        self.last_reward_id = game_id
+        return True
 
     def seed_count(self, species):
         return self.seeds.get(species, 0)
@@ -273,6 +333,9 @@ class Garden:
 
     @staticmethod
     def _advance_pot(pot, elapsed):
+        if pot['ruleset_id'] == TYCOON_RULE and pot['initial_watered']:
+            for key in ('water_wait', 'mist_wait'):
+                pot[key] = max(0.0, pot[key] - elapsed)
         if elapsed <= 0 or not pot['planted'] or not pot['initial_watered'] or pot['growth'] >= pot['duration']:
             return
         old_age = pot['care_elapsed']
@@ -293,6 +356,7 @@ class Garden:
         self.last_update = now
         if self.vacation:
             return
+        self.reward_wait = max(0.0, self.reward_wait - elapsed)
         for pot in self.pots:
             self._advance_pot(pot, elapsed)
         self._advance_sunlight(elapsed, now)
@@ -335,20 +399,35 @@ class Garden:
             'growth': 0.0, 'duration': float(60 if is_tutorial else definition.growth_seconds),
             'initial_watered': False, 'care_elapsed': 0.0,
             'mid_watered': False, 'misted': False,
-            'legacy_care_exempt': False, 'ruleset_id': 'v0.4',
+            'legacy_care_exempt': False, 'ruleset_id': TYCOON_RULE,
             'base_sale_g': definition.sale_price,
             'mist_bonus_g': definition.mist_bonus,
-            'care_profile': 'start_only' if is_tutorial else definition.care_profile,
+            'care_profile': 'start_only' if is_tutorial else 'repeat',
             'is_tutorial': is_tutorial,
+            **TYCOON_POT_DEFAULTS,
+            'fertilizer_limit': 0 if is_tutorial else definition.growth_seconds // 2400,
         }
         self.tutorial_used = True
         return True
 
     def care(self, kind, now):
         self.advance(now)
-        if kind not in ('water', 'mist') or not self.planted or self.bloomed or self.vacation:
+        if not self.can_care(kind):
             return False
         pot = self.pot
+        if pot['ruleset_id'] == TYCOON_RULE:
+            if kind == 'water' and not pot['initial_watered']:
+                pot['initial_watered'] = True
+                pot['care_elapsed'] = 0.0
+                pot['water_count'] = 1
+                pot['water_wait'] = 0.0 if pot['is_tutorial'] else float(WATER_INTERVAL)
+                return True
+            pot[kind + '_count'] += 1
+            pot[kind + '_wait'] = float(WATER_INTERVAL if kind == 'water' else MIST_INTERVAL)
+            self.growth = min(self.duration, self.growth + (180 if kind == 'water' else 60))
+            if kind == 'mist':
+                pot['misted'] = True
+            return True
         if kind == 'mist':
             if not pot['initial_watered'] or pot['misted']:
                 return False
@@ -416,9 +495,10 @@ class Garden:
         return True
 
     def buy_pot(self):
-        if len(self.pots) >= 2 or self.coins < 150:
+        price = self.next_pot_price
+        if price is None or self.coins < price:
             return False
-        self.coins -= 150
+        self.coins -= price
         self.pots.append(empty_pot())
         return True
 
@@ -498,6 +578,16 @@ class Garden:
             raise ValueError('씨앗')
         if type(data['sunlight']) is not int or data['sunlight'] < 0:
             raise ValueError('햇빛')
+        if type(data['fertilizer']) is not int or not 0 <= data['fertilizer'] <= FERTILIZER_CAP:
+            raise ValueError('비료 재고')
+        if not _number(data['reward_wait']) or not 0 <= data['reward_wait'] <= REWARD_INTERVAL:
+            raise ValueError('비료 보상 대기')
+        if data['last_reward_id'] is not None and (
+            not isinstance(data['last_reward_id'], str) or not 1 <= len(data['last_reward_id']) <= 128
+        ):
+            raise ValueError('비료 지급 기록')
+        if data['reward_wait'] > 0 and data['last_reward_id'] is None:
+            raise ValueError('비료 지급 기록 없음')
         if not _number(data['sun_elapsed']) or not 0 <= data['sun_elapsed'] < SUN_INTERVAL:
             raise ValueError('햇빛 생산 시간')
         if type(data['sun_cursor']) is not int or data['sun_cursor'] < 0:
@@ -513,7 +603,7 @@ class Garden:
             raise ValueError('정원 꾸미기')
         _validate_settings(data['settings'])
         pots = data['pots']
-        if not isinstance(pots, list) or not 1 <= len(pots) <= 2:
+        if not isinstance(pots, list) or not 1 <= len(pots) <= len(POT_PRICES):
             raise ValueError('화분 개수')
         if type(data['selected']) is not int or not 0 <= data['selected'] < len(pots):
             raise ValueError('선택 화분')
@@ -544,20 +634,40 @@ class Garden:
         for key in ('base_sale_g', 'mist_bonus_g'):
             if type(pot[key]) is not int or pot[key] < 0:
                 raise ValueError(key)
+        for key, maximum in (('water_wait', WATER_INTERVAL), ('mist_wait', MIST_INTERVAL)):
+            if not _number(pot[key]) or not 0 <= pot[key] <= maximum:
+                raise ValueError('돌봄 대기시간')
+        for key in ('water_count', 'mist_count', 'fertilizer_used', 'fertilizer_limit'):
+            if type(pot[key]) is not int or pot[key] < 0:
+                raise ValueError('돌봄 사용 횟수')
+        if pot['fertilizer_used'] > pot['fertilizer_limit'] or pot['fertilizer_limit'] * 600 > pot['duration'] * .25:
+            raise ValueError('비료 사용 상한')
         if not pot['planted']:
             if pot != empty_pot():
                 raise ValueError('빈 화분 상태')
             return
         if pot['species'] not in PLANTS or not isinstance(pot['plant_id'], str) or not pot['plant_id']:
             raise ValueError('재배 식별')
-        if pot['ruleset_id'] not in ('v0.4', 'legacy-v3'):
+        if pot['ruleset_id'] not in ('v0.4', 'legacy-v3', TYCOON_RULE):
             raise ValueError('재배 규칙')
-        if pot['care_profile'] not in ('start_only', 'tulip_midwater'):
+        if pot['care_profile'] not in ('start_only', 'tulip_midwater', 'repeat'):
             raise ValueError('돌봄 규칙')
         if not pot['initial_watered'] and (pot['growth'] != 0 or pot['care_elapsed'] != 0 or pot['mid_watered'] or pot['misted']):
             raise ValueError('첫 물 전 상태')
         if pot['mid_watered'] and pot['care_profile'] != 'tulip_midwater':
             raise ValueError('중간 물 상태')
+        if pot['ruleset_id'] != TYCOON_RULE:
+            if pot['care_profile'] == 'repeat' or any(pot[key] != value for key, value in TYCOON_POT_DEFAULTS.items()):
+                raise ValueError('기존 작물 돌봄 상태')
+        else:
+            if pot['care_profile'] != ('start_only' if pot['is_tutorial'] else 'repeat') or pot['legacy_care_exempt']:
+                raise ValueError('새 작물 돌봄 규칙')
+            if not pot['initial_watered'] and any(pot[key] for key in TYCOON_POT_DEFAULTS if key != 'fertilizer_limit'):
+                raise ValueError('첫 물 전 돌봄 상태')
+            if pot['initial_watered'] != (pot['water_count'] > 0) or pot['misted'] != (pot['mist_count'] > 0):
+                raise ValueError('돌봄 횟수와 상태 불일치')
+            if pot['is_tutorial'] and (pot['misted'] or pot['fertilizer_limit'] or pot['water_count'] > 1):
+                raise ValueError('첫 꽃 돌봄 상태')
 
     @staticmethod
     def _validate_collection(items):

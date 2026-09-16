@@ -162,7 +162,10 @@ class DeveloperMode(unittest.TestCase):
         self.assertEqual(self.window.garden.growth, 6 * HOUR)
 
     def test_repeated_skip_uses_tulip_watering_and_slow_growth_rules(self):
-        self.prepare_demo('tulip')
+        garden = self.prepare_demo('tulip', watered=False)
+        garden.pot.update(ruleset_id='v0.4', care_profile='tulip_midwater', fertilizer_limit=0)
+        garden.care('water', NOW)
+        self.demo_store.save(garden)
         self.window.set_developer_mode(True)
         for _ in range(6):
             self.assertTrue(self.window.fast_forward())

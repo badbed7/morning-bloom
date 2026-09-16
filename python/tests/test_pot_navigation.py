@@ -144,7 +144,7 @@ class PotNavigation(unittest.TestCase):
         self.assertTrue(self.window.mist_button.isEnabled())
         self.wall_clock.return_value = NOW + 600
         self.window.refresh()
-        self.assertEqual([pot['growth'] for pot in self.garden.pots], [600, 600])
+        self.assertEqual([pot['growth'] for pot in self.garden.pots], [600, 660])
 
     def test_rapid_clicks_resize_and_leaving_page_clear_overlays(self):
         for _ in range(9):
@@ -189,7 +189,7 @@ class PotNavigation(unittest.TestCase):
             for widget in (
                 self.window.previous_pot, self.window.pot_name, self.window.next_pot,
                 self.window.water_button, self.window.mist_button,
-                self.window.harvest_button, self.window.settings_button,
+                self.window.fertilizer_button, self.window.settings_button,
             ):
                 self.assertTrue(widget.isVisible())
                 self.assertTrue(self.window.rect().contains(

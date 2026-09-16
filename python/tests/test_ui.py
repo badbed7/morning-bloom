@@ -72,6 +72,7 @@ class UI(unittest.TestCase):
             window = Window(store, garden, True)
             window.species_picker.setCurrentIndex(window.species_picker.findData('tulip'))
             window.plant_button.click()
+            garden.pot.update(ruleset_id='v0.4', care_profile='tulip_midwater', fertilizer_limit=0)
             window.water_button.click()
             window.offset = 40 * HOUR
             window.refresh()

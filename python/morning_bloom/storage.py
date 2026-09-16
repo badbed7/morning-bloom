@@ -10,6 +10,7 @@ from .model import (
     LEGACY_POT_FIELDS,
     LEGACY_SPECIES,
     SingleGarden,
+    TYCOON_POT_DEFAULTS,
     _number,
     _validate_legacy_collection,
     _validate_settings,
@@ -91,7 +92,8 @@ def _v3_to_v4(data):
         })
     for index, legacy in enumerate(data['pots']):
         if not legacy['planted']:
-            migrated['pots'].append(empty_pot())
+            migrated['pots'].append({key: value for key, value in empty_pot().items()
+                                     if key not in TYCOON_POT_DEFAULTS})
             continue
         definition = plant_definition(legacy['species'])
         is_tutorial = legacy['duration'] == 60
@@ -135,7 +137,7 @@ def _v4_to_v5(data):
         owned_themes=['grass'],
         equipped_theme='grass',
     )
-    Garden.from_dict(migrated)
+    _v5_to_v6(migrated)
     if migrated['collection']:
         first = migrated['collection'][0]
         migrated['sun_tokens'] = [{
@@ -144,7 +146,25 @@ def _v4_to_v5(data):
             'created_at': float(migrated['last_update']),
         }]
         migrated['sun_intro_claimed'] = True
-        Garden.from_dict(migrated)
+        _v5_to_v6(migrated)
+    return migrated
+
+
+def _v5_to_v6(data):
+    expected = set(Garden(0).to_dict()) - {'fertilizer', 'reward_wait', 'last_reward_id'}
+    old_pot_fields = set(empty_pot()) - set(TYCOON_POT_DEFAULTS)
+    if (not isinstance(data, dict) or set(data) != expected or type(data.get('schema')) is not int
+            or data['schema'] != 5 or not isinstance(data['pots'], list) or not 1 <= len(data['pots']) <= 2):
+        raise ValueError('v5 저장 항목 오류')
+    migrated = deepcopy(data)
+    for pot in migrated['pots']:
+        if (not isinstance(pot, dict) or set(pot) != old_pot_fields
+                or pot['ruleset_id'] not in (None, 'v0.4', 'legacy-v3')
+                or pot['care_profile'] == 'repeat'):
+            raise ValueError('v5 화분 항목 오류')
+        pot.update(TYCOON_POT_DEFAULTS)
+    migrated.update(schema=6, fertilizer=0, reward_wait=0.0, last_reward_id=None)
+    Garden.from_dict(migrated)
     return migrated
 
 
@@ -170,6 +190,8 @@ def migrate(data):
         migrated = _v3_to_v4(migrated)
     if migrated.get('schema') == 4:
         migrated = _v4_to_v5(migrated)
+    if migrated.get('schema') == 5:
+        migrated = _v5_to_v6(migrated)
     return migrated
 
 
@@ -198,9 +220,11 @@ class Store:
                     raise SaveError('새 버전의 저장 파일입니다. 원본을 보존하고 앱을 업데이트하세요.')
                 migrated = migrate(data)
                 state = Garden.from_dict(migrated)
-                if isinstance(data, dict) and data.get('schema') in (1, 2, 3, 4):
+                if isinstance(data, dict) and data.get('schema') in (1, 2, 3, 4, 5):
                     self._migration_source = raw
-                    self.notice = '기존 저장을 v5로 이전했습니다. 첫 저장 때 이전본을 별도 보관합니다.'
+                    if data['schema'] == 5:
+                        self.migration_backup = self.path.with_suffix('.json.v5-migration.bak')
+                    self.notice = '기존 저장을 v6로 이전했습니다. 재배 중인 꽃은 기존 규칙을 유지합니다.'
                 elif path == self.backup:
                     self.notice = '직전 정상 백업에서 복구했습니다.'
                 state.advance(now)

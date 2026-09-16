@@ -1,6 +1,7 @@
 import unittest
 
 from morning_bloom.model import DAY, HOUR, Garden
+from morning_bloom.plant_catalog import plant_definition
 
 
 def ready_garden(species, now=0):
@@ -8,6 +9,9 @@ def ready_garden(species, now=0):
     seeds[species] = 1
     garden = Garden(now, tutorial_used=True, tutorial_reward_claimed=True, seeds=seeds)
     assert garden.plant(now, species)
+    # These cases preserve the pre-tycoon rules for migrated active flowers.
+    garden.pot.update(ruleset_id='v0.4', care_profile=plant_definition(species).care_profile,
+                      fertilizer_limit=0)
     assert garden.care('water', now)
     return garden
 

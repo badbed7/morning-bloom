@@ -9,7 +9,6 @@ from PySide6.QtGui import QColor, QFont, QFontDatabase, QPainter
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
-    QComboBox,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -23,11 +22,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .cosmetics import THEMES, garden_theme
+from .cosmetics import POT_SKINS, THEMES, garden_theme, pot_skin
+from .cosmetic_icons import skin_icon, theme_icon
 from .flower_art import paint_potted_flower
 from .fertilizer_game import FertilizerGame
 from .garden_view import CollectionGarden, sale_price
 from .model import FERTILIZER_CAP, FERTILIZER_SECONDS, POT_PRICES, TYCOON_RULE
+from .icon_picker import IconPicker
 from .navigation import SlideStack, chevron_icon
 from .plant_catalog import PLANTS, plant_definition
 from .seed_picker import SeedPicker
@@ -89,6 +90,7 @@ class Flower(QWidget):
             painter, self.garden.definition, stage=self.garden.stage,
             phase=0 if self.garden.vacation else self.phase,
             planted=self.garden.planted, drops=self.drops,
+            skin=self.garden.equipped_skin,
         )
         painter.end()
 
@@ -140,11 +142,11 @@ class Window(QWidget):
             QPushButton#navigationButton, QPushButton#quiet {background:transparent;border:1px solid transparent;padding:0;}
             QPushButton#navigationButton:hover, QPushButton#quiet:hover {background:#eee4d2;border-color:#d8cbb6;}
             QPushButton#navigationButton:focus, QPushButton#quiet:focus {border-color:#7c8968;}
-            QToolButton#seedPacket {background:#fbf7ed;border:1px solid #d8cbb6;border-radius:5px;padding:3px;color:#5b5142;font-size:11px;}
-            QToolButton#seedPacket:hover {background:#f0e6d3;border-color:#b09a78;}
-            QToolButton#seedPacket:checked {background:#e7ebdd;border:2px solid #7c8968;padding:2px;}
-            QToolButton#seedPacket:focus {border-color:#526647;}
-            QToolButton#seedPacket:disabled {color:#a69c89;}
+            QToolButton#iconChoice {background:#fbf7ed;border:1px solid #d8cbb6;border-radius:5px;padding:3px;color:#5b5142;font-size:11px;}
+            QToolButton#iconChoice:hover {background:#f0e6d3;border-color:#b09a78;}
+            QToolButton#iconChoice:checked {background:#e7ebdd;border:2px solid #7c8968;padding:2px;}
+            QToolButton#iconChoice:focus {border-color:#526647;}
+            QToolButton#iconChoice:disabled {color:#a69c89;}
             QLabel#title {font-size:15px;font-weight:600;color:#705a40;} QLabel#small {color:#80745e;font-size:11px;}
             QLabel#section {font-size:16px;font-weight:600;}
             QLabel#potTitle {font-weight:600;}
@@ -154,7 +156,6 @@ class Window(QWidget):
             QPushButton#primary:hover {background:#526647;}
             QProgressBar {border:0;background:#e6decd;border-radius:3px;height:8px;text-align:center;}
             QProgressBar::chunk {background:#93a47b;border-radius:3px;}
-            QComboBox {background:#fbf7ed;border:1px solid #d8cbb6;border-radius:5px;padding:6px;}
             QSlider::groove:horizontal {height:5px;background:#e6decd;border-radius:2px;}
             QSlider::sub-page:horizontal {background:#93a47b;border-radius:2px;}
             QSlider::handle:horizontal {width:13px;margin:-4px 0;background:#657957;border-radius:6px;}
@@ -472,18 +473,12 @@ class Window(QWidget):
         self.buy_seed_button = self.button(layout, '씨앗 구매', lambda: self.garden.buy_seed(self.shop_picker.selected))
         layout.addWidget(QLabel('화분 확장 · 씨앗은 별도 구매'))
         self.buy_pot_button = self.button(layout, '두 번째 화분 구매 · 150G', self.garden.buy_pot)
-        theme_title = QLabel('정원 꾸미기 · 햇빛')
+        theme_title = QLabel('정원 배경 · 햇빛')
         theme_title.setObjectName('section')
         layout.addWidget(theme_title)
-        self.theme_picker = QComboBox()
-        for theme in THEMES.values():
-            price = '기본 제공' if theme.price == 0 else f'햇빛 {theme.price}'
-            self.theme_picker.addItem(f'{theme.name} · {price}', theme.key)
+        self.theme_picker = IconPicker((theme.key, theme.label, theme_icon(theme)) for theme in THEMES.values())
+        self.theme_picker.buttons[self.garden.equipped_theme].setChecked(True)
         layout.addWidget(self.theme_picker)
-        self.theme_preview = QFrame()
-        self.theme_preview.setFixedHeight(42)
-        self.theme_preview.setAccessibleName('선택한 정원 배경 미리보기')
-        layout.addWidget(self.theme_preview)
         self.theme_info = QLabel()
         self.theme_info.setObjectName('small')
         self.theme_info.setWordWrap(True)
@@ -492,10 +487,29 @@ class Window(QWidget):
         self.buy_theme_button = self.button(theme_row, '배경 구매', self.buy_selected_theme)
         self.apply_theme_button = self.button(theme_row, '배경 적용', self.apply_selected_theme)
         layout.addLayout(theme_row)
+        skin_title = QLabel('화분 스킨 · 햇빛')
+        skin_title.setObjectName('section')
+        layout.addWidget(skin_title)
+        skin_scope = QLabel('한 번 구매하면 재배·정원의 모든 화분에 계속 사용할 수 있어요.')
+        skin_scope.setObjectName('small')
+        skin_scope.setWordWrap(True)
+        layout.addWidget(skin_scope)
+        self.skin_picker = IconPicker((skin.key, skin.label, skin_icon(skin)) for skin in POT_SKINS.values())
+        self.skin_picker.buttons[self.garden.equipped_skin].setChecked(True)
+        layout.addWidget(self.skin_picker)
+        self.skin_info = QLabel()
+        self.skin_info.setObjectName('small')
+        self.skin_info.setWordWrap(True)
+        layout.addWidget(self.skin_info)
+        skin_row = QHBoxLayout()
+        self.buy_skin_button = self.button(skin_row, '스킨 구매', self.buy_selected_skin)
+        self.apply_skin_button = self.button(skin_row, '스킨 적용', self.apply_selected_skin)
+        layout.addLayout(skin_row)
         layout.addStretch()
         self.pages.addWidget(page)
         self.shop_picker.selectionChanged.connect(self.refresh)
-        self.theme_picker.currentIndexChanged.connect(self.refresh)
+        self.theme_picker.selectionChanged.connect(self.refresh)
+        self.skin_picker.selectionChanged.connect(self.refresh)
 
     def harvest_flower(self):
         result = self.garden.harvest(self.now())
@@ -520,17 +534,31 @@ class Window(QWidget):
         return False
 
     def buy_selected_theme(self):
-        theme = garden_theme(self.theme_picker.currentData())
+        theme = garden_theme(self.theme_picker.selected)
         if not self.garden.buy_theme(theme.key):
             return False
         self.notify(f'{theme.name} 구매 · 햇빛 {theme.price} 사용', important=True)
         return True
 
     def apply_selected_theme(self):
-        theme = garden_theme(self.theme_picker.currentData())
+        theme = garden_theme(self.theme_picker.selected)
         if not self.garden.equip_theme(theme.key):
             return False
         self.notify(f'{theme.name}을 정원에 적용했어요.', important=True)
+        return True
+
+    def buy_selected_skin(self):
+        skin = pot_skin(self.skin_picker.selected)
+        if not self.garden.buy_skin(skin.key):
+            return False
+        self.notify(f'{skin.name} 구매 · 햇빛 {skin.price} 사용', important=True)
+        return True
+
+    def apply_selected_skin(self):
+        skin = pot_skin(self.skin_picker.selected)
+        if not self.garden.equip_skin(skin.key):
+            return False
+        self.notify(f'{skin.name}을 모든 화분에 적용했어요.', important=True)
         return True
 
     def _place_window(self):
@@ -907,21 +935,34 @@ class Window(QWidget):
             after = garden.coins - price
             warning = ' · 다음 씨앗을 살 골드가 부족해요' if not sum(garden.seeds.values()) and after < 8 else ''
             self.buy_pot_button.setToolTip(f'부족 {max(0, price - garden.coins)}G · 구매 후 {after}G' + warning)
-        theme = garden_theme(self.theme_picker.currentData())
+        for picker, catalog, owned, equipped in (
+            (self.theme_picker, THEMES, garden.owned_themes, garden.equipped_theme),
+            (self.skin_picker, POT_SKINS, garden.owned_skins, garden.equipped_skin),
+        ):
+            for key, button in picker.buttons.items():
+                item = catalog[key]
+                state = '사용 중' if key == equipped else ('보유' if key in owned else f'햇빛 {item.price}')
+                button.setText(f'{item.label}\n{state}')
+                button.setAccessibleName(f'{item.name} · {state}')
+                button.setToolTip(f'{item.name} · {state}\n{item.description}')
+        theme = garden_theme(self.theme_picker.selected)
         owned = theme.key in garden.owned_themes
         equipped = theme.key == garden.equipped_theme
-        self.theme_preview.setStyleSheet(
-            'QFrame {'
-            f'background:qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 {theme.top},stop:1 {theme.bottom});'
-            f'border:1px solid {theme.tuft};border-radius:10px;'
-            '}'
-        )
         state = '사용 중' if equipped else ('소유 중' if owned else f'가격 햇빛 {theme.price}')
         self.theme_info.setText(f'{theme.description} · {state}')
         self.buy_theme_button.setText('보유한 배경' if owned else f'구매 · 햇빛 {theme.price}')
         self.buy_theme_button.setEnabled(not owned and garden.sunlight >= theme.price)
         self.apply_theme_button.setText('사용 중' if equipped else '정원에 적용')
         self.apply_theme_button.setEnabled(owned and not equipped)
+        skin = pot_skin(self.skin_picker.selected)
+        owned = skin.key in garden.owned_skins
+        equipped = skin.key == garden.equipped_skin
+        self.skin_info.setText(skin.description)
+        self.buy_skin_button.setText('보유한 스킨' if owned else f'구매 · 햇빛 {skin.price}')
+        self.buy_skin_button.setEnabled(not owned and garden.sunlight >= skin.price)
+        self.buy_skin_button.setToolTip(f'보유 햇빛 {garden.sunlight} · 부족 {max(0, skin.price - garden.sunlight)}')
+        self.apply_skin_button.setText('사용 중' if equipped else '모든 화분에 적용')
+        self.apply_skin_button.setEnabled(owned and not equipped)
         self.collection_garden.sync()
         self.flower.update()
 

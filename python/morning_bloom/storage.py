@@ -151,7 +151,7 @@ def _v4_to_v5(data):
 
 
 def _v5_to_v6(data):
-    expected = set(Garden(0).to_dict()) - {'fertilizer', 'reward_wait', 'last_reward_id'}
+    expected = set(Garden(0).to_dict()) - {'fertilizer', 'reward_wait', 'last_reward_id', 'owned_skins', 'equipped_skin'}
     old_pot_fields = set(empty_pot()) - set(TYCOON_POT_DEFAULTS)
     if (not isinstance(data, dict) or set(data) != expected or type(data.get('schema')) is not int
             or data['schema'] != 5 or not isinstance(data['pots'], list) or not 1 <= len(data['pots']) <= 2):
@@ -164,6 +164,17 @@ def _v5_to_v6(data):
             raise ValueError('v5 화분 항목 오류')
         pot.update(TYCOON_POT_DEFAULTS)
     migrated.update(schema=6, fertilizer=0, reward_wait=0.0, last_reward_id=None)
+    _v6_to_v7(migrated)
+    return migrated
+
+
+def _v6_to_v7(data):
+    expected = set(Garden(0).to_dict()) - {'owned_skins', 'equipped_skin'}
+    if (not isinstance(data, dict) or set(data) != expected
+            or type(data.get('schema')) is not int or data['schema'] != 6):
+        raise ValueError('v6 저장 항목 오류')
+    migrated = deepcopy(data)
+    migrated.update(schema=7, owned_skins=['terracotta'], equipped_skin='terracotta')
     Garden.from_dict(migrated)
     return migrated
 
@@ -192,6 +203,8 @@ def migrate(data):
         migrated = _v4_to_v5(migrated)
     if migrated.get('schema') == 5:
         migrated = _v5_to_v6(migrated)
+    if migrated.get('schema') == 6:
+        migrated = _v6_to_v7(migrated)
     return migrated
 
 
@@ -220,11 +233,11 @@ class Store:
                     raise SaveError('새 버전의 저장 파일입니다. 원본을 보존하고 앱을 업데이트하세요.')
                 migrated = migrate(data)
                 state = Garden.from_dict(migrated)
-                if isinstance(data, dict) and data.get('schema') in (1, 2, 3, 4, 5):
+                if isinstance(data, dict) and data.get('schema') in (1, 2, 3, 4, 5, 6):
                     self._migration_source = raw
-                    if data['schema'] == 5:
-                        self.migration_backup = self.path.with_suffix('.json.v5-migration.bak')
-                    self.notice = '기존 저장을 v6로 이전했습니다. 재배 중인 꽃은 기존 규칙을 유지합니다.'
+                    if data['schema'] in (5, 6):
+                        self.migration_backup = self.path.with_suffix(f'.json.v{data["schema"]}-migration.bak')
+                    self.notice = '기존 저장을 v7로 이전했습니다. 꽃·재화·꾸미기를 그대로 유지합니다.'
                 elif path == self.backup:
                     self.notice = '직전 정상 백업에서 복구했습니다.'
                 state.advance(now)

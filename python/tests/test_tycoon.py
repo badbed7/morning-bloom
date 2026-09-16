@@ -29,7 +29,7 @@ def growing(species='starflower', now=NOW):
 
 def v5_data(garden):
     data = garden.to_dict()
-    for key in ('fertilizer', 'reward_wait', 'last_reward_id'):
+    for key in ('fertilizer', 'reward_wait', 'last_reward_id', 'owned_skins', 'equipped_skin'):
         data.pop(key)
     for pot in data['pots']:
         for key in TYCOON_POT_DEFAULTS:
@@ -197,7 +197,7 @@ class TycoonRules(unittest.TestCase):
             raw = json.dumps(old)
             store.path.write_text(raw, encoding='utf-8')
             garden = store.load(NOW)
-            self.assertEqual((garden.schema, garden.coins, garden.water_status), (6, 432, 'slow'))
+            self.assertEqual((garden.schema, garden.coins, garden.water_status), (Garden.CURRENT_SCHEMA, 432, 'slow'))
             self.assertFalse(garden.can_use_fertilizer)
             store.save(garden)
             self.assertEqual(store.migration_backup.name, 'garden.json.v5-migration.bak')

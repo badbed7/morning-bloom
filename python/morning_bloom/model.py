@@ -5,7 +5,7 @@ from typing import ClassVar
 from uuid import uuid4
 import math
 
-from .cosmetics import THEMES, garden_theme
+from .cosmetics import POT_SKINS, THEMES, garden_theme, pot_skin
 from .plant_catalog import DAY, HOUR, PLANTS, plant_definition
 
 OFFLINE_CAP = 3 * DAY
@@ -160,7 +160,7 @@ def _validate_legacy_collection(items):
 @dataclass
 class Garden:
     """Shared inventory with up to four independently simulated pots."""
-    CURRENT_SCHEMA: ClassVar[int] = 6
+    CURRENT_SCHEMA: ClassVar[int] = 7
 
     last_update: float
     schema: int = CURRENT_SCHEMA
@@ -176,6 +176,8 @@ class Garden:
     sun_intro_claimed: bool = False
     owned_themes: list = field(default_factory=lambda: ['grass'])
     equipped_theme: str = 'grass'
+    owned_skins: list = field(default_factory=lambda: ['terracotta'])
+    equipped_skin: str = 'terracotta'
     fertilizer: int = 0
     reward_wait: float = 0.0
     last_reward_id: str | None = None
@@ -542,6 +544,22 @@ class Garden:
         self.equipped_theme = theme_id
         return True
 
+    def buy_skin(self, skin_id):
+        if type(skin_id) is not str or skin_id not in POT_SKINS or skin_id in self.owned_skins:
+            return False
+        price = pot_skin(skin_id).price
+        if self.sunlight < price:
+            return False
+        self.sunlight -= price
+        self.owned_skins.append(skin_id)
+        return True
+
+    def equip_skin(self, skin_id):
+        if type(skin_id) is not str or skin_id not in self.owned_skins or skin_id not in POT_SKINS:
+            return False
+        self.equipped_skin = skin_id
+        return True
+
     def set_vacation(self, enabled, now):
         if type(enabled) is not bool:
             return False
@@ -601,6 +619,14 @@ class Garden:
             or type(data['equipped_theme']) is not str or data['equipped_theme'] not in owned
         ):
             raise ValueError('정원 꾸미기')
+        owned = data['owned_skins']
+        if (
+            not isinstance(owned, list) or not owned
+            or any(type(key) is not str or key not in POT_SKINS for key in owned)
+            or len(owned) != len(set(owned)) or 'terracotta' not in owned
+            or type(data['equipped_skin']) is not str or data['equipped_skin'] not in owned
+        ):
+            raise ValueError('화분 스킨')
         _validate_settings(data['settings'])
         pots = data['pots']
         if not isinstance(pots, list) or not 1 <= len(pots) <= len(POT_PRICES):

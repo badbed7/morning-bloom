@@ -3,6 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from morning_bloom.cosmetics import POT_SKINS
 from morning_bloom.model import Garden, SUN_INTERVAL, SUN_PENDING_CAP, TYCOON_POT_DEFAULTS
 from morning_bloom.storage import SaveError, Store
 
@@ -20,6 +21,7 @@ def v4_data(garden):
         'sunlight', 'sun_tokens', 'sun_elapsed', 'sun_cursor',
         'sun_intro_claimed', 'owned_themes', 'equipped_theme',
         'fertilizer', 'reward_wait', 'last_reward_id',
+        'owned_skins', 'equipped_skin',
     ):
         data.pop(key)
     for pot in data['pots']:
@@ -109,6 +111,60 @@ class SunlightProduction(unittest.TestCase):
 
 
 class CosmeticsAndMigration(unittest.TestCase):
+    def test_pot_skins_charge_sunlight_once_and_only_change_appearance(self):
+        garden = Garden(100, coins=777, sunlight=11, collection=[flower()])
+        self.assertFalse(garden.buy_skin('ivory'))
+        self.assertFalse(garden.equip_skin('ivory'))
+        garden.sunlight = 60
+        before = garden.to_dict()
+        for key in ('ivory', 'sage', 'rose'):
+            self.assertTrue(garden.buy_skin(key))
+            self.assertFalse(garden.buy_skin(key))
+            self.assertTrue(garden.equip_skin(key))
+        self.assertEqual(garden.sunlight, 60 - sum(POT_SKINS[key].price for key in ('ivory', 'sage', 'rose')))
+        self.assertEqual(Garden.from_dict(garden.to_dict()).equipped_skin, 'rose')
+        self.assertTrue(garden.equip_skin('terracotta'))
+        after = garden.to_dict()
+        for key in before.keys() - {'sunlight', 'owned_skins', 'equipped_skin'}:
+            self.assertEqual(after[key], before[key], key)
+        for invalid in ('missing', [], {}, None, True):
+            self.assertFalse(garden.buy_skin(invalid))
+            self.assertFalse(garden.equip_skin(invalid))
+
+    def test_invalid_skin_ownership_and_unowned_equipment_are_rejected(self):
+        for key, value in (
+            ('owned_skins', []), ('owned_skins', ['terracotta', 'terracotta']),
+            ('owned_skins', ['ivory']), ('owned_skins', ['terracotta', {}]),
+            ('owned_skins', ['terracotta', 'missing']), ('equipped_skin', 'ivory'),
+            ('equipped_skin', []),
+        ):
+            data = Garden(100).to_dict()
+            data[key] = value
+            with self.assertRaises(ValueError):
+                Garden.from_dict(data)
+
+    def test_v6_migration_preserves_inventory_and_creates_original_backup(self):
+        data = Garden(100, coins=432, sunlight=30, fertilizer=2, collection=[flower()],
+                      owned_themes=['grass', 'sky'], equipped_theme='sky').to_dict()
+        data.pop('owned_skins')
+        data.pop('equipped_skin')
+        data['schema'] = 6
+        raw = json.dumps(data, ensure_ascii=False)
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Store(Path(tmp) / 'garden.json')
+            store.path.write_text(raw, encoding='utf-8')
+            garden = store.load(100)
+            self.assertEqual(garden.to_dict(), {**data, 'schema': Garden.CURRENT_SCHEMA,
+                                              'owned_skins': ['terracotta'], 'equipped_skin': 'terracotta'})
+            store.save(garden)
+            self.assertEqual(store.migration_backup.name, 'garden.json.v6-migration.bak')
+            self.assertEqual(store.migration_backup.read_text(encoding='utf-8'), raw)
+            self.assertTrue(garden.buy_skin('sage'))
+            self.assertTrue(garden.equip_skin('sage'))
+            store.save(garden)
+            self.assertEqual((store.load(100).equipped_skin, store.load(100).sunlight), ('sage', 12))
+            self.assertEqual(store.migration_backup.read_text(encoding='utf-8'), raw)
+
     def test_theme_purchase_and_apply_use_only_sunlight(self):
         garden = Garden(0)
         garden.sunlight = 11

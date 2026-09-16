@@ -1,9 +1,9 @@
 """Seed packets shared by the planting screen and the gold shop."""
-from PySide6.QtCore import QRectF, QSize, Qt, Signal
+from PySide6.QtCore import QRectF, Qt
 from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
-from PySide6.QtWidgets import QButtonGroup, QHBoxLayout, QSizePolicy, QToolButton, QWidget
 
 from .flower_art import paint_collection_flower
+from .icon_picker import IconPicker
 from .plant_catalog import HOUR, PLANTS
 
 
@@ -25,40 +25,12 @@ def seed_packet_icon(definition):
     return QIcon(pixmap)
 
 
-class SeedPicker(QWidget):
-    selectionChanged = Signal()
-
+class SeedPicker(IconPicker):
     def __init__(self, shop=False):
-        super().__init__()
+        super().__init__((definition.key, definition.name, seed_packet_icon(definition))
+                         for definition in PLANTS.values())
         self.shop = shop
-        self.buttons = {}
-        self.group = QButtonGroup(self)
-        self.group.setExclusive(True)
-        self.setFixedHeight(76)
-        self.setMinimumWidth(0)
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(6)
-        for definition in PLANTS.values():
-            button = QToolButton()
-            button.setObjectName('seedPacket')
-            button.setProperty('species', definition.key)
-            button.setCheckable(True)
-            button.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
-            button.setIcon(seed_packet_icon(definition))
-            button.setIconSize(QSize(36, 40))
-            button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-            button.setMinimumWidth(0)
-            self.group.addButton(button)
-            self.buttons[definition.key] = button
-            layout.addWidget(button, 1)
-        next(iter(self.buttons.values())).setChecked(True)
-        self.group.buttonClicked.connect(lambda _: self.selectionChanged.emit())
         self.update_counts({})
-
-    @property
-    def selected(self):
-        return self.group.checkedButton().property('species')
 
     def update_counts(self, seeds):
         for key, button in self.buttons.items():

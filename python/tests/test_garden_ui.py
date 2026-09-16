@@ -7,10 +7,11 @@ from unittest.mock import patch
 from PySide6.QtCore import QMimeData, QPoint, QPointF, Qt
 from PySide6.QtGui import QDragEnterEvent, QDropEvent, QFont, QFontDatabase
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QListWidget
+from PySide6.QtWidgets import QApplication, QComboBox, QListWidget, QScrollArea
 
 from morning_bloom.app import GARDEN_PAGE, POT_PAGE, SETTINGS_PAGE, SHOP_PAGE, Window
 from morning_bloom.garden_view import FLOWER_MIME
+from morning_bloom.flower_art import paint_collection_flower, paint_potted_flower
 from morning_bloom.model import Garden
 from morning_bloom.storage import SaveError, Store
 
@@ -180,8 +181,7 @@ class GardenInterface(unittest.TestCase):
         self.window.refresh()
         self.window.navigate(1)
         self.window.pages.finish_transition()
-        cream = self.window.theme_picker.findData('cream')
-        self.window.theme_picker.setCurrentIndex(cream)
+        self.window.theme_picker.buttons['cream'].click()
         self.assertTrue(self.window.buy_theme_button.isEnabled())
         self.window.buy_theme_button.click()
         self.assertEqual(self.garden.sunlight, 0)
@@ -189,7 +189,8 @@ class GardenInterface(unittest.TestCase):
         self.assertTrue(self.window.apply_theme_button.isEnabled())
         self.window.apply_theme_button.click()
         self.assertEqual(self.garden.equipped_theme, 'cream')
-        self.assertIn('#f5eacb', self.window.theme_preview.styleSheet())
+        self.assertIn('사용 중', self.window.theme_picker.buttons['cream'].text())
+        self.assertFalse(self.window.theme_picker.buttons['cream'].icon().isNull())
         self.assertEqual(self.store.load(self.garden.last_update).equipped_theme, 'cream')
         self.window.pages.slide_to(GARDEN_PAGE)
         self.window.pages.finish_transition()
@@ -197,13 +198,93 @@ class GardenInterface(unittest.TestCase):
 
     def test_failed_cosmetic_purchase_restores_sunlight_and_ownership(self):
         self.garden.sunlight = 12
-        self.window.theme_picker.setCurrentIndex(self.window.theme_picker.findData('cream'))
+        self.window.theme_picker.buttons['cream'].click()
         self.window.refresh()
         with patch.object(self.store, 'save', side_effect=SaveError('disk full')):
             self.window.buy_theme_button.click()
         self.assertEqual(self.garden.sunlight, 12)
         self.assertEqual(self.garden.owned_themes, ['grass'])
         self.assertIn('되돌렸습니다', self.window.message.text())
+
+    def test_skin_purchase_apply_and_failure_restore_money_and_saved_appearance(self):
+        self.garden.sunlight = 30
+        self.window.skin_picker.buttons['sage'].click()
+        self.assertEqual(self.garden.sunlight, 30)
+        self.assertFalse(self.window.apply_skin_button.isEnabled())
+        with patch.object(self.store, 'save', side_effect=SaveError('disk full')):
+            self.window.buy_skin_button.click()
+        self.assertEqual((self.garden.sunlight, self.garden.owned_skins), (30, ['terracotta']))
+        self.window.buy_skin_button.click()
+        self.assertEqual(self.garden.sunlight, 12)
+        self.assertEqual(self.garden.equipped_skin, 'terracotta')
+        self.assertFalse(self.window.buy_skin_button.isEnabled())
+        with patch.object(self.store, 'save', side_effect=SaveError('disk full')):
+            self.window.apply_skin_button.click()
+        self.assertEqual(self.garden.equipped_skin, 'terracotta')
+        self.window.apply_skin_button.click()
+        self.assertEqual((self.garden.equipped_skin, self.garden.sunlight), ('sage', 12))
+        restored = self.store.load(self.garden.last_update)
+        self.assertEqual((restored.equipped_skin, restored.owned_skins), ('sage', ['terracotta', 'sage']))
+        self.window.skin_picker.buttons['rose'].click()
+        self.assertFalse(self.window.buy_skin_button.isEnabled())
+        self.assertFalse(self.window.apply_skin_button.isEnabled())
+        self.assertEqual(self.garden.equipped_skin, 'sage')
+        self.window.skin_picker.buttons['terracotta'].click()
+        self.window.apply_skin_button.click()
+        self.assertEqual((self.garden.equipped_skin, self.garden.sunlight), ('terracotta', 12))
+
+    def test_skin_reaches_growing_collection_and_drag_renderers(self):
+        self.garden.sunlight = 18
+        self.garden.buy_skin('sage')
+        self.garden.equip_skin('sage')
+        self.window.plant_button.click()
+        self.window.refresh()
+        skins = []
+
+        def draw_pot(*args, **kwargs):
+            skins.append(kwargs['skin'])
+            return paint_potted_flower(*args, **kwargs)
+
+        def draw_collection(*args, **kwargs):
+            skins.append(kwargs['skin'])
+            return paint_collection_flower(*args, **kwargs)
+
+        with patch('morning_bloom.app.paint_potted_flower', new=draw_pot):
+            self.window.flower.grab()
+            self.assertEqual(skins, ['sage'])
+        self.show_garden()
+        skins.clear()
+        with patch('morning_bloom.garden_view.paint_collection_flower', new=draw_collection):
+            self.meadow.grab()
+            self.assertTrue(skins)
+            self.assertEqual(set(skins), {'sage'})
+            skins.clear()
+            with patch('morning_bloom.garden_view.QDrag') as drag:
+                drag.return_value.exec.return_value = Qt.IgnoreAction
+                self.meadow.start_drag('flower-0')
+            self.assertTrue(skins)
+            self.assertEqual(set(skins), {'sage'})
+
+    def test_cosmetic_icons_are_exclusive_and_fit_all_window_sizes(self):
+        self.window.navigate(1)
+        self.window.pages.finish_transition()
+        self.assertEqual(self.window.findChildren(QComboBox), [])
+        scroll = self.window.pages.widget(SHOP_PAGE).findChild(QScrollArea)
+        for side in (320, 384, 520):
+            self.window.setFixedSize(side, side)
+            for picker in (self.window.theme_picker, self.window.skin_picker):
+                self.app.processEvents()
+                scroll.ensureWidgetVisible(picker, 0, 0)
+                self.app.processEvents()
+                for button in picker.buttons.values():
+                    self.assertFalse(button.icon().isNull())
+                    self.assertTrue(scroll.viewport().rect().contains(button.mapTo(scroll.viewport(), button.rect().topLeft())))
+                    self.assertTrue(scroll.viewport().rect().contains(button.mapTo(scroll.viewport(), button.rect().bottomRight())))
+                buttons = list(picker.buttons.values())
+                buttons[-1].click()
+                self.assertEqual(sum(button.isChecked() for button in buttons), 1)
+                self.assertEqual(self.garden.equipped_theme, 'grass')
+                self.assertEqual(self.garden.equipped_skin, 'terracotta')
 
     def test_drag_cancel_keeps_flower_and_coins(self):
         self.show_garden()

@@ -108,7 +108,7 @@ class UI(unittest.TestCase):
                 saved = store.path.read_bytes()
                 window.navigate(1)
                 window.pages.finish_transition()
-                self.assertEqual(window.pages.widget(SHOP_PAGE).findChildren(QComboBox), [window.theme_picker])
+                self.assertEqual(window.pages.widget(SHOP_PAGE).findChildren(QComboBox), [])
                 window.shop_picker.buttons['tulip'].click()
                 window.shop_picker.buttons['starflower'].click()
                 self.assertEqual(sum(button.isChecked() for button in window.shop_picker.buttons.values()), 1)

@@ -163,7 +163,7 @@ class Meadow(QWidget):
             painter.setBrush(QColor(64, 98, 49, 48))
             painter.drawEllipse(QRectF(rect.center().x() - 23, rect.bottom() - 5, 46, 8))
             paint_collection_flower(painter, rect.adjusted(8, -3 + bob, -8, -9 + bob),
-                                    plant_definition(item['species']), phase)
+                                    plant_definition(item['species']), phase, skin=self.garden.equipped_skin)
             painter.restore()
         for index, token in enumerate(self.tokens):
             rect = self.sun_rect(index)
@@ -259,7 +259,8 @@ class Meadow(QWidget):
         pixmap.fill(Qt.transparent)
         painter = QPainter(pixmap)
         painter.setRenderHint(QPainter.Antialiasing)
-        paint_collection_flower(painter, QRectF(0, 0, 84, 108), plant_definition(item['species']))
+        paint_collection_flower(painter, QRectF(0, 0, 84, 108), plant_definition(item['species']),
+                                skin=self.garden.equipped_skin)
         painter.end()
         drag.setPixmap(pixmap)
         drag.setHotSpot(QPoint(42, 70))

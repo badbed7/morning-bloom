@@ -125,6 +125,19 @@ class DeveloperMode(unittest.TestCase):
         self.assertEqual(self.wall_clock(), NOW)
         self.assertIn('6시간', self.window.developer_status.text())
 
+    def test_six_hours_also_advances_sunlight_clock_to_pending_cap(self):
+        demo = self.prepare_demo()
+        demo.collection = [{
+            'id': 'garden-flower', 'species': 'daisy', 'harvested_at': NOW,
+            'base_sale_g': 50, 'misted': False, 'bonus_g': 0,
+        }]
+        demo.sun_intro_claimed = True
+        self.demo_store.save(demo)
+        self.window.set_developer_mode(True)
+        self.window.fast_forward_button.click()
+        self.assertEqual(len(self.window.garden.sun_tokens), 9)
+        self.assertIn('대기 9/9', self.window.collection_garden.sun_status.text())
+
     def test_skip_does_not_bypass_first_water(self):
         self.prepare_demo(watered=False)
         self.window.set_developer_mode(True)

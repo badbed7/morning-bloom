@@ -5,6 +5,7 @@ from typing import ClassVar
 from uuid import uuid4
 import math
 
+from .cosmetics import THEMES, garden_theme
 from .plant_catalog import DAY, HOUR, PLANTS, plant_definition
 
 OFFLINE_CAP = 3 * DAY
@@ -12,6 +13,8 @@ MID_WATER_EARLY = 22 * HOUR
 MID_WATER_DUE = 24 * HOUR
 MID_WATER_SLOW = 30 * HOUR
 SLOW_RATE = .5
+SUN_INTERVAL = 20 * 60
+SUN_PENDING_CAP = 9
 LEGACY_SPECIES = ('daisy', 'tulip')
 LEGACY_POT_FIELDS = ('planted', 'species', 'growth', 'duration', 'water_due', 'mist_due', 'mist_progress')
 
@@ -147,7 +150,7 @@ def _validate_legacy_collection(items):
 @dataclass
 class Garden:
     """Shared inventory with one or two independently simulated pots."""
-    CURRENT_SCHEMA: ClassVar[int] = 4
+    CURRENT_SCHEMA: ClassVar[int] = 5
 
     last_update: float
     schema: int = CURRENT_SCHEMA
@@ -156,6 +159,13 @@ class Garden:
     coins: int = 120
     seeds: dict = field(default_factory=lambda: {key: int(key == 'daisy') for key in PLANTS})
     collection: list = field(default_factory=list)
+    sunlight: int = 0
+    sun_tokens: list = field(default_factory=list)
+    sun_elapsed: float = 0.0
+    sun_cursor: int = 0
+    sun_intro_claimed: bool = False
+    owned_themes: list = field(default_factory=lambda: ['grass'])
+    equipped_theme: str = 'grass'
     vacation: bool = False
     settings: dict = field(default_factory=lambda: dict(opacity=1.0, topmost=True, x=-99999, y=-99999))
     pots: list = field(default_factory=list)
@@ -285,6 +295,33 @@ class Garden:
             return
         for pot in self.pots:
             self._advance_pot(pot, elapsed)
+        self._advance_sunlight(elapsed, now)
+
+    def _advance_sunlight(self, elapsed, now):
+        if not self.collection:
+            self.sun_elapsed = 0.0
+            return
+        total = self.sun_elapsed + elapsed
+        rounds = int(total // SUN_INTERVAL)
+        self.sun_elapsed = total % SUN_INTERVAL
+        if rounds <= 0 or len(self.sun_tokens) >= SUN_PENDING_CAP:
+            return
+        available = SUN_PENDING_CAP - len(self.sun_tokens)
+        count = min(available, rounds * len(self.collection))
+        for offset in range(count):
+            source = self.collection[(self.sun_cursor + offset) % len(self.collection)]
+            self.sun_tokens.append({
+                'id': str(uuid4()),
+                'source_flower_id': source['id'],
+                'created_at': float(now),
+            })
+        self.sun_cursor = (self.sun_cursor + count) % len(self.collection)
+
+    @property
+    def seconds_to_sun(self):
+        if self.vacation or not self.collection or len(self.sun_tokens) >= SUN_PENDING_CAP:
+            return None
+        return SUN_INTERVAL - self.sun_elapsed
 
     def plant(self, now, species='daisy'):
         self.advance(now)
@@ -351,7 +388,17 @@ class Garden:
         }
         if any(existing['id'] == item['id'] for existing in self.collection):
             return False
+        was_empty = not self.collection
         self.collection.append(item)
+        if was_empty:
+            self.sun_elapsed = 0.0
+        if not self.sun_intro_claimed and len(self.sun_tokens) < SUN_PENDING_CAP:
+            self.sun_tokens.append({
+                'id': str(uuid4()),
+                'source_flower_id': item['id'],
+                'created_at': float(self.last_update),
+            })
+            self.sun_intro_claimed = True
         if pot['is_tutorial'] and not self.tutorial_reward_claimed:
             self.seeds[pot['species']] += 1
             self.tutorial_reward_claimed = True
@@ -375,15 +422,45 @@ class Garden:
         self.pots.append(empty_pot())
         return True
 
-    def sell(self, item_id=None):
+    def sell(self, item_id=None, now=None):
+        if now is not None:
+            self.advance(now)
         if item_id is None and self.collection:
             item_id = self.collection[-1]['id']
         for index, item in enumerate(self.collection):
             if item['id'] == item_id:
                 self.coins += item['base_sale_g'] + item['bonus_g']
                 self.collection.pop(index)
+                if not self.collection:
+                    self.sun_elapsed = 0.0
                 return True
         return False
+
+    def collect_sun(self, token_id, now=None):
+        if now is not None:
+            self.advance(now)
+        for index, token in enumerate(self.sun_tokens):
+            if token['id'] == token_id:
+                self.sun_tokens.pop(index)
+                self.sunlight += 1
+                return True
+        return False
+
+    def buy_theme(self, theme_id):
+        if theme_id not in THEMES or theme_id in self.owned_themes:
+            return False
+        price = garden_theme(theme_id).price
+        if self.sunlight < price:
+            return False
+        self.sunlight -= price
+        self.owned_themes.append(theme_id)
+        return True
+
+    def equip_theme(self, theme_id):
+        if theme_id not in self.owned_themes or theme_id not in THEMES:
+            return False
+        self.equipped_theme = theme_id
+        return True
 
     def set_vacation(self, enabled, now):
         if type(enabled) is not bool:
@@ -410,7 +487,7 @@ class Garden:
             raise ValueError('last_update')
         if type(data['coins']) is not int or data['coins'] < 0:
             raise ValueError('coins')
-        for key in ('tutorial_used', 'tutorial_reward_claimed', 'vacation'):
+        for key in ('tutorial_used', 'tutorial_reward_claimed', 'sun_intro_claimed', 'vacation'):
             if type(data[key]) is not bool:
                 raise ValueError(key)
         if data['tutorial_reward_claimed'] and not data['tutorial_used']:
@@ -419,6 +496,21 @@ class Garden:
             raise ValueError('씨앗')
         if any(type(value) is not int or value < 0 for value in data['seeds'].values()):
             raise ValueError('씨앗')
+        if type(data['sunlight']) is not int or data['sunlight'] < 0:
+            raise ValueError('햇빛')
+        if not _number(data['sun_elapsed']) or not 0 <= data['sun_elapsed'] < SUN_INTERVAL:
+            raise ValueError('햇빛 생산 시간')
+        if type(data['sun_cursor']) is not int or data['sun_cursor'] < 0:
+            raise ValueError('햇빛 생산 순번')
+        cls._validate_sun_tokens(data['sun_tokens'])
+        owned = data['owned_themes']
+        if (
+            not isinstance(owned, list) or not owned
+            or any(type(key) is not str or key not in THEMES for key in owned)
+            or len(owned) != len(set(owned)) or 'grass' not in owned
+            or type(data['equipped_theme']) is not str or data['equipped_theme'] not in owned
+        ):
+            raise ValueError('정원 꾸미기')
         _validate_settings(data['settings'])
         pots = data['pots']
         if not isinstance(pots, list) or not 1 <= len(pots) <= 2:
@@ -489,3 +581,19 @@ class Garden:
                 raise ValueError('보관 식물')
             ids.add(item['id'])
         return ids
+
+    @staticmethod
+    def _validate_sun_tokens(tokens):
+        if not isinstance(tokens, list) or len(tokens) > SUN_PENDING_CAP:
+            raise ValueError('대기 햇빛')
+        ids = set()
+        expected = {'id', 'source_flower_id', 'created_at'}
+        for token in tokens:
+            if (
+                not isinstance(token, dict) or set(token) != expected
+                or not isinstance(token['id'], str) or not token['id'] or token['id'] in ids
+                or not isinstance(token['source_flower_id'], str) or not token['source_flower_id']
+                or not _number(token['created_at']) or token['created_at'] < 0
+            ):
+                raise ValueError('대기 햇빛')
+            ids.add(token['id'])

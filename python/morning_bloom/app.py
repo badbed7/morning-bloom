@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .cosmetics import THEMES, garden_theme
 from .flower_art import paint_potted_flower
 from .garden_view import CollectionGarden, sale_price
 from .navigation import SlideStack
@@ -181,7 +182,7 @@ class Window(QWidget):
         root.addWidget(self.pages, 1)
         self._build_pot_page()
         self._build_shop_page()
-        self.collection_garden = CollectionGarden(self.garden, self.sell_flower)
+        self.collection_garden = CollectionGarden(self.garden, self.sell_flower, self.collect_sun)
         self.pages.addWidget(self.collection_garden)
         self._build_settings_page()
 
@@ -377,6 +378,9 @@ class Window(QWidget):
         page, layout = self._scrollable_page()
         self.shop_wallet = QLabel()
         layout.addWidget(self.shop_wallet)
+        seed_title = QLabel('재배 상점 · 골드')
+        seed_title.setObjectName('section')
+        layout.addWidget(seed_title)
         self.shop_picker = QComboBox()
         for item in PLANTS.values():
             self.shop_picker.addItem(f'{item.name} · {format_duration(item.growth_seconds)}', item.key)
@@ -388,9 +392,30 @@ class Window(QWidget):
         self.buy_seed_button = self.button(layout, '씨앗 구매', lambda: self.garden.buy_seed(self.shop_picker.currentData()))
         layout.addWidget(QLabel('화분 확장 · 씨앗은 별도 구매'))
         self.buy_pot_button = self.button(layout, '두 번째 화분 구매 · 150G', self.garden.buy_pot)
+        theme_title = QLabel('정원 꾸미기 · 햇빛')
+        theme_title.setObjectName('section')
+        layout.addWidget(theme_title)
+        self.theme_picker = QComboBox()
+        for theme in THEMES.values():
+            price = '기본 제공' if theme.price == 0 else f'햇빛 {theme.price}'
+            self.theme_picker.addItem(f'{theme.name} · {price}', theme.key)
+        layout.addWidget(self.theme_picker)
+        self.theme_preview = QFrame()
+        self.theme_preview.setFixedHeight(42)
+        self.theme_preview.setAccessibleName('선택한 정원 배경 미리보기')
+        layout.addWidget(self.theme_preview)
+        self.theme_info = QLabel()
+        self.theme_info.setObjectName('small')
+        self.theme_info.setWordWrap(True)
+        layout.addWidget(self.theme_info)
+        theme_row = QHBoxLayout()
+        self.buy_theme_button = self.button(theme_row, '배경 구매', self.buy_selected_theme)
+        self.apply_theme_button = self.button(theme_row, '배경 적용', self.apply_selected_theme)
+        layout.addLayout(theme_row)
         layout.addStretch()
         self.pages.addWidget(page)
         self.shop_picker.currentIndexChanged.connect(self.refresh)
+        self.theme_picker.currentIndexChanged.connect(self.refresh)
 
     def harvest_flower(self):
         result = self.garden.harvest(self.now())
@@ -403,10 +428,30 @@ class Window(QWidget):
         if item is None:
             return False
         name, price = plant_definition(item['species']).name, sale_price(item)
-        if self.act(lambda: self.garden.sell(item_id)):
+        if self.act(lambda: self.garden.sell(item_id, self.now())):
             self.notify(f'{name} 판매 +{price}G', important=True)
             return True
         return False
+
+    def collect_sun(self, token_id):
+        if self.act(lambda: self.garden.collect_sun(token_id, self.now())):
+            self.notify('햇빛 수집 +1 · 꾸미기 상점에서 사용할 수 있어요.', important=True)
+            return True
+        return False
+
+    def buy_selected_theme(self):
+        theme = garden_theme(self.theme_picker.currentData())
+        if not self.garden.buy_theme(theme.key):
+            return False
+        self.notify(f'{theme.name} 구매 · 햇빛 {theme.price} 사용', important=True)
+        return True
+
+    def apply_selected_theme(self):
+        theme = garden_theme(self.theme_picker.currentData())
+        if not self.garden.equip_theme(theme.key):
+            return False
+        self.notify(f'{theme.name}을 정원에 적용했어요.', important=True)
+        return True
 
     def _place_window(self):
         position = QPointF(self.garden.settings['x'], self.garden.settings['y']).toPoint()
@@ -632,7 +677,9 @@ class Window(QWidget):
         self.harvest_button.setEnabled(garden.bloomed)
 
         seed_total = sum(garden.seeds.values())
-        self.inventory.setText(f'{garden.coins}G · 씨앗 {seed_total} · 꽃 {len(garden.collection)}')
+        self.inventory.setText(
+            f'{garden.coins}G · 햇빛 {garden.sunlight} · 씨앗 {seed_total} · 꽃 {len(garden.collection)}'
+        )
         seeds = ' / '.join(f'{item.name} {garden.seed_count(key)}' for key, item in PLANTS.items())
         self.inventory.setToolTip(f'씨앗 {seeds} · 보관 꽃 {len(garden.collection)}')
         self.pot_picker.blockSignals(True)
@@ -642,7 +689,9 @@ class Window(QWidget):
             self.pot_picker.addItem(f'화분 {i + 1} · {name} · {self._pot_state(pot)}')
         self.pot_picker.setCurrentIndex(garden.selected)
         self.pot_picker.blockSignals(False)
-        self.shop_wallet.setText(f'보유 {garden.coins}G · 화분 {len(garden.pots)}/2개')
+        self.shop_wallet.setText(
+            f'보유 {garden.coins}G · 햇빛 {garden.sunlight} · 화분 {len(garden.pots)}/2개'
+        )
         species = self.shop_picker.currentData()
         item = plant_definition(species)
         care = '첫 물만 필요' if item.care_profile == 'start_only' else '24시간 물 권장 · 30시간부터 감속'
@@ -654,6 +703,21 @@ class Window(QWidget):
         self.buy_seed_button.setEnabled(garden.coins >= item.seed_price)
         self.buy_pot_button.setEnabled(len(garden.pots) < 2 and garden.coins >= 150)
         self.buy_pot_button.setText('두 번째 화분 보유 중' if len(garden.pots) == 2 else '두 번째 화분 구매 · 150G')
+        theme = garden_theme(self.theme_picker.currentData())
+        owned = theme.key in garden.owned_themes
+        equipped = theme.key == garden.equipped_theme
+        self.theme_preview.setStyleSheet(
+            'QFrame {'
+            f'background:qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 {theme.top},stop:1 {theme.bottom});'
+            f'border:1px solid {theme.tuft};border-radius:10px;'
+            '}'
+        )
+        state = '사용 중' if equipped else ('소유 중' if owned else f'가격 햇빛 {theme.price}')
+        self.theme_info.setText(f'{theme.description} · {state}')
+        self.buy_theme_button.setText('보유한 배경' if owned else f'구매 · 햇빛 {theme.price}')
+        self.buy_theme_button.setEnabled(not owned and garden.sunlight >= theme.price)
+        self.apply_theme_button.setText('사용 중' if equipped else '정원에 적용')
+        self.apply_theme_button.setEnabled(owned and not equipped)
         self.collection_garden.sync()
         self.flower.update()
 

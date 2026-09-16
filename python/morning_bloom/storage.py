@@ -117,6 +117,37 @@ def _v3_to_v4(data):
     return migrated
 
 
+def _v4_to_v5(data):
+    expected = {
+        'last_update', 'schema', 'tutorial_used', 'tutorial_reward_claimed',
+        'coins', 'seeds', 'collection', 'vacation', 'settings', 'pots', 'selected',
+    }
+    if not isinstance(data, dict) or set(data) != expected or data.get('schema') != 4:
+        raise ValueError('v4 저장 항목 오류')
+    migrated = deepcopy(data)
+    migrated.update(
+        schema=5,
+        sunlight=0,
+        sun_tokens=[],
+        sun_elapsed=0.0,
+        sun_cursor=0,
+        sun_intro_claimed=False,
+        owned_themes=['grass'],
+        equipped_theme='grass',
+    )
+    Garden.from_dict(migrated)
+    if migrated['collection']:
+        first = migrated['collection'][0]
+        migrated['sun_tokens'] = [{
+            'id': str(uuid5(NAMESPACE_URL, f'morning-bloom:v5:sun-intro:{first["id"]}')),
+            'source_flower_id': first['id'],
+            'created_at': float(migrated['last_update']),
+        }]
+        migrated['sun_intro_claimed'] = True
+        Garden.from_dict(migrated)
+    return migrated
+
+
 def migrate(data):
     """Return current-schema data without mutating the source document."""
     if not isinstance(data, dict):
@@ -137,6 +168,8 @@ def migrate(data):
         migrated = _v2_to_v3(migrated)
     if migrated.get('schema') == 3:
         migrated = _v3_to_v4(migrated)
+    if migrated.get('schema') == 4:
+        migrated = _v4_to_v5(migrated)
     return migrated
 
 
@@ -165,9 +198,9 @@ class Store:
                     raise SaveError('새 버전의 저장 파일입니다. 원본을 보존하고 앱을 업데이트하세요.')
                 migrated = migrate(data)
                 state = Garden.from_dict(migrated)
-                if isinstance(data, dict) and data.get('schema') in (1, 2, 3):
+                if isinstance(data, dict) and data.get('schema') in (1, 2, 3, 4):
                     self._migration_source = raw
-                    self.notice = '기존 저장을 v4로 이전했습니다. 첫 저장 때 이전본을 별도 보관합니다.'
+                    self.notice = '기존 저장을 v5로 이전했습니다. 첫 저장 때 이전본을 별도 보관합니다.'
                 elif path == self.backup:
                     self.notice = '직전 정상 백업에서 복구했습니다.'
                 state.advance(now)

@@ -127,6 +127,84 @@ class GardenInterface(unittest.TestCase):
         QTest.mouseClick(self.meadow, Qt.LeftButton, pos=self.meadow.item_rect(0).center().toPoint())
         self.assertEqual(before, (self.garden.coins, len(self.garden.collection)))
 
+    def add_sun(self, token_id='sun-1'):
+        self.garden.sun_tokens = [{
+            'id': token_id, 'source_flower_id': 'flower-0',
+            'created_at': self.garden.last_update,
+        }]
+        self.garden.sun_intro_claimed = True
+        self.window.refresh()
+        return self.meadow.sun_rect(0).center().toPoint()
+
+    def test_clicking_sun_collects_once_persists_and_starts_burst(self):
+        self.show_garden()
+        point = self.add_sun()
+        self.assertIsNone(self.meadow.item_at(point))
+        QTest.mouseClick(self.meadow, Qt.LeftButton, pos=point)
+        self.assertEqual(self.garden.sunlight, 1)
+        self.assertEqual(self.garden.sun_tokens, [])
+        self.assertEqual(len(self.meadow.bursts), 1)
+        self.assertIn('햇빛 수집 +1', self.window.message.text())
+        restored = self.store.load(self.garden.last_update)
+        self.assertEqual(restored.sunlight, 1)
+        self.assertEqual(restored.sun_tokens, [])
+        QTest.mouseClick(self.meadow, Qt.LeftButton, pos=point)
+        self.assertEqual(self.garden.sunlight, 1)
+
+    def test_failed_sun_save_restores_token_without_burst(self):
+        self.show_garden()
+        point = self.add_sun()
+        with patch.object(self.store, 'save', side_effect=SaveError('disk full')):
+            QTest.mouseClick(self.meadow, Qt.LeftButton, pos=point)
+        self.assertEqual(self.garden.sunlight, 0)
+        self.assertEqual([token['id'] for token in self.garden.sun_tokens], ['sun-1'])
+        self.assertEqual(self.meadow.bursts, [])
+        self.assertIn('되돌렸습니다', self.window.message.text())
+
+    def test_sun_slots_are_distinct_and_do_not_start_flower_drag(self):
+        self.garden.sun_tokens = [
+            {'id': f'sun-{index}', 'source_flower_id': 'flower-0',
+             'created_at': self.garden.last_update}
+            for index in range(9)
+        ]
+        self.garden.sun_intro_claimed = True
+        self.window.refresh()
+        points = [self.meadow.sun_rect(index).center().toPoint() for index in range(9)]
+        self.assertEqual(len({(point.x(), point.y()) for point in points}), 9)
+        for index, point in enumerate(points):
+            self.assertEqual(self.meadow.sun_token_at(point)['id'], f'sun-{index}')
+            self.assertIsNone(self.meadow.item_at(point))
+
+    def test_cosmetic_shop_buys_applies_and_restores_background(self):
+        self.garden.sunlight = 12
+        self.window.refresh()
+        self.window.navigate(1)
+        self.window.pages.finish_transition()
+        cream = self.window.theme_picker.findData('cream')
+        self.window.theme_picker.setCurrentIndex(cream)
+        self.assertTrue(self.window.buy_theme_button.isEnabled())
+        self.window.buy_theme_button.click()
+        self.assertEqual(self.garden.sunlight, 0)
+        self.assertIn('cream', self.garden.owned_themes)
+        self.assertTrue(self.window.apply_theme_button.isEnabled())
+        self.window.apply_theme_button.click()
+        self.assertEqual(self.garden.equipped_theme, 'cream')
+        self.assertIn('#f5eacb', self.window.theme_preview.styleSheet())
+        self.assertEqual(self.store.load(self.garden.last_update).equipped_theme, 'cream')
+        self.window.pages.slide_to(GARDEN_PAGE)
+        self.window.pages.finish_transition()
+        self.assertFalse(self.meadow.grab().isNull())
+
+    def test_failed_cosmetic_purchase_restores_sunlight_and_ownership(self):
+        self.garden.sunlight = 12
+        self.window.theme_picker.setCurrentIndex(self.window.theme_picker.findData('cream'))
+        self.window.refresh()
+        with patch.object(self.store, 'save', side_effect=SaveError('disk full')):
+            self.window.buy_theme_button.click()
+        self.assertEqual(self.garden.sunlight, 12)
+        self.assertEqual(self.garden.owned_themes, ['grass'])
+        self.assertIn('되돌렸습니다', self.window.message.text())
+
     def test_drag_cancel_keeps_flower_and_coins(self):
         self.show_garden()
         with patch('morning_bloom.garden_view.QDrag') as drag:

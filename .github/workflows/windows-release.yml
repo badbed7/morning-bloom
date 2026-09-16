@@ -36,6 +36,7 @@ jobs:
         run: python release/build_windows.py
         env:
           BLOOM_RELEASE_REPO: ${{ vars.BLOOM_RELEASE_REPO || 'badbed7/morning-bloom-releases' }}
+          GOOGLE_OAUTH_CLIENT_ID: ${{ vars.GOOGLE_OAUTH_CLIENT_ID }}
       - uses: actions/upload-artifact@v4
         with:
           name: MorningBloom-Windows

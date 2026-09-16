@@ -106,8 +106,29 @@ Qt `AppLocalDataLocation` 아래 `MorningBloomPython` 폴더를 사용합니다.
 - `*.json.v5-migration.bak`: v5에서 v6으로 처음 이전할 때의 원문
 - `*.json.v6-migration.bak`: v6에서 v7로 처음 이전할 때의 원문
 - `*.json.v7-migration.bak`: v7에서 v8로 처음 이전할 때의 원문
+- `*.json.pre-cloud.bak`: Google Drive 저장을 복원하기 직전의 로컬 저장
 
 손상된 본 파일은 정상 백업으로 복구합니다. 양쪽이 모두 손상되거나 더 높은 저장 버전이면 시작과 저장을 멈춰 원본을 보존합니다.
+
+## Google 계정과 클라우드 저장
+
+설정에서 Google 계정을 연결하면 일반 정원을 Google Drive의 비공개 `appDataFolder`에 저장합니다. 이 파일은 사용자의 일반 Drive 목록에 나타나지 않으며 Morning Bloom만 요청한 권한으로 접근합니다. 개발자 모드 정원은 동기화하지 않습니다. 로그인에는 데스크톱 OAuth Authorization Code와 PKCE를 사용하며 별도 게임 서버나 클라이언트 보안 비밀은 사용하지 않습니다. 장기 로그인 토큰은 Windows 자격 증명 관리자에 보관합니다.
+
+앱은 시작할 때와 5분마다 로컬·클라우드 저장 시각을 비교합니다. 로컬 저장이 새로우면 백업하고, 클라우드 저장이 새로우면 현재 정원을 교체하기 전에 확인합니다. `지금 백업`과 `클라우드 복원`도 설정에서 실행할 수 있습니다. 복원 직전 로컬 파일은 `garden.json.pre-cloud.bak`에 남습니다.
+
+개발 빌드 설정:
+
+1. [Google Cloud Console](https://console.cloud.google.com/)에서 프로젝트를 만들고 Google Drive API를 사용 설정합니다.
+2. Google Auth Platform에서 앱 정보와 사용 대상을 설정합니다. 테스트 상태라면 사용할 Google 계정을 테스트 사용자로 등록합니다.
+3. OAuth 클라이언트를 **Desktop app** 유형으로 만들고 Client ID를 복사합니다. Client secret은 코드나 GitHub에 넣지 않습니다.
+4. 소스 실행 전 `MORNING_BLOOM_GOOGLE_CLIENT_ID` 환경 변수에 Client ID를 설정합니다.
+
+```powershell
+$env:MORNING_BLOOM_GOOGLE_CLIENT_ID = '발급된-ID.apps.googleusercontent.com'
+python -m morning_bloom
+```
+
+배포 빌드는 GitHub 저장소의 **Settings → Secrets and variables → Actions → Variables**에 `GOOGLE_OAUTH_CLIENT_ID`를 등록합니다. Client ID는 공개 식별자이며 빌드 결과에 포함됩니다. 값을 등록한 뒤 MSIX나 Windows release를 다시 빌드해야 합니다. [Google 데스크톱 OAuth 안내](https://developers.google.com/identity/protocols/oauth2/native-app), [Drive 앱 데이터 안내](https://developers.google.com/workspace/drive/api/guides/appdata)를 따릅니다.
 
 ## 검증
 

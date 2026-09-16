@@ -235,6 +235,7 @@ class Store:
     def __init__(self, path):
         self.path = Path(path)
         self.backup = self.path.with_suffix('.json.bak')
+        self.cloud_backup = self.path.with_suffix('.json.pre-cloud.bak')
         self.migration_backup = self.path.with_suffix('.json.v3-migration.bak')
         self.blocked = False
         self.notice = ''
@@ -292,6 +293,26 @@ class Store:
             self._migration_source = None
         except OSError as exc:
             raise SaveError(str(exc)) from exc
+
+    def replace_from_cloud(self, data, now):
+        """Validate a cloud save and atomically install it, retaining the local save."""
+        if self.blocked:
+            raise SaveError('저장 파일 보호 중')
+        try:
+            if (isinstance(data, dict) and type(data.get('schema')) is int
+                    and data['schema'] > Garden.CURRENT_SCHEMA):
+                raise SaveError('클라우드 저장이 더 새로운 버전입니다. 앱을 업데이트하세요.')
+            state = Garden.from_dict(migrate(data))
+            state.advance(now)
+            current = self.path.read_text(encoding='utf-8') if self.path.exists() else None
+            if current is not None:
+                self._atomic(self.cloud_backup, current)
+            self._atomic(self.path, json.dumps(state.to_dict(), ensure_ascii=False, indent=2))
+            return state
+        except SaveError:
+            raise
+        except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+            raise SaveError('클라우드 저장을 적용할 수 없습니다.') from exc
 
     @staticmethod
     def _atomic(path, text):

@@ -2,6 +2,8 @@ import argparse
 import math
 import sys
 import time
+from concurrent.futures import Future
+from threading import Thread
 from pathlib import Path
 
 from PySide6.QtCore import QLockFile, QPointF, QRectF, QStandardPaths, Qt, QTimer
@@ -29,6 +31,7 @@ from .fertilizer_game import FertilizerGame
 from .mist_game import MistGame
 from .desktop_flowers import DesktopFlowers
 from .garden_view import CollectionGarden, sale_price
+from .google_cloud import CloudError, GoogleDriveSync
 from .model import FERTILIZER_CAP, FERTILIZER_SECONDS, POT_PRICES, TYCOON_RULE
 from .icon_picker import IconPicker
 from .navigation import SlideStack, chevron_icon
@@ -98,7 +101,7 @@ class Flower(QWidget):
 
 
 class Window(QWidget):
-    def __init__(self, store, garden, demo=False, save_lock=None):
+    def __init__(self, store, garden, demo=False, save_lock=None, cloud=None):
         super().__init__()
         self.store, self.garden, self.demo = store, garden, demo
         self.offset = max(0, garden.last_update - time.time()) if demo else 0
@@ -108,6 +111,11 @@ class Window(QWidget):
         self._action_busy = False
         self._fertilizer_game = None
         self._mist_game = None
+        self.cloud = cloud
+        self._cloud_future = None
+        self._cloud_done = None
+        self._cloud_busy = False
+        self._local_saved_at = store.path.stat().st_mtime if getattr(store, 'path', None) and store.path.exists() else 0
         self.desktop = DesktopFlowers(self)
         self.setWindowTitle('아침 한 송이')
         self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint)
@@ -124,6 +132,17 @@ class Window(QWidget):
         self.autosave = QTimer(self)
         self.autosave.timeout.connect(self.persist)
         self.autosave.start(30000)
+        self.cloud_poll = QTimer(self)
+        self.cloud_poll.setInterval(100)
+        self.cloud_poll.timeout.connect(self._poll_cloud)
+        self.cloud_auto = QTimer(self)
+        self.cloud_auto.setInterval(300000)
+        self.cloud_auto.timeout.connect(self.check_cloud)
+        self.cloud_auto.start()
+        self.cloud_start = QTimer(self)
+        self.cloud_start.setSingleShot(True)
+        self.cloud_start.timeout.connect(self.check_cloud)
+        self.cloud_start.start(1500)
         self.refresh()
 
     def _set_responsive_square(self):
@@ -436,6 +455,24 @@ class Window(QWidget):
         desktop_hint.setObjectName('small')
         layout.addWidget(desktop_hint)
         self.button(layout, '바탕화면 꽃 모두 정원으로', self.return_all_desktop)
+        cloud_title = QLabel('Google Drive 저장')
+        cloud_title.setObjectName('section')
+        layout.addWidget(cloud_title)
+        self.cloud_status = QLabel()
+        self.cloud_status.setObjectName('small')
+        self.cloud_status.setWordWrap(True)
+        layout.addWidget(self.cloud_status)
+        self.cloud_connect_button = QPushButton('Google 계정 연결')
+        self.cloud_connect_button.clicked.connect(self.toggle_cloud_connection)
+        layout.addWidget(self.cloud_connect_button)
+        cloud_row = QHBoxLayout()
+        self.cloud_backup_button = QPushButton('지금 백업')
+        self.cloud_backup_button.clicked.connect(self.backup_cloud)
+        cloud_row.addWidget(self.cloud_backup_button)
+        self.cloud_restore_button = QPushButton('클라우드 복원')
+        self.cloud_restore_button.clicked.connect(self.restore_cloud)
+        cloud_row.addWidget(self.cloud_restore_button)
+        layout.addLayout(cloud_row)
         catalog = QLabel(
             '식물 카탈로그\n'
             + '\n'.join(
@@ -472,6 +509,146 @@ class Window(QWidget):
         layout.addWidget(self.fast_forward_button)
         layout.addStretch()
         self.pages.addWidget(page)
+        self._sync_cloud_controls()
+
+    def _sync_cloud_controls(self):
+        configured = bool(self.cloud and self.cloud.configured)
+        connected = configured and self.cloud.connected
+        active = connected and not self.demo and not self._cloud_busy
+        if not configured:
+            status = 'Google OAuth Client ID 설정이 필요합니다.'
+        elif connected:
+            status = '연결됨 · ' + (self.cloud.email or 'Google 계정')
+            if self.demo:
+                status += ' · 테스트 정원은 동기화하지 않음'
+        else:
+            status = '연결하면 일반 정원을 비공개 앱 데이터에 저장합니다.'
+        self.cloud_status.setText(status)
+        self.cloud_connect_button.setText('연결 해제' if connected else 'Google 계정 연결')
+        self.cloud_connect_button.setEnabled(configured and not self._cloud_busy)
+        self.cloud_backup_button.setEnabled(active)
+        self.cloud_restore_button.setEnabled(active)
+
+    def _run_cloud(self, action, done, message):
+        if not self.cloud or self._cloud_busy:
+            return False
+        self._cloud_busy = True
+        self._cloud_done = done
+        self._cloud_future = Future()
+
+        def work():
+            try:
+                self._cloud_future.set_result(action())
+            except BaseException as exc:
+                self._cloud_future.set_exception(exc)
+
+        Thread(target=work, name='MorningBloomCloud', daemon=True).start()
+        self._sync_cloud_controls()
+        if message:
+            self.notify(message)
+        self.cloud_poll.start()
+        return True
+
+    def _poll_cloud(self):
+        if not self._cloud_future or not self._cloud_future.done():
+            return
+        self.cloud_poll.stop()
+        future, done = self._cloud_future, self._cloud_done
+        self._cloud_future = self._cloud_done = None
+        self._cloud_busy = False
+        self._sync_cloud_controls()
+        try:
+            result = future.result()
+        except (CloudError, OSError, ValueError) as exc:
+            self.notify('Google Drive 실패 · ' + str(exc), important=True)
+            return
+        done(result)
+
+    def toggle_cloud_connection(self):
+        if not self.cloud:
+            return False
+        if self.cloud.connected:
+            return self._run_cloud(
+                self.cloud.disconnect,
+                lambda _: (self._sync_cloud_controls(), self.notify('Google 계정 연결을 해제했습니다.', important=True)),
+                'Google 연결을 해제하는 중…',
+            )
+        return self._run_cloud(self.cloud.connect, self._after_cloud_connect, '브라우저에서 Google 로그인을 완료하세요.')
+
+    def _after_cloud_connect(self, _email):
+        self._sync_cloud_controls()
+        self.notify('Google 계정이 연결되었습니다.', important=True)
+        self.check_cloud()
+
+    def check_cloud(self):
+        if not self.cloud or not self.cloud.connected or self.demo or self._cloud_busy:
+            return False
+        return self._run_cloud(
+            self.cloud.download_save,
+            lambda envelope: self._consider_cloud_save(envelope, manual=False),
+            '클라우드 저장을 확인하는 중…',
+        )
+
+    def backup_cloud(self, _checked=False, silent=False):
+        if not self.cloud or not self.cloud.connected or self.demo or self._cloud_busy:
+            return False
+        if not self.persist():
+            return False
+        snapshot = self.garden.to_dict()
+        return self._run_cloud(
+            lambda: self.cloud.upload_save(snapshot),
+            lambda saved_at: self.notify('Google Drive 백업 완료', important=not silent),
+            '' if silent else 'Google Drive에 백업하는 중…',
+        )
+
+    def restore_cloud(self):
+        if not self.cloud or not self.cloud.connected or self.demo or self._cloud_busy:
+            return False
+        return self._run_cloud(
+            self.cloud.download_save,
+            lambda envelope: self._consider_cloud_save(envelope, manual=True),
+            '클라우드 저장을 불러오는 중…',
+        )
+
+    def _consider_cloud_save(self, envelope, manual):
+        if envelope is None:
+            if manual:
+                self.notify('Google Drive에 저장된 정원이 없습니다.', important=True)
+            else:
+                self.backup_cloud()
+            return
+        cloud_newer = envelope['saved_at'] > self._local_saved_at + 1
+        if not manual and not cloud_newer:
+            if self._local_saved_at > envelope['saved_at'] + 1:
+                self.backup_cloud(silent=True)
+            else:
+                self.notify('Google Drive와 동기화되었습니다.')
+            return
+        answer = QMessageBox.question(
+            self,
+            '클라우드 저장 복원',
+            'Google Drive의 정원으로 현재 정원을 교체할까요?\n현재 저장은 복원 전 백업으로 보존합니다.',
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if answer == QMessageBox.Yes:
+            self._apply_cloud_save(envelope)
+        else:
+            self.notify('로컬 정원을 유지했습니다. 클라우드 저장은 변경하지 않았습니다.', important=True)
+
+    def _apply_cloud_save(self, envelope):
+        try:
+            restored = self.store.replace_from_cloud(envelope['save'], self.now())
+            self.desktop.close()
+            self.garden.restore(restored.to_dict())
+            self._local_saved_at = self.store.path.stat().st_mtime
+            self._apply_session_settings()
+            self.refresh()
+            self.notify('Google Drive 저장을 복원했습니다.', important=True)
+            return True
+        except (SaveError, ValueError, OSError) as exc:
+            self.notify('클라우드 복원 실패 · ' + str(exc), important=True)
+            return False
 
     def _build_shop_page(self):
         page, layout = self._scrollable_page()
@@ -776,10 +953,13 @@ class Window(QWidget):
             f'테스트 저장 · 실제 시각보다 {format_duration(self.offset)} 앞섬'
             if self.demo else '일반 정원 · 시간 이동 잠김'
         )
+        self._sync_cloud_controls()
 
     def set_developer_mode(self, enabled):
         """Switch locked save files, retaining the Garden object used by every view."""
-        if enabled == self.demo or self._action_busy:
+        if enabled == self.demo or self._action_busy or self._cloud_busy:
+            if self._cloud_busy:
+                self.notify('Google Drive 작업이 끝난 뒤 전환하세요.', important=True)
             self._sync_developer_controls()
             return enabled == self.demo
         self._cancel_fertilizer_game()
@@ -806,6 +986,7 @@ class Window(QWidget):
             self.desktop.close()
             self.garden.restore(target_garden.to_dict())
             self.store, self.demo = target_store, enabled
+            self._local_saved_at = target_store.path.stat().st_mtime
             self.offset = max(0, target_garden.last_update - time.time()) if enabled else 0
             previous_lock = self._save_lock
             self._save_lock, target_lock = target_lock, None
@@ -1102,6 +1283,8 @@ class Window(QWidget):
         except (SaveError, ValueError, OSError) as exc:
             self.notify('저장 실패 · ' + str(exc), important=True)
             return False
+        if getattr(self.store, 'path', None) and self.store.path.exists():
+            self._local_saved_at = self.store.path.stat().st_mtime
         return True
 
     def resizeEvent(self, event):
@@ -1128,6 +1311,9 @@ class Window(QWidget):
             self.desktop.close()
             self.clock.stop()
             self.autosave.stop()
+            self.cloud_poll.stop()
+            self.cloud_auto.stop()
+            self.cloud_start.stop()
             if self._save_lock is not None:
                 self._save_lock.unlock()
                 self._save_lock = None
@@ -1159,6 +1345,6 @@ def main():
     except SaveError as exc:
         QMessageBox.critical(None, '저장 파일 보호', str(exc) + '\n' + str(path))
         return 1
-    window = Window(store, garden, args.demo, save_lock=lock)
+    window = Window(store, garden, args.demo, save_lock=lock, cloud=GoogleDriveSync())
     window.show()
     return app.exec()

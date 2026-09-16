@@ -42,6 +42,8 @@ jobs:
           PYTHONPATH: release
       - name: Build native game
         run: python release/build_windows.py
+        env:
+          GOOGLE_OAUTH_CLIENT_ID: ${{ vars.GOOGLE_OAUTH_CLIENT_ID }}
       - name: Create unsigned Store submission package
         run: python release/build_msix.py
         env:

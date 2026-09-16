@@ -27,8 +27,18 @@ def main():
     if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', repo): raise SystemExit('Invalid repository')
     (ROOT / 'release/release_config.py').write_text(f'REPOSITORY = {repo!r}\n')
     common = [sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean', '--windowed', '--distpath', 'dist', '--workpath', 'build', '--specpath', 'build']
-    run(*common, '--onedir', '--name', 'MorningBloomGame', '--paths', 'python',
-        '--add-data', str(ROOT / 'assets/fonts') + ';assets/fonts', 'release/game_entry.py')
+    google_id = os.environ.get('GOOGLE_OAUTH_CLIENT_ID', '').strip()
+    if google_id and not re.fullmatch(r'[A-Za-z0-9_-]+\.apps\.googleusercontent\.com', google_id):
+        raise SystemExit('Invalid GOOGLE_OAUTH_CLIENT_ID')
+    with tempfile.TemporaryDirectory(prefix='MorningBloom-build-config-') as config_dir:
+        google_args = []
+        if google_id:
+            config = Path(config_dir) / 'google-oauth-client-id.txt'
+            config.write_text(google_id, encoding='utf-8')
+            google_args = ['--add-data', str(config) + ';.']
+        run(*common, '--onedir', '--name', 'MorningBloomGame', '--paths', 'python',
+            '--add-data', str(ROOT / 'assets/fonts') + ';assets/fonts', *google_args,
+            'release/game_entry.py')
     run(*common, '--onefile', '--name', 'MorningBloom', '--paths', 'release', 'release/launcher.py')
     game = ROOT / 'dist/MorningBloomGame'
     licenses = game / 'licenses'

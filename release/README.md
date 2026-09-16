@@ -9,15 +9,18 @@ Smart App Control이 켜진 PC에는 Microsoft Store 배포를 권장합니다. 
 1. [Partner Center](https://partner.microsoft.com/dashboard)에서 Windows 앱 개인 개발자로 등록합니다.
 2. **Apps and games → New product → MSIX or PWA app**에서 앱 이름을 예약합니다.
 3. **Product management → Product identity**의 `Name`, `Publisher`, `Publisher display name`을 복사합니다. 대소문자까지 그대로 사용해야 합니다.
-4. GitHub Actions의 **Store MSIX package → Run workflow**에서 세 값을 입력합니다.
-5. 완료된 `MorningBloom-Store-MSIX` artifact의 `.msix`를 내려받아 Partner Center 제출의 **Packages**에 올립니다.
-6. 가격·카테고리·연령 등급·스토어 설명·스크린샷·지원 정보를 채운 뒤 인증을 제출합니다.
+4. Google Drive 저장을 포함하려면 저장소의 Actions variable `GOOGLE_OAUTH_CLIENT_ID`에 Google Desktop app Client ID를 등록합니다. Client secret은 등록하지 않습니다.
+5. GitHub Actions의 **Store MSIX package → Run workflow**에서 세 값을 입력합니다.
+6. 완료된 `MorningBloom-Store-MSIX` artifact의 `.msix`를 내려받아 Partner Center 제출의 **Packages**에 올립니다.
+7. 가격·카테고리·연령 등급·스토어 설명·스크린샷·지원 정보를 채운 뒤 인증을 제출합니다.
 
 `release/VERSION`의 `0.5.0`은 Store용 `1.5.0.0`으로 변환합니다. MSIX 네 번째 버전은 Store 예약 값인 `0`으로 유지합니다. 이후 제출은 `release/VERSION`을 올려 더 높은 패키지 버전을 만듭니다.
 
-로컬 수동 패키징은 Windows 10/11 SDK의 `MakeAppx.exe`가 필요합니다. 먼저 `python release/build_windows.py`를 실행한 뒤 다음 환경 변수를 설정하고 실행합니다.
+로컬 수동 패키징은 Windows 10/11 SDK의 `MakeAppx.exe`가 필요합니다. 다음 환경 변수를 설정하고 게임과 MSIX를 차례로 빌드합니다.
 
 ```powershell
+$env:GOOGLE_OAUTH_CLIENT_ID = 'Google Desktop app Client ID'
+python release/build_windows.py
 $env:STORE_IDENTITY_NAME = 'Partner Center의 Name'
 $env:STORE_PUBLISHER = 'Partner Center의 Publisher'
 $env:STORE_PUBLISHER_DISPLAY_NAME = 'Partner Center의 Publisher display name'

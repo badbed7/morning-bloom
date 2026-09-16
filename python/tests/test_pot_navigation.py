@@ -54,28 +54,35 @@ class PotNavigation(unittest.TestCase):
         self.time_patch.stop()
         self.temp.cleanup()
 
-    def test_selector_uses_arrows_and_keeps_only_species_dropdown(self):
+    def test_selector_uses_chevrons_and_seed_packets(self):
         self.assertFalse(hasattr(self.window, 'pot_picker'))
         self.assertEqual(
             self.window.pages.widget(POT_PAGE).findChildren(QComboBox),
-            [self.window.species_picker],
+            [],
         )
+        self.assertEqual(set(self.window.species_picker.buttons), {'daisy', 'starflower', 'tulip'})
+        self.assertTrue(all(not button.icon().isNull() for button in self.window.species_picker.buttons.values()))
         self.assertEqual(self.window.pot_name.text(), '화분 1 / 2 · 데이지')
         self.assertIn('성장 중', self.window.pot_name.toolTip())
         self.assertEqual(self.window.previous_pot.accessibleName(), '이전 화분')
         self.assertEqual(self.window.next_pot.accessibleName(), '다음 화분')
 
-    def test_arrows_wrap_both_ways_and_persist_without_changing_pots_or_inventory(self):
+    def test_arrows_stop_at_both_ends_and_persist_valid_moves(self):
         before = self.garden.to_dict()
-        for button in (self.window.next_pot, self.window.previous_pot):
-            for expected in (1, 0):
-                QTest.mouseClick(button, Qt.LeftButton)
-                self.assertEqual(self.garden.selected, expected)
-                self.assertIn(f'화분 {expected + 1} / 2', self.window.pot_name.text())
-                self.assertEqual(self.store.load(NOW).selected, expected)
-                after = self.garden.to_dict()
-                for key in ('pots', 'coins', 'seeds', 'collection', 'sunlight'):
-                    self.assertEqual(after[key], before[key], key)
+        for direction, expected in ((-1, 0), (1, 1), (1, 1), (-1, 0), (-1, 0)):
+            boundary = self.garden.selected == expected
+            with patch.object(self.store, 'save', wraps=self.store.save) as save:
+                self.assertEqual(self.window.navigate_pot(direction), not boundary)
+                if boundary:
+                    save.assert_not_called()
+            self.assertEqual(self.garden.selected, expected)
+            self.assertIn(f'화분 {expected + 1} / 2', self.window.pot_name.text())
+            self.assertEqual(self.store.load(NOW).selected, expected)
+            self.assertEqual(self.window.previous_pot.isEnabled(), expected > 0)
+            self.assertEqual(self.window.next_pot.isEnabled(), expected < 1)
+            after = self.garden.to_dict()
+            for key in ('pots', 'coins', 'seeds', 'collection', 'sunlight'):
+                self.assertEqual(after[key], before[key], key)
 
     def test_slide_direction_matches_clicked_arrow(self):
         for button, direction in ((self.window.next_pot, 1), (self.window.previous_pot, -1)):
@@ -107,7 +114,7 @@ class PotNavigation(unittest.TestCase):
         self.window.buy_pot_button.click()
         self.window.navigate(-1)
         self.window.pages.finish_transition()
-        self.assertTrue(self.window.previous_pot.isEnabled())
+        self.assertFalse(self.window.previous_pot.isEnabled())
         self.assertTrue(self.window.next_pot.isEnabled())
         QTest.mouseClick(self.window.next_pot, Qt.LeftButton)
         self.assertEqual(self.window.pot_name.text(), '화분 2 / 2 · 빈 화분')
@@ -208,7 +215,8 @@ class PotNavigation(unittest.TestCase):
         self.assertFalse(self.window.next_pot.isEnabled())
         self.assertTrue(self.window.set_developer_mode(False))
         self.assertIn('화분 2 / 2', self.window.pot_name.text())
-        self.assertTrue(self.window.next_pot.isEnabled())
+        self.assertFalse(self.window.next_pot.isEnabled())
+        self.assertTrue(self.window.previous_pot.isEnabled())
 
 
 if __name__ == '__main__':

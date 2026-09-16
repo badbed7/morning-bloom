@@ -1,6 +1,24 @@
 """Small slide transitions; page widgets always keep their real layout."""
-from PySide6.QtCore import QEasingCurve, QPoint, QParallelAnimationGroup, QPropertyAnimation
+from PySide6.QtCore import QEasingCurve, QPoint, QParallelAnimationGroup, QPropertyAnimation, Qt
+from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QLabel, QStackedWidget
+
+
+def chevron_icon(direction):
+    icon = QIcon()
+    for mode, color in ((QIcon.Normal, '#75604a'), (QIcon.Disabled, '#c9bfae')):
+        pixmap = QPixmap(36, 36)
+        pixmap.setDevicePixelRatio(2)
+        pixmap.fill(Qt.transparent)
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setPen(QPen(QColor(color), 1.6, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        start, tip = (11, 6) if direction < 0 else (6, 11)
+        painter.drawLine(start, 4, tip, 9)
+        painter.drawLine(tip, 9, start, 14)
+        painter.end()
+        icon.addPixmap(pixmap, mode)
+    return icon
 
 
 class SlideStack(QStackedWidget):

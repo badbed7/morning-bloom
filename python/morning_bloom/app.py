@@ -18,7 +18,6 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSizePolicy,
-    QStyle,
     QSlider,
     QVBoxLayout,
     QWidget,
@@ -29,8 +28,9 @@ from .flower_art import paint_potted_flower
 from .fertilizer_game import FertilizerGame
 from .garden_view import CollectionGarden, sale_price
 from .model import FERTILIZER_CAP, FERTILIZER_SECONDS, POT_PRICES, TYCOON_RULE
-from .navigation import SlideStack
+from .navigation import SlideStack, chevron_icon
 from .plant_catalog import PLANTS, plant_definition
+from .seed_picker import SeedPicker
 from .storage import SaveError, Store
 
 POT_PAGE, SHOP_PAGE, GARDEN_PAGE, SETTINGS_PAGE = range(4)
@@ -83,7 +83,7 @@ class Flower(QWidget):
         painter.translate((self.width() - 380 * scale) / 2, 0)
         painter.scale(scale, scale)
         painter.setPen(Qt.NoPen)
-        painter.setBrush(QColor('#e8efdf'))
+        painter.setBrush(QColor('#e4e6d2'))
         painter.drawEllipse(QRectF(75, 144, 230, 24))
         paint_potted_flower(
             painter, self.garden.definition, stage=self.garden.stage,
@@ -132,24 +132,34 @@ class Window(QWidget):
 
     def _set_style(self):
         self.setStyleSheet('''
-            QWidget {background:#f8f7ef;color:#334e41;font-size:13px;}
-            QPushButton {background:#e5ecde;border:0;border-radius:9px;padding:7px;}
-            QPushButton:hover {background:#d5e1cb;} QPushButton:disabled {color:#a7afa3;}
-            QLabel#title {font-size:15px;font-weight:600;} QLabel#small {color:#778575;font-size:11px;}
+            QWidget {background:#f7f1e5;color:#5b5142;font-size:13px;}
+            QPushButton {background:#eee4d2;border:1px solid #d8cbb6;border-radius:5px;padding:6px;}
+            QPushButton:hover {background:#e5dac3;border-color:#b09a78;}
+            QPushButton:disabled {background:#f0eadd;color:#a69c89;border-color:#e2d9c9;}
+            QPushButton:focus, QToolButton:focus {border:1px solid #7c8968;}
+            QPushButton#navigationButton, QPushButton#quiet {background:transparent;border:1px solid transparent;padding:0;}
+            QPushButton#navigationButton:hover, QPushButton#quiet:hover {background:#eee4d2;border-color:#d8cbb6;}
+            QPushButton#navigationButton:focus, QPushButton#quiet:focus {border-color:#7c8968;}
+            QToolButton#seedPacket {background:#fbf7ed;border:1px solid #d8cbb6;border-radius:5px;padding:3px;color:#5b5142;font-size:11px;}
+            QToolButton#seedPacket:hover {background:#f0e6d3;border-color:#b09a78;}
+            QToolButton#seedPacket:checked {background:#e7ebdd;border:2px solid #7c8968;padding:2px;}
+            QToolButton#seedPacket:focus {border-color:#526647;}
+            QToolButton#seedPacket:disabled {color:#a69c89;}
+            QLabel#title {font-size:15px;font-weight:600;color:#705a40;} QLabel#small {color:#80745e;font-size:11px;}
             QLabel#section {font-size:16px;font-weight:600;}
             QLabel#potTitle {font-weight:600;}
-            QWidget#fertilizerTools {background:#edf0e5;border-radius:9px;}
+            QWidget#fertilizerTools {background:#eee7d7;border:1px solid #ded2bd;border-radius:5px;}
             QWidget#fertilizerTools QLabel {background:transparent;}
-            QPushButton#primary {background:#496b50;color:#ffffff;}
-            QPushButton#primary:hover {background:#3d5d44;}
-            QProgressBar {border:0;background:#e5e9df;border-radius:4px;height:8px;text-align:center;}
-            QProgressBar::chunk {background:#8faa79;border-radius:4px;}
-            QComboBox {background:#ffffff;border:1px solid #dce3d6;border-radius:8px;padding:6px;}
-            QSlider::groove:horizontal {height:5px;background:#dfe5d8;border-radius:2px;}
-            QSlider::sub-page:horizontal {background:#8faa79;border-radius:2px;}
-            QSlider::handle:horizontal {width:13px;margin:-4px 0;background:#647f5b;border-radius:6px;}
-            QScrollBar:vertical {background:#eef0e5;width:8px;margin:0;}
-            QScrollBar::handle:vertical {background:#9bae83;border-radius:4px;min-height:22px;}
+            QPushButton#primary {background:#657957;color:#fffaf0;border-color:#657957;}
+            QPushButton#primary:hover {background:#526647;}
+            QProgressBar {border:0;background:#e6decd;border-radius:3px;height:8px;text-align:center;}
+            QProgressBar::chunk {background:#93a47b;border-radius:3px;}
+            QComboBox {background:#fbf7ed;border:1px solid #d8cbb6;border-radius:5px;padding:6px;}
+            QSlider::groove:horizontal {height:5px;background:#e6decd;border-radius:2px;}
+            QSlider::sub-page:horizontal {background:#93a47b;border-radius:2px;}
+            QSlider::handle:horizontal {width:13px;margin:-4px 0;background:#657957;border-radius:6px;}
+            QScrollBar:vertical {background:#f0eadd;width:8px;margin:0;}
+            QScrollBar::handle:vertical {background:#b7ad94;border-radius:4px;min-height:22px;}
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {height:0;}
             QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {background:transparent;}
         ''')
@@ -181,6 +191,7 @@ class Window(QWidget):
         self.next_page.clicked.connect(lambda: self.navigate(1))
         top.addWidget(self.next_page)
         close = QPushButton('X')
+        close.setObjectName('quiet')
         close.setFixedSize(28, 28)
         close.setAccessibleName('저장 후 종료')
         close.clicked.connect(self.close)
@@ -218,11 +229,11 @@ class Window(QWidget):
         root.addLayout(footer)
         self.pages.currentChanged.connect(self._page_changed)
         self._page_changed(POT_PAGE)
-        for button, icon in ((self.previous_page, QStyle.SP_ArrowLeft), (self.previous_pot, QStyle.SP_ArrowLeft),
-                             (self.next_page, QStyle.SP_ArrowRight), (self.next_pot, QStyle.SP_ArrowRight)):
+        for button, direction in ((self.previous_page, -1), (self.previous_pot, -1),
+                                  (self.next_page, 1), (self.next_pot, 1)):
             button.setText('')
-            button.setIcon(self.style().standardIcon(icon))
-            button.setStyleSheet('padding:0;')
+            button.setIcon(chevron_icon(direction))
+            button.setObjectName('navigationButton')
 
     def _page_changed(self, index):
         if index != POT_PAGE:
@@ -254,7 +265,9 @@ class Window(QWidget):
         count = len(self.garden.pots)
         if count < 2 or self._action_busy or direction not in (-1, 1):
             return False
-        target = (self.garden.selected + direction) % count
+        target = self.garden.selected + direction
+        if not 0 <= target < count:
+            return False
 
         def select():
             if not self.act(lambda: self.garden.select(target)):
@@ -320,20 +333,10 @@ class Window(QWidget):
         self.care_info.setFixedHeight(16)
         layout.addWidget(self.care_info)
 
-        row = QHBoxLayout()
-        self.species_picker = QComboBox()
-        self.species_picker.setMinimumWidth(0)
-        self.species_picker.setFixedHeight(28)
-        self.species_picker.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
-        for definition in PLANTS.values():
-            self.species_picker.addItem(
-                f'{definition.name} · {format_duration(definition.growth_seconds)}',
-                definition.key,
-            )
-        self.species_picker.currentIndexChanged.connect(self.refresh)
-        row.addWidget(self.species_picker, 1)
-        self.plant_button = self.button(row, '씨앗 심기', self.plant_selected)
-        layout.addLayout(row)
+        self.species_picker = SeedPicker()
+        self.species_picker.selectionChanged.connect(self.refresh)
+        layout.addWidget(self.species_picker)
+        self.plant_button = self.button(layout, '씨앗 심기', self.plant_selected)
 
         row = QHBoxLayout()
         self.water_button = QPushButton('물주기')
@@ -451,20 +454,22 @@ class Window(QWidget):
 
     def _build_shop_page(self):
         page, layout = self._scrollable_page()
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(6)
         self.shop_wallet = QLabel()
+        self.shop_wallet.setObjectName('small')
         layout.addWidget(self.shop_wallet)
         seed_title = QLabel('재배 상점 · 골드')
         seed_title.setObjectName('section')
         layout.addWidget(seed_title)
-        self.shop_picker = QComboBox()
-        for item in PLANTS.values():
-            self.shop_picker.addItem(f'{item.name} · {format_duration(item.growth_seconds)}', item.key)
+        self.shop_picker = SeedPicker(shop=True)
         layout.addWidget(self.shop_picker)
         self.shop_info = QLabel()
+        self.shop_info.setObjectName('small')
         self.shop_info.setWordWrap(True)
         self.shop_info.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         layout.addWidget(self.shop_info)
-        self.buy_seed_button = self.button(layout, '씨앗 구매', lambda: self.garden.buy_seed(self.shop_picker.currentData()))
+        self.buy_seed_button = self.button(layout, '씨앗 구매', lambda: self.garden.buy_seed(self.shop_picker.selected))
         layout.addWidget(QLabel('화분 확장 · 씨앗은 별도 구매'))
         self.buy_pot_button = self.button(layout, '두 번째 화분 구매 · 150G', self.garden.buy_pot)
         theme_title = QLabel('정원 꾸미기 · 햇빛')
@@ -489,7 +494,7 @@ class Window(QWidget):
         layout.addLayout(theme_row)
         layout.addStretch()
         self.pages.addWidget(page)
-        self.shop_picker.currentIndexChanged.connect(self.refresh)
+        self.shop_picker.selectionChanged.connect(self.refresh)
         self.theme_picker.currentIndexChanged.connect(self.refresh)
 
     def harvest_flower(self):
@@ -584,7 +589,7 @@ class Window(QWidget):
             self._action_busy = False
 
     def plant_selected(self):
-        return self.garden.plant(self.now(), self.species_picker.currentData())
+        return self.garden.plant(self.now(), self.species_picker.selected)
 
     def care(self, kind):
         previous_status = self.garden.water_status
@@ -790,16 +795,21 @@ class Window(QWidget):
             self.remaining.setText('빈 화분 · 키울 식물을 선택하세요')
             self.care_info.setText('모든 꽃은 심은 뒤 첫 물주기를 해야 성장해요')
 
-        selected = self.species_picker.currentData()
+        selected = self.species_picker.selected
         count = garden.seed_count(selected)
-        self.plant_button.setText('씨앗 심기' if count else '씨앗 없음')
+        self.plant_button.setText(
+            f'{PLANTS[selected].name} 심기 · {format_duration(PLANTS[selected].growth_seconds)}'
+            if count else '씨앗 없음 · 상점에서 구매'
+        )
         self.plant_button.setEnabled(garden.can_plant(selected))
         self.species_picker.setEnabled(not garden.planted and not garden.vacation)
         self.species_picker.setVisible(not garden.planted)
         self.plant_button.setVisible(not garden.planted)
+        self.flower.setVisible(garden.planted)
         self.progress.setVisible(garden.planted)
+        self.remaining.setVisible(garden.planted)
         caring = garden.planted and not garden.bloomed
-        self.care_info.setVisible(not (caring and garden.pot['initial_watered']
+        self.care_info.setVisible(garden.planted and not (caring and garden.pot['initial_watered']
                                       and garden.pot['ruleset_id'] == TYCOON_RULE
                                       and not garden.pot['is_tutorial']))
         self.remaining.setToolTip(self.care_info.text())
@@ -807,12 +817,8 @@ class Window(QWidget):
         self.mist_button.setVisible(caring and garden.pot['initial_watered'] and not garden.pot['is_tutorial'])
         self.fertilizer_button.setVisible(caring and garden.pot['initial_watered'] and garden.tutorial_reward_claimed)
         self.harvest_button.setVisible(garden.bloomed)
-        self.species_picker.blockSignals(True)
-        for index, item in enumerate(PLANTS.values()):
-            self.species_picker.setItemText(
-                index, f'{item.name} · {format_duration(item.growth_seconds)} · {garden.seed_count(item.key)}개'
-            )
-        self.species_picker.blockSignals(False)
+        self.species_picker.update_counts(garden.seeds)
+        self.shop_picker.update_counts(garden.seeds)
         self.vacation.blockSignals(True)
         self.vacation.setChecked(garden.vacation)
         self.vacation.blockSignals(False)
@@ -875,22 +881,23 @@ class Window(QWidget):
         self.pot_name.setText(f'화분 {garden.selected + 1} / {count} · {name}')
         self.pot_name.setToolTip(self.pot_name.text() + ' · ' + self._pot_state(garden.pot))
         for button, direction in ((self.previous_pot, -1), (self.next_pot, 1)):
-            button.setEnabled(count > 1)
-            target = (garden.selected + direction) % count
+            target = garden.selected + direction
+            button.setEnabled(0 <= target < count)
             button.setToolTip(
-                f'화분 {target + 1}로 이동' if count > 1
-                else '상점에서 두 번째 화분을 구매하면 넘길 수 있어요'
+                '상점에서 화분을 추가하면 넘길 수 있어요' if count == 1 else
+                f'화분 {target + 1}로 이동' if 0 <= target < count else
+                '첫 화분이에요' if direction < 0 else '마지막 화분이에요'
             )
         self.shop_wallet.setText(
             f'보유 {garden.coins}G · 햇빛 {garden.sunlight} · 화분 {len(garden.pots)}/{len(POT_PRICES)}개'
         )
-        species = self.shop_picker.currentData()
+        species = self.shop_picker.selected
         item = plant_definition(species)
-        care = '첫 물 후 성장 · 반복 돌봄은 선택'
         self.shop_info.setText(
-            f'{item.shop_tag}\n성장 {format_duration(item.growth_seconds)} · {care}\n'
-            f'판매 {item.sale_price}G · 분무 시 {item.sale_price + item.mist_bonus}G'
+            f'성장 {format_duration(item.growth_seconds)} · 판매 {item.sale_price}G\n'
+            f'첫 물 이후 성장 · 분무 판매 +{item.mist_bonus}G'
         )
+        self.shop_info.setToolTip(item.shop_tag + '\n첫 물 후 성장 · 반복 돌봄은 선택')
         self.buy_seed_button.setText(f'{item.name} 씨앗 구매 · {item.seed_price}G')
         self.buy_seed_button.setEnabled(garden.coins >= item.seed_price)
         price = garden.next_pot_price

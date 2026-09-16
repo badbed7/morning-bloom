@@ -16,6 +16,7 @@ def smoke_test():
         window.show()
         app.processEvents()
         window.plant_button.click()
+        window.water_button.click()
         window.offset = 61
         window.refresh()
         window.harvest_button.click()

@@ -92,6 +92,19 @@ class Updating(unittest.TestCase):
                 z.writestr('MorningBloomGame.exe',b'a');z.writestr('morningbloomgame.exe',b'b')
             with self.assertRaises(UpdateError):extract(archive,root/'unpack')
 
+    def test_offline_bundle_upgrade_and_fallback(self):
+        from launcher import prepare
+        for bundled,healthy,expected in [('0.4.0',True,'0.4.0'),('0.4.0',False,'0.3.0'),('0.2.0',True,'0.3.0')]:
+            with self.subTest(bundled=bundled,healthy=healthy),tempfile.TemporaryDirectory() as tmp:
+                root=Path(tmp);installer=Installer(root/'launcher')
+                archive,current=self.payload(root);installer.install(archive,current,lambda _:True)
+                archive,data=self.payload(root,bundled);archive.rename(root/'MorningBloom-game.zip')
+                (root/'bundled-update.json').write_text(json.dumps(data))
+                with patch('launcher.read_latest',side_effect=OSError('offline')),patch('launcher.health_check',return_value=healthy):
+                    result=prepare(installer,root,lambda _:None)
+                self.assertEqual(installer.current()['version'],expected)
+                self.assertEqual(result,installer.executable(installer.current()))
+
     def test_download_failure_removes_partial(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp);_,data=self.payload(root);target=root/'partial.zip';target.write_bytes(b'partial')

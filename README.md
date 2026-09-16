@@ -92,10 +92,10 @@ godot --headless --path . --script tests/ui_smoke.gd -- --demo
 앱 코드는 프로젝트 소유자의 별도 라이선스 결정 전까지 All rights reserved입니다. 꽃·화분은 프로토타입용 코드 도형입니다. 포함된 Noto Sans CJK KR 서브셋은 [SIL Open Font License](assets/fonts/OFL.txt)를 따릅니다. 현재 AI 생성 이미지나 음원은 포함하지 않았습니다.
 
 
-최신 Python 기능: [품종별 성장·돌봄·경제와 상점·정원·화분 2개](python/README.md). 후속 기획: [다음 개발 제안](docs/next-proposals.ko.md).
+최신 Python 기능: [네 화분·반복 돌봄·비료·아이콘 상점과 정원 꾸미기](python/README.md). 후속 기획: [다음 개발 제안](docs/next-proposals.ko.md).
 
 ## Windows 실행 파일과 업데이트
 
-현재 EXE 빌드·릴리스 게시·자동 업데이트 배포 작업은 보류합니다. 이번 변경은 소스 코드와 기획 문서에만 반영합니다.
+v0.4.0부터 네 화분·비료 미니게임·코티지 UI·아이콘 선택·햇빛 화분 스킨을 Windows 실행 파일에 포함합니다. [v0.4.0 Release](https://github.com/badbed7/morning-bloom/releases/tag/v0.4.0)에서 전체 ZIP을 받아 압축을 풀고 실행하세요.
 
 Python 설치 없이 실행하는 배포본은 Releases에 게시합니다. [자동 업데이트·배포 채널 설정](release/README.md)을 확인하세요. 소스 저장소는 비공개이며 일반 사용자용 자동 업데이트는 공개 배포 저장소 연결이 필요합니다.

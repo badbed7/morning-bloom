@@ -2,11 +2,13 @@
 
 ## 사용자 실행
 
-Releases의 `MorningBloom-0.3.0-Windows-x64.zip`을 받고 전체 압축을 푼 다음 `MorningBloom.exe`를 실행합니다. Python 설치는 필요 없습니다. 최초 실행에는 같은 폴더의 `MorningBloom-game.zip`과 `bundled-update.json`이 필요합니다.
+Releases의 `MorningBloom-0.4.0-Windows-x64.zip`을 받고 전체 압축을 푼 다음 `MorningBloom.exe`를 실행합니다. Python 설치는 필요 없습니다. 같은 폴더의 `MorningBloom-game.zip`과 `bundled-update.json`도 함께 보관합니다.
 
 런처가 실행할 때마다 공개 배포 저장소의 최신 정식 Release에서 `update.json`을 확인합니다. 더 높은 버전이면 ZIP 다운로드 → SHA-256 및 크기 검사 → 별도 폴더 압축 해제 → 격리된 실행 점검 → 활성 버전 변경 → 게임 실행 순서로 진행합니다. 다운로드나 새 버전 점검이 실패하면 현재 설치 버전을 실행합니다. 최초 배포 ZIP 자체에도 게임이 있어 첫 실행도 오프라인으로 가능합니다.
 
 이미 실행 중인 게임은 강제로 종료하지 않습니다. 런처는 게임 종료까지 잠금을 유지하므로 두 런처가 동시에 업데이트하지 않습니다. 현재 게임의 내부 잠금도 유지합니다. 업데이트는 다음 실행 때 적용됩니다.
+
+공개 업데이트 채널이 없어도 새 배포 ZIP을 받아 전체 압축을 풀고 실행하면 포함된 버전으로 기존 설치를 갱신합니다. 포함된 버전이 더 오래됐거나 실행 점검에 실패하면 기존 설치를 유지합니다.
 
 게임 저장: 기존 `%LOCALAPPDATA%\MorningBloomPython`. 설치 파일과 업데이트 로그: `%LOCALAPPDATA%\MorningBloomLauncher`. 저장 파일은 다운로드·교체 대상이 아닙니다. 새 게임의 기존 저장 이전 로직을 사용합니다. 이전 실행 파일은 남겨두지만 저장 형식이 달라질 수 있어 임의로 저장을 되돌리지 않습니다.
 

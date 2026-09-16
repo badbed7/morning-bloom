@@ -37,11 +37,17 @@ def acquire_lock(path):
 
 def prepare(installer, bundle, report):
     current = installer.current()
-    # The complete first distribution works offline; saves live elsewhere.
-    if current is None:
-        report('Preparing first launch...')
-        data = manifest(json.loads((bundle / 'bundled-update.json').read_text()), REPOSITORY)
-        current = installer.install(bundle / 'MorningBloom-game.zip', data, health_check)
+    # A newly downloaded bundle also upgrades an existing offline installation.
+    try:
+        bundled_manifest = bundle / 'bundled-update.json'
+        if current is None or bundled_manifest.is_file():
+            data = manifest(json.loads(bundled_manifest.read_text()), REPOSITORY)
+            if current is None or version(data['version']) > version(current['version']):
+                report('Preparing bundled version...')
+                current = installer.install(bundle / 'MorningBloom-game.zip', data, health_check)
+    except Exception:
+        if current is None: raise
+        report('Bundled update unavailable. Keeping installed version...')
     try:
         report('Checking for updates...')
         latest = read_latest(REPOSITORY)

@@ -10,16 +10,26 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import messagebox
 from release_config import REPOSITORY
-from update_core import Installer, read_latest, manifest, download, version
+from update_core import Installer, UpdateError, read_latest, manifest, download, version
 
 
-def health_check(executable):
-    try:
-        result = subprocess.run([str(executable), '--smoke-test'], timeout=45,
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
-        return result.returncode == 0
-    except (OSError, subprocess.TimeoutExpired): return False
+def health_check(executable, log_path):
+    log_path = Path(log_path).resolve()
+    system = sys.getwindowsversion() if sys.platform == 'win32' else sys.platform
+    log_path.write_text(f'{system} / {64 if sys.maxsize > 2**32 else 32}-bit\nStartup check: {executable}\n', encoding='utf-8')
+    with log_path.open('a', encoding='utf-8') as log:
+        try:
+            result = subprocess.run([str(executable), '--smoke-test', '--startup-log', str(log_path)],
+                cwd=executable.parent, timeout=45, stdin=subprocess.DEVNULL,
+                stdout=log, stderr=log, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+            if result.returncode == 0: return True
+            reason = f'Game startup exited with code {result.returncode} (0x{result.returncode & 0xffffffff:08X})'
+        except subprocess.TimeoutExpired:
+            reason = 'Game startup check timed out after 45 seconds'
+        except OSError as exc:
+            reason = f'Could not launch game: {exc}'
+        log.write(reason + '\n')
+    raise UpdateError(reason + '\nDiagnostic log: ' + str(log_path))
 
 
 def acquire_lock(path):
@@ -37,6 +47,7 @@ def acquire_lock(path):
 
 def prepare(installer, bundle, report):
     current = installer.current()
+    check = lambda executable: health_check(executable, installer.root / 'startup-check.log')
     # A newly downloaded bundle also upgrades an existing offline installation.
     try:
         bundled_manifest = bundle / 'bundled-update.json'
@@ -44,7 +55,7 @@ def prepare(installer, bundle, report):
             data = manifest(json.loads(bundled_manifest.read_text()), REPOSITORY)
             if current is None or version(data['version']) > version(current['version']):
                 report('Preparing bundled version...')
-                current = installer.install(bundle / 'MorningBloom-game.zip', data, health_check)
+                current = installer.install(bundle / 'MorningBloom-game.zip', data, check)
     except Exception:
         if current is None: raise
         report('Bundled update unavailable. Keeping installed version...')
@@ -56,7 +67,7 @@ def prepare(installer, bundle, report):
                 archive = Path(temp) / 'game.zip'
                 download(latest, archive, report)
                 report('Checking new version...')
-                current = installer.install(archive, latest, health_check)
+                current = installer.install(archive, latest, check)
     except Exception as exc:
         # No credentials are ever stored in the launcher. Offline/private feeds fail closed.
         try: (installer.root / 'update.log').write_text(f'Update unavailable: {type(exc).__name__}: {exc}\n', encoding='utf-8')
@@ -71,10 +82,16 @@ def main():
         return 0
     if '--verify-bundle' in sys.argv:
         bundle = Path(sys.executable).parent
-        with tempfile.TemporaryDirectory() as temp:
-            installer = Installer(temp)
-            data = manifest(json.loads((bundle / 'bundled-update.json').read_text()), REPOSITORY)
-            installer.install(bundle / 'MorningBloom-game.zip', data, health_check)
+        log_path = bundle.parent / 'startup-check.log'
+        try:
+            with tempfile.TemporaryDirectory() as temp:
+                installer = Installer(temp)
+                data = manifest(json.loads((bundle / 'bundled-update.json').read_text()), REPOSITORY)
+                installer.install(bundle / 'MorningBloom-game.zip', data,
+                    lambda executable: health_check(executable, log_path))
+        except Exception as exc:
+            with log_path.open('a', encoding='utf-8') as log: log.write(str(exc) + '\n')
+            return 1
         return 0
     root = tk.Tk()
     root.title('Morning Bloom')

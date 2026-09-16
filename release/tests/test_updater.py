@@ -1,6 +1,7 @@
 import hashlib
 import json
 import tempfile
+import subprocess
 import unittest
 import zipfile
 from pathlib import Path
@@ -111,5 +112,32 @@ class Updating(unittest.TestCase):
             with patch('urllib.request.urlopen',side_effect=OSError('offline')):
                 with self.assertRaises(OSError):download(data,target)
             self.assertFalse(target.exists())
+
+    def test_startup_failure_preserves_diagnostic_and_current_install(self):
+        from launcher import health_check
+        for result in [subprocess.CompletedProcess([], 0xc0000135), subprocess.TimeoutExpired([],45), OSError('launch denied')]:
+            with self.subTest(result=result),tempfile.TemporaryDirectory() as tmp:
+                root=Path(tmp);installer=Installer(root/'launcher')
+                archive,current=self.payload(root);installer.install(archive,current,lambda _:True)
+                archive,data=self.payload(root,'0.4.1');log=installer.root/'startup-check.log'
+                def failed_run(*args,**kwargs):
+                    self.assertEqual(kwargs['stdin'],subprocess.DEVNULL)
+                    self.assertEqual(kwargs['cwd'],Path(args[0][0]).parent)
+                    kwargs['stderr'].write('native loader diagnostic\n')
+                    if isinstance(result,Exception): raise result
+                    return result
+                with patch('launcher.subprocess.run',side_effect=failed_run),self.assertRaisesRegex(UpdateError,'Diagnostic log:'):
+                    installer.install(archive,data,lambda exe:health_check(exe,log))
+                self.assertIn('native loader diagnostic',log.read_text(encoding='utf-8'))
+                self.assertEqual(installer.current()['version'],current['version'])
+                self.assertFalse(installer.folder(data).exists())
+
+    def test_windowed_game_exception_is_logged(self):
+        from game_entry import checked_smoke_test
+        with tempfile.TemporaryDirectory() as tmp:
+            log=Path(tmp)/'startup.log'
+            with patch('game_entry.smoke_test',side_effect=ImportError('missing test runtime')):
+                self.assertEqual(checked_smoke_test(log),1)
+            self.assertIn('ImportError: missing test runtime',log.read_text(encoding='utf-8'))
 
 if __name__=='__main__':unittest.main()

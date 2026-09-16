@@ -1,5 +1,33 @@
 # Windows 배포와 자동 업데이트
 
+## Microsoft Store MSIX
+
+Smart App Control이 켜진 PC에는 Microsoft Store 배포를 권장합니다. Store 제출본은 현재 런처를 넣지 않고 `MorningBloomGame.exe`와 런타임 전체를 MSIX로 묶습니다. 인증을 통과한 패키지는 Microsoft Store가 서명하고 업데이트도 Store가 처리합니다. 별도 PFX 인증서는 필요하지 않습니다.
+
+최초 1회:
+
+1. [Partner Center](https://partner.microsoft.com/dashboard)에서 Windows 앱 개인 개발자로 등록합니다.
+2. **Apps and games → New product → MSIX or PWA app**에서 앱 이름을 예약합니다.
+3. **Product management → Product identity**의 `Name`, `Publisher`, `Publisher display name`을 복사합니다. 대소문자까지 그대로 사용해야 합니다.
+4. GitHub Actions의 **Store MSIX package → Run workflow**에서 세 값을 입력합니다.
+5. 완료된 `MorningBloom-Store-MSIX` artifact의 `.msix`를 내려받아 Partner Center 제출의 **Packages**에 올립니다.
+6. 가격·카테고리·연령 등급·스토어 설명·스크린샷·지원 정보를 채운 뒤 인증을 제출합니다.
+
+`release/VERSION`의 `0.4.0`은 Store용 `1.4.0.0`으로 변환합니다. MSIX 네 번째 버전은 Store 예약 값인 `0`으로 유지합니다. 이후 제출은 `release/VERSION`을 올려 더 높은 패키지 버전을 만듭니다.
+
+로컬 수동 패키징은 Windows 10/11 SDK의 `MakeAppx.exe`가 필요합니다. 먼저 `python release/build_windows.py`를 실행한 뒤 다음 환경 변수를 설정하고 실행합니다.
+
+```powershell
+$env:STORE_IDENTITY_NAME = 'Partner Center의 Name'
+$env:STORE_PUBLISHER = 'Partner Center의 Publisher'
+$env:STORE_PUBLISHER_DISPLAY_NAME = 'Partner Center의 Publisher display name'
+python release/build_msix.py
+```
+
+출력은 `release-output/MorningBloom-<버전>-Store-x64.msix`입니다. 로컬 파일은 Store 제출 전까지 서명되지 않았으므로 다른 PC에 직접 배포하지 않습니다. Store 인증용 매니페스트는 Windows 10 2004 이상, x64, `packagedClassicApp`/`mediumIL`과 `runFullTrust`를 선언합니다. [Microsoft MSIX 수동 패키징](https://learn.microsoft.com/windows/msix/desktop/desktop-to-uwp-manual-conversion), [Store 패키지 요구 사항](https://learn.microsoft.com/windows/apps/publish/publish-your-app/msix/app-package-requirements), [코드 서명 선택지](https://learn.microsoft.com/windows/apps/package-and-deploy/code-signing-options)를 따릅니다.
+
+기존 저장 경로 코드는 유지됩니다. 패키지 앱의 새 AppData 쓰기는 Windows가 앱별 저장소로 가상화하며 업데이트 뒤에도 유지되지만, 앱 제거 시 함께 삭제될 수 있습니다. 제거 전에는 게임 내보내기 기능이 아직 없으므로 `%LOCALAPPDATA%\MorningBloomPython` 저장 파일을 별도 백업합니다.
+
 ## 사용자 실행
 
 Releases의 `MorningBloom-0.4.0-Windows-x64.zip`을 받고 전체 압축을 푼 다음 `MorningBloom.exe`를 실행합니다. Python 설치는 필요 없습니다. 같은 폴더의 `MorningBloom-game.zip`과 `bundled-update.json`도 함께 보관합니다.
@@ -11,6 +39,12 @@ Releases의 `MorningBloom-0.4.0-Windows-x64.zip`을 받고 전체 압축을 푼 
 공개 업데이트 채널이 없어도 새 배포 ZIP을 받아 전체 압축을 풀고 실행하면 포함된 버전으로 기존 설치를 갱신합니다. 포함된 버전이 더 오래됐거나 실행 점검에 실패하면 기존 설치를 유지합니다.
 
 게임 저장: 기존 `%LOCALAPPDATA%\MorningBloomPython`. 설치 파일과 업데이트 로그: `%LOCALAPPDATA%\MorningBloomLauncher`. 저장 파일은 다운로드·교체 대상이 아닙니다. 새 게임의 기존 저장 이전 로직을 사용합니다. 이전 실행 파일은 남겨두지만 저장 형식이 달라질 수 있어 임의로 저장을 되돌리지 않습니다.
+
+## 다른 PC의 시작 오류 확인
+
+미배포 진단 변경은 시작 검사에 실패하면 종료 코드 또는 45초 시간 초과를 표시하고 `%LOCALAPPDATA%\MorningBloomLauncher\startup-check.log`에 실행 단계·Python 예외·네이티브 오류 출력을 보관합니다. 로그는 설치 임시 폴더 정리 후에도 남으며 저장 데이터나 환경 변수 전체를 수집하지 않습니다. 기존 v0.4.0 배포본에는 이 진단 기능이 없습니다.
+
+기존 `New game failed startup check` 메시지만으로는 다른 PC의 원인을 확정할 수 없습니다. Windows 스마트 앱 컨트롤이 EXE나 DLL을 차단한 경우 진단 코드만 재배포해도 차단이 해제되지는 않습니다. 앱별 예외 허용은 지원하지 않습니다. 배포 측 대응은 신뢰할 수 있는 인증서로 실행 파일과 DLL 등 모든 실행 코드를 서명하는 것입니다. [Microsoft FAQ](https://support.microsoft.com/en-us/windows/security/threat-malware-protection/smart-app-control-frequently-asked-questions), [코드 서명 안내](https://learn.microsoft.com/en-us/windows/security/book/application-security-application-and-driver-control).
 
 ## 현재 배포 채널 제약
 

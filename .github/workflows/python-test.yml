@@ -13,3 +13,6 @@ jobs:
         env:
           PYTHONPATH: python
           QT_QPA_PLATFORM: offscreen
+      - run: python -m unittest discover -s release/tests -v
+        env:
+          PYTHONPATH: release

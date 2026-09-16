@@ -6,6 +6,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import zipfile
 from pathlib import Path
 
@@ -66,7 +67,17 @@ def main():
         'Updates are checked on launch. Offline mode uses the installed game.\n'
         'Update feed: https://github.com/' + repo + '/releases\n'
         'This prototype uses HTTPS and SHA-256 integrity checks; executables are not Authenticode signed.\n', encoding='utf-8')
-    run(bootstrap / 'MorningBloom.exe', '--verify-bundle')
+    # Verify the packaged launcher without the build machine's Python/Qt paths.
+    clean_env = {key: value for key, value in os.environ.items()
+                 if not key.upper().startswith(('PYTHON', 'QT_', 'QML_', 'VIRTUAL_ENV'))}
+    clean_env['PATH'] = os.environ['SystemRoot'] + '\\System32;' + os.environ['SystemRoot']
+    with tempfile.TemporaryDirectory(prefix='MorningBloom-실행 점검-') as temp:
+        result = subprocess.run([str(bootstrap / 'MorningBloom.exe'), '--verify-bundle'],
+            cwd=temp, env=clean_env, stdin=subprocess.DEVNULL, timeout=90)
+    if result.returncode:
+        log = ROOT / 'build/startup-check.log'
+        if log.exists(): print(log.read_text(encoding='utf-8', errors='replace'), flush=True)
+        raise SystemExit('Packaged launcher startup check failed')
     zip_folder(bootstrap, output / f'MorningBloom-{release_version}-Windows-x64.zip')
     (output / 'release-notes.md').write_text(
         f'Morning Bloom {release_version}\n\nDownload the Windows-x64 ZIP, extract all files and run MorningBloom.exe.\n'

@@ -98,4 +98,6 @@ godot --headless --path . --script tests/ui_smoke.gd -- --demo
 
 v0.4.0부터 네 화분·비료 미니게임·코티지 UI·아이콘 선택·햇빛 화분 스킨을 Windows 실행 파일에 포함합니다. [v0.4.0 Release](https://github.com/badbed7/morning-bloom/releases/tag/v0.4.0)에서 전체 ZIP을 받아 압축을 풀고 실행하세요.
 
-Python 설치 없이 실행하는 배포본은 Releases에 게시합니다. [자동 업데이트·배포 채널 설정](release/README.md)을 확인하세요. 소스 저장소는 비공개이며 일반 사용자용 자동 업데이트는 공개 배포 저장소 연결이 필요합니다.
+Smart App Control이 켜진 일반 사용자 PC에는 Microsoft Store MSIX를 사용합니다. Store용 자동 빌드와 제출 순서는 [Microsoft Store MSIX 배포](release/README.md#microsoft-store-msix)를 확인하세요. 현재 Store 등록 전이며 Partner Center의 제품 ID를 연결해야 합니다.
+
+GitHub ZIP은 개발·시험용 배포본입니다. [자동 업데이트·배포 채널 설정](release/README.md)을 확인하세요. 소스 저장소는 비공개이며 일반 사용자용 GitHub 자동 업데이트는 공개 배포 저장소 연결이 필요합니다.

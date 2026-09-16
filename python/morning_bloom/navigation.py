@@ -20,6 +20,19 @@ class SlideStack(QStackedWidget):
             return
         previous = self.currentWidget().grab()
         self.setCurrentIndex(index)
+        self._start_transition(previous, direction)
+
+    def slide_update(self, callback, direction=1):
+        """Slide a shared view after a successful, transactional content change."""
+        self.finish_transition()
+        previous = self.currentWidget().grab() if self.isVisible() else None
+        if callback() is False:
+            return False
+        if previous is not None and self.isVisible():
+            self._start_transition(previous, direction)
+        return True
+
+    def _start_transition(self, previous, direction):
         self.currentWidget().layout().activate()
         incoming = self.currentWidget().grab()
         distance = self.width() * (1 if direction >= 0 else -1)

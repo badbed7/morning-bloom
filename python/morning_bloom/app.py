@@ -234,16 +234,51 @@ class Window(QWidget):
         else:
             self.pages.slide_to(SETTINGS_PAGE)
 
+    def navigate_pot(self, direction):
+        count = len(self.garden.pots)
+        if count < 2 or self._action_busy or direction not in (-1, 1):
+            return False
+        target = (self.garden.selected + direction) % count
+
+        def select():
+            if not self.act(lambda: self.garden.select(target)):
+                return False
+            self.flower.drops = 0
+            self.flower.update()
+            return True
+
+        return self.pot_slides.slide_update(select, direction)
+
     def _build_pot_page(self):
         page = QWidget()
-        layout = QVBoxLayout(page)
+        outer = QVBoxLayout(page)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(4)
+        selector = QHBoxLayout()
+        selector.setSpacing(4)
+        self.previous_pot = QPushButton('‹')
+        self.previous_pot.setFixedSize(28, 28)
+        self.previous_pot.setAccessibleName('이전 화분')
+        self.previous_pot.clicked.connect(lambda: self.navigate_pot(-1))
+        selector.addWidget(self.previous_pot)
+        self.pot_name = QLabel()
+        self.pot_name.setAlignment(Qt.AlignCenter)
+        self.pot_name.setMinimumWidth(0)
+        self.pot_name.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        selector.addWidget(self.pot_name, 1)
+        self.next_pot = QPushButton('›')
+        self.next_pot.setFixedSize(28, 28)
+        self.next_pot.setAccessibleName('다음 화분')
+        self.next_pot.clicked.connect(lambda: self.navigate_pot(1))
+        selector.addWidget(self.next_pot)
+        outer.addLayout(selector)
+
+        self.pot_slides = SlideStack()
+        outer.addWidget(self.pot_slides, 1)
+        content = QWidget()
+        layout = QVBoxLayout(content)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
-        self.pot_picker = QComboBox()
-        self.pot_picker.setMinimumWidth(0)
-        self.pot_picker.setFixedHeight(28)
-        self.pot_picker.currentIndexChanged.connect(lambda index: self.act(lambda: self.garden.select(index)))
-        layout.addWidget(self.pot_picker)
         self.flower = Flower(self.garden)
         layout.addWidget(self.flower, 1)
         self.status = QLabel()
@@ -291,6 +326,7 @@ class Window(QWidget):
             button.setFixedHeight(28)
         layout.addLayout(row)
 
+        self.pot_slides.addWidget(content)
         self.pages.addWidget(page)
 
     def _scrollable_page(self):
@@ -682,13 +718,17 @@ class Window(QWidget):
         )
         seeds = ' / '.join(f'{item.name} {garden.seed_count(key)}' for key, item in PLANTS.items())
         self.inventory.setToolTip(f'씨앗 {seeds} · 보관 꽃 {len(garden.collection)}')
-        self.pot_picker.blockSignals(True)
-        self.pot_picker.clear()
-        for i, pot in enumerate(garden.pots):
-            name = plant_definition(pot['species']).name if pot['species'] else '빈 화분'
-            self.pot_picker.addItem(f'화분 {i + 1} · {name} · {self._pot_state(pot)}')
-        self.pot_picker.setCurrentIndex(garden.selected)
-        self.pot_picker.blockSignals(False)
+        count = len(garden.pots)
+        name = garden.definition.name if garden.planted else '빈 화분'
+        self.pot_name.setText(f'화분 {garden.selected + 1} / {count} · {name}')
+        self.pot_name.setToolTip(self.pot_name.text() + ' · ' + self._pot_state(garden.pot))
+        for button, direction in ((self.previous_pot, -1), (self.next_pot, 1)):
+            button.setEnabled(count > 1)
+            target = (garden.selected + direction) % count
+            button.setToolTip(
+                f'화분 {target + 1}로 이동' if count > 1
+                else '상점에서 두 번째 화분을 구매하면 넘길 수 있어요'
+            )
         self.shop_wallet.setText(
             f'보유 {garden.coins}G · 햇빛 {garden.sunlight} · 화분 {len(garden.pots)}/2개'
         )

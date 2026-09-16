@@ -144,7 +144,7 @@ class PotNavigation(unittest.TestCase):
         self.assertTrue(self.window.mist_button.isEnabled())
         self.wall_clock.return_value = NOW + 600
         self.window.refresh()
-        self.assertEqual([pot['growth'] for pot in self.garden.pots], [600, 660])
+        self.assertEqual([pot['growth'] for pot in self.garden.pots], [600, 600])
 
     def test_rapid_clicks_resize_and_leaving_page_clear_overlays(self):
         for _ in range(9):

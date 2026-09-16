@@ -62,7 +62,7 @@ class EconomyAndPots(unittest.TestCase):
 
 
 class SaveMigration(unittest.TestCase):
-    def test_v2_active_plant_migrates_to_v6_with_exemption(self):
+    def test_v2_active_plant_migrates_to_v5_with_exemption(self):
         legacy = SingleGarden(100, tutorial_used=True, seeds={'daisy': 0, 'tulip': 1})
         legacy.plant(100, 'tulip')
         legacy.advance(100 + 40 * HOUR)
@@ -71,7 +71,7 @@ class SaveMigration(unittest.TestCase):
             raw = json.dumps(legacy.to_dict(), ensure_ascii=False)
             store.path.write_text(raw, encoding='utf-8')
             garden = store.load(100 + 40 * HOUR)
-            self.assertEqual(garden.schema, Garden.CURRENT_SCHEMA)
+            self.assertEqual(garden.schema, 5)
             self.assertTrue(garden.pot['initial_watered'])
             self.assertTrue(garden.pot['legacy_care_exempt'])
             self.assertEqual(garden.seed_count('starflower'), 0)
@@ -106,7 +106,7 @@ class SaveMigration(unittest.TestCase):
             store.save(garden)
             store.path.write_text('broken', encoding='utf-8')
             self.assertEqual(Store(store.path).load(100).coins, 120)
-            store.path.write_text(json.dumps({'schema': Garden.CURRENT_SCHEMA + 1}), encoding='utf-8')
+            store.path.write_text('{"schema": 6}', encoding='utf-8')
             blocked = Store(store.path)
             with self.assertRaises(SaveError):
                 blocked.load(100)

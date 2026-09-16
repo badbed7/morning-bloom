@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from morning_bloom.model import Garden, SUN_INTERVAL, SUN_PENDING_CAP, TYCOON_POT_DEFAULTS
+from morning_bloom.model import Garden, SUN_INTERVAL, SUN_PENDING_CAP
 from morning_bloom.storage import SaveError, Store
 
 
@@ -19,12 +19,8 @@ def v4_data(garden):
     for key in (
         'sunlight', 'sun_tokens', 'sun_elapsed', 'sun_cursor',
         'sun_intro_claimed', 'owned_themes', 'equipped_theme',
-        'fertilizer', 'reward_wait', 'last_reward_id',
     ):
         data.pop(key)
-    for pot in data['pots']:
-        for key in TYCOON_POT_DEFAULTS:
-            pot.pop(key)
     data['schema'] = 4
     return data
 
@@ -154,7 +150,7 @@ class CosmeticsAndMigration(unittest.TestCase):
             store = Store(Path(tmp) / 'garden.json')
             store.path.write_text(raw, encoding='utf-8')
             migrated = store.load(100)
-            self.assertEqual(migrated.schema, Garden.CURRENT_SCHEMA)
+            self.assertEqual(migrated.schema, 5)
             self.assertEqual((migrated.coins, migrated.collection), (321, [flower()]))
             self.assertEqual(migrated.sunlight, 0)
             self.assertEqual(len(migrated.sun_tokens), 1)

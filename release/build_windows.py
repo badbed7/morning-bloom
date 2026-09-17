@@ -92,6 +92,7 @@ def main():
     (output / 'release-notes.md').write_text(
         f'Morning Bloom {release_version}\n\n'
         'New in this release:\n'
+        '- Google account connection and private Google Drive garden backup and restore.\n'
         '- Spray-care minigame with three animated plant clicks.\n'
         '- Interactive flowers attached to the Windows desktop, with independent opacity and sunlight.\n'
         '- 20G mystery seeds, including a 0.1% ancient flower worth 500G.\n'

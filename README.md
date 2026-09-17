@@ -4,7 +4,7 @@
 
 **목표: Python + PySide6 / 2D 전용 / Windows 우선**
 
-**Python 2D 초안 구현:** 루트의 `run-python.bat`으로 실행하세요. [Python 실행 방법·구현 상태](python/README.md)를 확인하세요.
+**Python 실행:** Release의 Python-BAT ZIP을 풀고 `run-python.bat`으로 실행하세요. 매번 GitHub 최신 버전을 확인하고 기존 정원을 유지하며 업데이트합니다. [Python 실행 방법·구현 상태](python/README.md)를 확인하세요.
 
 아래 Godot 실행·테스트 안내는 보존된 이전 시제품에 해당합니다.
 
@@ -96,8 +96,8 @@ godot --headless --path . --script tests/ui_smoke.gd -- --demo
 
 ## Windows 실행 파일과 업데이트
 
-v0.6.0은 Google 계정 연결과 비공개 Drive 정원 백업·복원, 분무 미니게임·Windows 바탕화면 꽃·랜덤 씨앗·고대 꽃을 포함합니다. [v0.6.0 Release](https://github.com/badbed7/morning-bloom/releases/tag/v0.6.0)에서 전체 ZIP을 받아 압축을 풀고 실행하세요.
+v0.7.0은 BAT·EXE 양쪽의 실행 전 자동 업데이트를 지원합니다. [v0.7.0 Release](https://github.com/badbed7/morning-bloom/releases/tag/v0.7.0)에서 Python-BAT ZIP 또는 Windows-x64 ZIP을 받아 전체 압축을 풀고 실행하세요. Google 계정·비공개 Drive 백업·복원과 기존 게임 기능을 유지합니다.
 
-Smart App Control이 켜진 일반 사용자 PC에는 Microsoft Store MSIX를 사용합니다. Store용 자동 빌드와 제출 순서는 [Microsoft Store MSIX 배포](release/README.md#microsoft-store-msix)를 확인하세요. 현재 Store 등록 전이며 Partner Center의 제품 ID를 연결해야 합니다.
+Python BAT는 Python 3.12 64비트로 실행하며, EXE는 Python 설치가 필요 없습니다. 사용자 배포에는 MSIX를 사용하지 않습니다. v0.6.0 이하를 쓰던 사용자는 v0.7.0 런처로 한 번 교체하면 이후 실행부터 자동 업데이트됩니다.
 
-GitHub ZIP은 개발·시험용 배포본입니다. [자동 업데이트·배포 채널 설정](release/README.md)을 확인하세요. 소스 저장소는 비공개이며 일반 사용자용 GitHub 자동 업데이트는 공개 배포 저장소 연결이 필요합니다.
+공개 저장소의 최신 Release에서 인증 없이 업데이트를 받습니다. 게임 저장은 `%LOCALAPPDATA%/MorningBloomPython`에 보존합니다. [실행 순서·실패 복구·새 버전 게시](release/README.md)를 확인하세요.

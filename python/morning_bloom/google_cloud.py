@@ -36,10 +36,10 @@ def configured_client_id():
     value = os.environ.get('MORNING_BLOOM_GOOGLE_CLIENT_ID', '').strip()
     if value:
         return value
-    if getattr(sys, 'frozen', False):
-        path = Path(getattr(sys, '_MEIPASS', Path(sys.executable).parent)) / 'google-oauth-client-id.txt'
-        if path.is_file():
-            return path.read_text(encoding='utf-8').strip()
+    root = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parents[1]))
+    path = root / 'google-oauth-client-id.txt'
+    if path.is_file():
+        return path.read_text(encoding='utf-8').strip()
     return ''
 
 

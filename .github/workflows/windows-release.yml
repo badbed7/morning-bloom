@@ -35,7 +35,12 @@ jobs:
       - name: Build and test native executables
         run: python release/build_windows.py
         env:
-          BLOOM_RELEASE_REPO: ${{ vars.BLOOM_RELEASE_REPO || 'badbed7/morning-bloom-releases' }}
+          BLOOM_RELEASE_REPO: ${{ github.repository }}
+          GOOGLE_OAUTH_CLIENT_ID: ${{ vars.GOOGLE_OAUTH_CLIENT_ID }}
+      - name: Build and test Python BAT package
+        run: python release/build_python.py
+        env:
+          BLOOM_RELEASE_REPO: ${{ github.repository }}
           GOOGLE_OAUTH_CLIENT_ID: ${{ vars.GOOGLE_OAUTH_CLIENT_ID }}
       - uses: actions/upload-artifact@v4
         with:
@@ -55,27 +60,12 @@ jobs:
           if ($LASTEXITCODE -eq 0) { throw "Release already exists. Bump release/VERSION; existing releases are never overwritten." }
           gh release create $tag --target $env:RELEASE_COMMIT --title "Morning Bloom $version" --notes-file release-output/release-notes.md --draft
           if ($LASTEXITCODE -ne 0) { throw 'Could not create release' }
-          gh release upload $tag release-output/*.zip release-output/update.json
+          gh release upload $tag release-output/*.zip release-output/update.json release-output/python-update.json
           if ($LASTEXITCODE -ne 0) { throw 'Could not upload release assets' }
           gh release edit $tag --draft=false --latest
           if ($LASTEXITCODE -ne 0) { throw 'Could not publish release' }
-      - name: Publish binary-only public distribution when connected
-        shell: pwsh
+      - name: Check both public update feeds without credentials
+        run: python -c "import os; from update_core import read_latest; expected=open('release/VERSION').read().strip(); assert all(read_latest(os.environ['BLOOM_RELEASE_REPO'], mode)['version'] == expected for mode in (False, True))"
         env:
-          GH_TOKEN: ${{ secrets.BLOOM_RELEASE_TOKEN }}
-          GH_REPO: ${{ vars.BLOOM_RELEASE_REPO || 'badbed7/morning-bloom-releases' }}
-        run: |
-          if (-not $env:GH_TOKEN) {
-            'Public distribution is not connected. Private release and build artifacts are ready.' >> $env:GITHUB_STEP_SUMMARY
-            exit 0
-          }
-          $version = (Get-Content release/VERSION -Raw).Trim()
-          $tag = "v$version"
-          gh release view $tag *> $null
-          if ($LASTEXITCODE -eq 0) { throw 'Public release already exists; do not overwrite' }
-          gh release create $tag --title "Morning Bloom $version" --notes-file release-output/release-notes.md --draft
-          if ($LASTEXITCODE -ne 0) { throw 'Could not create public release' }
-          gh release upload $tag release-output/*.zip release-output/update.json
-          if ($LASTEXITCODE -ne 0) { throw 'Could not upload public assets' }
-          gh release edit $tag --draft=false --latest
-          if ($LASTEXITCODE -ne 0) { throw 'Could not publish public release' }
+          PYTHONPATH: release
+          BLOOM_RELEASE_REPO: ${{ github.repository }}

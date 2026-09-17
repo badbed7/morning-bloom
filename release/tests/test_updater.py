@@ -1,5 +1,6 @@
 import hashlib
 import json
+import shutil
 import tempfile
 import subprocess
 import unittest
@@ -8,15 +9,22 @@ from pathlib import Path
 from unittest.mock import patch
 from update_core import Installer, UpdateError, extract, manifest, version, download
 
-REPO='badbed7/morning-bloom-releases'
+REPO='badbed7/morning-bloom'
 
 class Updating(unittest.TestCase):
-    def payload(self, root, release='0.3.0', name='MorningBloomGame.exe'):
+    def payload(self, root, release='0.3.0', name='MorningBloomGame.exe', python_mode=False):
         archive=root/(release+'.zip')
-        with zipfile.ZipFile(archive,'w') as z: z.writestr(name,b'fake-executable-for-test')
+        with zipfile.ZipFile(archive,'w') as z:
+            if python_mode:
+                z.writestr('release/game_entry.py', b'# Python game')
+                z.writestr('python/morning_bloom/__main__.py', b'# game entry')
+                z.writestr('python/requirements.txt', b'PySide6==6.8.3')
+            else:
+                z.writestr(name,b'fake-executable-for-test')
+        asset = 'MorningBloom-python.zip' if python_mode else 'MorningBloom-game.zip'
         data=dict(protocol=1,version=release,size=archive.stat().st_size,
             sha256=hashlib.sha256(archive.read_bytes()).hexdigest(),
-            url=f'https://github.com/{REPO}/releases/download/v{release}/MorningBloom-game.zip')
+            url=f'https://github.com/{REPO}/releases/download/v{release}/{asset}')
         return archive,data
 
     def test_upgrade_and_save_directory_untouched(self):
@@ -112,6 +120,90 @@ class Updating(unittest.TestCase):
             with patch('urllib.request.urlopen',side_effect=OSError('offline')):
                 with self.assertRaises(OSError):download(data,target)
             self.assertFalse(target.exists())
+
+    def test_latest_checked_before_install_and_both_modes_preserve_saves(self):
+        from launcher import prepare
+        for python_mode in (False, True):
+            with self.subTest(python_mode=python_mode), tempfile.TemporaryDirectory() as tmp:
+                root=Path(tmp);installer=Installer(root/'launcher', python_mode)
+                saves=root/'MorningBloomPython';saves.mkdir()
+                (saves/'garden.json').write_bytes(b'actual player save')
+                archive,old=self.payload(root, python_mode=python_mode)
+                installer.install(archive,old,lambda _:True)
+                latest_archive,latest=self.payload(root,'0.4.0',python_mode=python_mode)
+                order=[]
+                def fetch(repository, mode):
+                    self.assertEqual((repository, mode), (REPO, python_mode))
+                    order.append('check')
+                    return latest
+                def get_zip(data, path, report):
+                    order.append('download');shutil.copyfile(latest_archive,path)
+                def healthy(*args):
+                    order.append('health');return True
+                with patch('launcher.read_latest',side_effect=fetch), patch('launcher.download',side_effect=get_zip), \
+                        patch('launcher.python_runtime',return_value=Path('python.exe')), patch('launcher.health_check',side_effect=healthy):
+                    result=prepare(installer,root,lambda _:None)
+                    self.assertEqual(order,['check','download','health'])
+                    self.assertEqual(installer.current()['version'],'0.4.0')
+                    self.assertTrue(result.is_file())
+                    order.clear()
+                    prepare(installer,root,lambda _:None)
+                    self.assertEqual(order,['check'])
+                self.assertEqual((saves/'garden.json').read_bytes(),b'actual player save')
+
+    def test_first_launch_online_without_bundle_and_invalid_download_fallback(self):
+        from launcher import prepare
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);installer=Installer(root/'launcher')
+            archive,data=self.payload(root)
+            with patch('launcher.read_latest',return_value=data), \
+                    patch('launcher.download',side_effect=lambda data,path,report:shutil.copyfile(archive,path)), \
+                    patch('launcher.health_check',return_value=True):
+                self.assertTrue(prepare(installer,root,lambda _:None).is_file())
+            _,new=self.payload(root,'0.4.0')
+            for failure in (OSError('offline'), UpdateError('hash mismatch')):
+                with patch('launcher.read_latest',return_value=new), patch('launcher.download',side_effect=failure):
+                    prepare(installer,root,lambda _:None)
+                self.assertEqual(installer.current()['version'],'0.3.0')
+                self.assertIn(str(failure),(installer.root/'update.log').read_text(encoding='utf-8'))
+
+    def test_identical_bundle_avoids_download_after_check(self):
+        from launcher import prepare
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);installer=Installer(root/'launcher');archive,data=self.payload(root)
+            archive.rename(root/'MorningBloom-game.zip')
+            (root/'bundled-update.json').write_text(json.dumps(data))
+            with patch('launcher.read_latest',return_value=data) as latest, patch('launcher.download') as get_zip, \
+                    patch('launcher.health_check',return_value=True):
+                prepare(installer,root,lambda _:None)
+            latest.assert_called_once();get_zip.assert_not_called()
+
+    def test_python_runtime_cache_and_failed_dependency_upgrade(self):
+        from launcher import python_runtime
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);entry=root/'game/release/game_entry.py'
+            entry.parent.mkdir(parents=True);(root/'game/python').mkdir()
+            requirements=root/'game/python/requirements.txt';requirements.write_text('PySide6==6.8.3')
+            def setup(args, **kwargs):
+                if 'venv' in args:
+                    exe=Path(args[-1])/'Scripts/python.exe';exe.parent.mkdir(parents=True);exe.touch()
+            with patch('launcher.subprocess.run',side_effect=setup) as run:
+                first=python_runtime(entry,root,lambda _:None)
+                self.assertEqual(python_runtime(entry,root,lambda _:None),first)
+                self.assertEqual(run.call_count,2)
+            requirements.write_text('PySide6==9.0.0')
+            with patch('launcher.subprocess.run',side_effect=OSError('offline')), self.assertRaises(UpdateError):
+                python_runtime(entry,root,lambda _:None)
+            requirements.write_text('PySide6==6.8.3')
+            with patch('launcher.subprocess.run') as run:
+                self.assertEqual(python_runtime(entry,root,lambda _:None),first)
+                run.assert_not_called()
+
+    def test_python_feed_cannot_accept_native_payload(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);archive,data=self.payload(root)
+            with self.assertRaises(UpdateError):manifest(data,REPO,True)
+            with self.assertRaises(UpdateError):extract(archive,root/'unpack',True)
 
     def test_startup_failure_preserves_diagnostic_and_current_install(self):
         from launcher import health_check

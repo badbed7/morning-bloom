@@ -1,4 +1,6 @@
 """Stable Windows bootstrap. Keeps its lock until the game exits."""
+import argparse
+import hashlib
 import json
 import os
 import queue
@@ -13,13 +15,41 @@ from release_config import REPOSITORY
 from update_core import Installer, UpdateError, read_latest, manifest, download, version
 
 
-def health_check(executable, log_path):
+def command(executable, runtime=None):
+    return [str(runtime), '-I', str(executable)] if runtime else [str(executable)]
+
+
+def python_runtime(executable, root, report):
+    """Reuse dependencies by Python version and requirements hash, preserving older runtimes."""
+    requirements = executable.parent.parent / 'python/requirements.txt'
+    digest = hashlib.sha256(requirements.read_bytes()).hexdigest()
+    runtime = root / 'runtimes' / (f'{sys.version_info.major}.{sys.version_info.minor}-' + digest)
+    python = runtime / 'Scripts/python.exe'
+    ready = runtime / 'ready'
+    if python.is_file() and ready.is_file():
+        return python
+    report('Python 실행 환경 준비 중… 첫 실행에는 시간이 걸릴 수 있습니다.')
+    log_path = root / 'python-setup.log'
+    with log_path.open('w', encoding='utf-8') as log:
+        try:
+            for args, timeout in (([sys.executable, '-I', '-m', 'venv', str(runtime)], 90),
+                                  ([str(python), '-I', '-m', 'pip', 'install', '--disable-pip-version-check',
+                                    '-r', str(requirements)], 600)):
+                subprocess.run(args, timeout=timeout, check=True, stdin=subprocess.DEVNULL,
+                    stdout=log, stderr=log, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+        except (OSError, subprocess.SubprocessError) as exc:
+            raise UpdateError('Python 실행 환경을 준비하지 못했습니다.\n' + str(log_path)) from exc
+    ready.write_text(digest, encoding='ascii')
+    return python
+
+
+def health_check(executable, log_path, runtime=None):
     log_path = Path(log_path).resolve()
     system = sys.getwindowsversion() if sys.platform == 'win32' else sys.platform
     log_path.write_text(f'{system} / {64 if sys.maxsize > 2**32 else 32}-bit\nStartup check: {executable}\n', encoding='utf-8')
     with log_path.open('a', encoding='utf-8') as log:
         try:
-            result = subprocess.run([str(executable), '--smoke-test', '--startup-log', str(log_path)],
+            result = subprocess.run(command(executable, runtime) + ['--smoke-test', '--startup-log', str(log_path)],
                 cwd=executable.parent, timeout=45, stdin=subprocess.DEVNULL,
                 stdout=log, stderr=log, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
             if result.returncode == 0: return True
@@ -47,71 +77,100 @@ def acquire_lock(path):
 
 def prepare(installer, bundle, report):
     current = installer.current()
-    check = lambda executable: health_check(executable, installer.root / 'startup-check.log')
-    # A newly downloaded bundle also upgrades an existing offline installation.
+    errors, candidates = [], []
+    def check(executable):
+        runtime = python_runtime(executable, installer.root, report) if installer.python_mode else None
+        return health_check(executable, installer.root / 'startup-check.log', runtime)
+
+    # Query before unpacking anything; install only the newest usable candidate.
     try:
-        bundled_manifest = bundle / 'bundled-update.json'
-        if current is None or bundled_manifest.is_file():
-            data = manifest(json.loads(bundled_manifest.read_text()), REPOSITORY)
-            if current is None or version(data['version']) > version(current['version']):
-                report('Preparing bundled version...')
-                current = installer.install(bundle / 'MorningBloom-game.zip', data, check)
-    except Exception:
-        if current is None: raise
-        report('Bundled update unavailable. Keeping installed version...')
-    try:
-        report('Checking for updates...')
-        latest = read_latest(REPOSITORY)
-        if version(latest['version']) > version(current['version']):
-            with tempfile.TemporaryDirectory(prefix='download-', dir=installer.root) as temp:
-                archive = Path(temp) / 'game.zip'
-                download(latest, archive, report)
-                report('Checking new version...')
-                current = installer.install(archive, latest, check)
+        report('GitHub 최신 버전 확인 중…')
+        latest = read_latest(REPOSITORY, installer.python_mode)
+        candidates.append((latest, None))
     except Exception as exc:
-        # No credentials are ever stored in the launcher. Offline/private feeds fail closed.
-        try: (installer.root / 'update.log').write_text(f'Update unavailable: {type(exc).__name__}: {exc}\n', encoding='utf-8')
-        except OSError: pass
-        report('Update unavailable. Starting installed version...')
+        errors.append(f'Update check: {exc}')
+    bundled_name = 'bundled-python-update.json' if installer.python_mode else 'bundled-update.json'
+    bundled_manifest = bundle / bundled_name
+    if bundled_manifest.is_file():
+        try:
+            data = manifest(json.loads(bundled_manifest.read_text()), REPOSITORY, installer.python_mode)
+            archive = bundle / ('MorningBloom-python.zip' if installer.python_mode else 'MorningBloom-game.zip')
+            # Prefer an identical local payload; no repeated download is needed.
+            candidates.insert(0, (data, archive))
+        except Exception as exc:
+            errors.append(f'Bundle: {exc}')
+    for data, archive in sorted(candidates, key=lambda item: version(item[0]['version']), reverse=True):
+        if current and version(data['version']) <= version(current['version']):
+            continue
+        try:
+            with tempfile.TemporaryDirectory(prefix='download-', dir=installer.root) as temp:
+                if archive is None:
+                    archive = Path(temp) / 'game.zip'
+                    download(data, archive, report)
+                report(f'v{data["version"]} 설치 및 실행 점검 중…')
+                current = installer.install(archive, data, check)
+            break
+        except Exception as exc:
+            errors.append(f'Install {data["version"]}: {exc}')
+    try:
+        (installer.root / 'update.log').write_text('\n'.join(errors) or 'Up to date', encoding='utf-8')
+    except OSError:
+        pass
+    if current is None:
+        raise UpdateError('실행할 버전을 준비하지 못했습니다. 인터넷과 배포 ZIP을 확인하세요.\n'
+                          + str(installer.root / 'update.log') + '\n' + '\n'.join(errors))
+    report(f'v{current["version"]} 시작 중…' + (' 업데이트 로그를 남겼습니다.' if errors else ''))
     return installer.executable(current)
 
 
 def main():
-    if '--self-test' in sys.argv:
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--python', action='store_true', dest='python_mode')
+    parser.add_argument('--self-test', action='store_true')
+    parser.add_argument('--verify-bundle', action='store_true')
+    args, game_args = parser.parse_known_args()
+    if args.self_test:
         version('0.3.0')
         return 0
-    if '--verify-bundle' in sys.argv:
-        bundle = Path(sys.executable).parent
+    bundle = Path(sys.executable).parent if getattr(sys, 'frozen', False) else Path(__file__).resolve().parent.parent
+    if args.verify_bundle:
         log_path = bundle.parent / 'startup-check.log'
         try:
             with tempfile.TemporaryDirectory() as temp:
-                installer = Installer(temp)
-                data = manifest(json.loads((bundle / 'bundled-update.json').read_text()), REPOSITORY)
-                installer.install(bundle / 'MorningBloom-game.zip', data,
-                    lambda executable: health_check(executable, log_path))
+                installer = Installer(temp, args.python_mode)
+                name = 'bundled-python-update.json' if args.python_mode else 'bundled-update.json'
+                archive = 'MorningBloom-python.zip' if args.python_mode else 'MorningBloom-game.zip'
+                data = manifest(json.loads((bundle / name).read_text()), REPOSITORY, args.python_mode)
+                def check(executable):
+                    runtime = python_runtime(executable, installer.root, print) if args.python_mode else None
+                    return health_check(executable, log_path, runtime)
+                installer.install(bundle / archive, data, check)
         except Exception as exc:
             with log_path.open('a', encoding='utf-8') as log: log.write(str(exc) + '\n')
             return 1
         return 0
     root = tk.Tk()
     root.title('Morning Bloom')
-    root.geometry('400x120')
+    root.geometry('480x140')
     root.resizable(False, False)
-    status = tk.StringVar(value='Starting Morning Bloom...')
-    tk.Label(root, textvariable=status, padx=20, pady=35).pack()
+    status = tk.StringVar(value='Morning Bloom 시작 중…')
+    tk.Label(root, textvariable=status, padx=20, pady=35, wraplength=440).pack()
     root.protocol('WM_DELETE_WINDOW', lambda: None)
-    installer = Installer(Path(os.environ['LOCALAPPDATA']) / 'MorningBloomLauncher')
-    lock = acquire_lock(installer.root / 'launcher.lock')
+    local = Path(os.environ['LOCALAPPDATA'])
+    installer = Installer(local / ('MorningBloomPythonLauncher' if args.python_mode else 'MorningBloomLauncher'), args.python_mode)
+    lock_path = local / 'MorningBloomLauncher/launcher.lock'
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    lock = acquire_lock(lock_path)
     if lock is None:
-        messagebox.showinfo('Morning Bloom', 'Morning Bloom is already running.')
+        messagebox.showinfo('Morning Bloom', 'Morning Bloom이 이미 실행 중입니다.')
         root.destroy()
         return 0
-    bundle = Path(sys.executable).parent if getattr(sys, 'frozen', False) else Path(__file__).parent
     events = queue.Queue()
     def worker():
         try:
             exe = prepare(installer, bundle, lambda text: events.put(('status', text)))
-            events.put(('ready', exe))
+            runtime = python_runtime(exe, installer.root, lambda text: events.put(('status', text))) if args.python_mode else None
+            events.put(('ready', (command(exe, runtime) + game_args, exe.parent)))
         except Exception as exc: events.put(('error', str(exc)))
     def poll():
         try:
@@ -119,18 +178,22 @@ def main():
                 kind, value = events.get_nowait()
                 if kind == 'status': status.set(value)
                 elif kind == 'error':
-                    messagebox.showerror('Morning Bloom', 'Unable to start.\n' + value)
+                    messagebox.showerror('Morning Bloom', '시작하지 못했습니다.\n' + value)
                     root.destroy()
                     return
                 elif kind == 'ready':
                     try:
-                        process = subprocess.Popen([str(value)], cwd=str(value.parent))
+                        process = subprocess.Popen(value[0], cwd=str(value[1]),
+                            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
                     except OSError as exc:
                         messagebox.showerror('Morning Bloom', str(exc));root.destroy();return
                     root.withdraw()
                     def wait_game():
                         if process.poll() is None: root.after(500, wait_game)
-                        else: root.destroy()
+                        else:
+                            if process.returncode:
+                                messagebox.showerror('Morning Bloom', f'게임이 종료되었습니다. 종료 코드: {process.returncode}')
+                            root.destroy()
                     wait_game()
                     return
         except queue.Empty: pass

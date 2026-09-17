@@ -1,85 +1,78 @@
-# Windows 배포와 자동 업데이트
+# Windows / Python BAT 배포와 자동 업데이트
 
-## Microsoft Store MSIX
-
-Smart App Control이 켜진 PC에는 Microsoft Store 배포를 권장합니다. Store 제출본은 현재 런처를 넣지 않고 `MorningBloomGame.exe`와 런타임 전체를 MSIX로 묶습니다. 인증을 통과한 패키지는 Microsoft Store가 서명하고 업데이트도 Store가 처리합니다. 별도 PFX 인증서는 필요하지 않습니다.
-
-최초 1회:
-
-1. [Partner Center](https://partner.microsoft.com/dashboard)에서 Windows 앱 개인 개발자로 등록합니다.
-2. **Apps and games → New product → MSIX or PWA app**에서 앱 이름을 예약합니다.
-3. **Product management → Product identity**의 `Name`, `Publisher`, `Publisher display name`을 복사합니다. 대소문자까지 그대로 사용해야 합니다.
-4. Google Drive 저장을 포함하려면 저장소의 Actions variable `GOOGLE_OAUTH_CLIENT_ID`에 Google Desktop app Client ID를 등록합니다. Client secret은 등록하지 않습니다.
-5. GitHub Actions의 **Store MSIX package → Run workflow**에서 세 값을 입력합니다.
-6. 완료된 `MorningBloom-Store-MSIX` artifact의 `.msix`를 내려받아 Partner Center 제출의 **Packages**에 올립니다.
-7. 가격·카테고리·연령 등급·스토어 설명·스크린샷·지원 정보를 채운 뒤 인증을 제출합니다.
-
-`release/VERSION`의 `0.6.0`은 Store용 `1.6.0.0`으로 변환합니다. MSIX 네 번째 버전은 Store 예약 값인 `0`으로 유지합니다. 이후 제출은 `release/VERSION`을 올려 더 높은 패키지 버전을 만듭니다.
-
-로컬 수동 패키징은 Windows 10/11 SDK의 `MakeAppx.exe`가 필요합니다. 다음 환경 변수를 설정하고 게임과 MSIX를 차례로 빌드합니다.
-
-```powershell
-$env:GOOGLE_OAUTH_CLIENT_ID = 'Google Desktop app Client ID'
-python release/build_windows.py
-$env:STORE_IDENTITY_NAME = 'Partner Center의 Name'
-$env:STORE_PUBLISHER = 'Partner Center의 Publisher'
-$env:STORE_PUBLISHER_DISPLAY_NAME = 'Partner Center의 Publisher display name'
-python release/build_msix.py
-```
-
-출력은 `release-output/MorningBloom-<버전>-Store-x64.msix`입니다. 로컬 파일은 Store 제출 전까지 서명되지 않았으므로 다른 PC에 직접 배포하지 않습니다. Store 인증용 매니페스트는 Windows 10 2004 이상, x64, `packagedClassicApp`/`mediumIL`과 `runFullTrust`를 선언합니다. [Microsoft MSIX 수동 패키징](https://learn.microsoft.com/windows/msix/desktop/desktop-to-uwp-manual-conversion), [Store 패키지 요구 사항](https://learn.microsoft.com/windows/apps/publish/publish-your-app/msix/app-package-requirements), [코드 서명 선택지](https://learn.microsoft.com/windows/apps/package-and-deploy/code-signing-options)를 따릅니다.
-
-기존 저장 경로 코드는 유지됩니다. 패키지 앱의 새 AppData 쓰기는 Windows가 앱별 저장소로 가상화하며 업데이트 뒤에도 유지되지만, 앱 제거 시 함께 삭제될 수 있습니다. 제거 전에는 게임 내보내기 기능이 아직 없으므로 `%LOCALAPPDATA%\MorningBloomPython` 저장 파일을 별도 백업합니다.
+현재 배포 경로는 공개 저장소 [badbed7/morning-bloom Releases](https://github.com/badbed7/morning-bloom/releases)입니다. GitHub 계정이나 토큰 없이 업데이트를 받습니다. 사용자 배포에는 MSIX를 사용하지 않습니다.
 
 ## 사용자 실행
 
-Releases의 `MorningBloom-0.4.0-Windows-x64.zip`을 받고 전체 압축을 푼 다음 `MorningBloom.exe`를 실행합니다. Python 설치는 필요 없습니다. 같은 폴더의 `MorningBloom-game.zip`과 `bundled-update.json`도 함께 보관합니다.
+- **Python 유지:** `MorningBloom-0.7.0-Python-BAT.zip`을 전부 풀고 `run-python.bat`을 실행합니다. Python 3.12 64비트, Python Launcher와 Tcl/Tk를 한 번 설치해야 합니다. 첫 의존성 설치에는 인터넷이 필요합니다.
+- **EXE:** `MorningBloom-0.7.0-Windows-x64.zip`을 전부 풀고 `MorningBloom.exe` 또는 같은 폴더의 `run.bat`을 실행합니다. Python을 따로 설치하지 않습니다.
 
-런처가 실행할 때마다 공개 배포 저장소의 최신 정식 Release에서 `update.json`을 확인합니다. 더 높은 버전이면 ZIP 다운로드 → SHA-256 및 크기 검사 → 별도 폴더 압축 해제 → 격리된 실행 점검 → 활성 버전 변경 → 게임 실행 순서로 진행합니다. 다운로드나 새 버전 점검이 실패하면 현재 설치 버전을 실행합니다. 최초 배포 ZIP 자체에도 게임이 있어 첫 실행도 오프라인으로 가능합니다.
+BAT나 EXE만 다른 곳으로 옮기지 마세요. 함께 들어 있는 ZIP과 버전 정보를 보관하면 네트워크 오류 시에도 포함된 버전을 설치할 수 있습니다. Python 의존성이 이미 준비된 PC는 오프라인으로도 시작할 수 있습니다.
 
-이미 실행 중인 게임은 강제로 종료하지 않습니다. 런처는 게임 종료까지 잠금을 유지하므로 두 런처가 동시에 업데이트하지 않습니다. 현재 게임의 내부 잠금도 유지합니다. 업데이트는 다음 실행 때 적용됩니다.
+**v0.6.0 이하의 BAT·런처는 v0.7.0 배포 ZIP으로 한 번 교체해야 합니다.** 이전 BAT는 업데이트 검사가 없었고, 이전 EXE는 존재하지 않는 `morning-bloom-releases` 주소로 빌드되었습니다. 게임 저장은 그대로 사용합니다. 이후에는 같은 BAT·런처로 실행하면 됩니다.
 
-공개 업데이트 채널이 없어도 새 배포 ZIP을 받아 전체 압축을 풀고 실행하면 포함된 버전으로 기존 설치를 갱신합니다. 포함된 버전이 더 오래됐거나 실행 점검에 실패하면 기존 설치를 유지합니다.
+## 실행 순서
 
-게임 저장: 기존 `%LOCALAPPDATA%\MorningBloomPython`. 설치 파일과 업데이트 로그: `%LOCALAPPDATA%\MorningBloomLauncher`. 저장 파일은 다운로드·교체 대상이 아닙니다. 새 게임의 기존 저장 이전 로직을 사용합니다. 이전 실행 파일은 남겨두지만 저장 형식이 달라질 수 있어 임의로 저장을 되돌리지 않습니다.
-
-## 다른 PC의 시작 오류 확인
-
-미배포 진단 변경은 시작 검사에 실패하면 종료 코드 또는 45초 시간 초과를 표시하고 `%LOCALAPPDATA%\MorningBloomLauncher\startup-check.log`에 실행 단계·Python 예외·네이티브 오류 출력을 보관합니다. 로그는 설치 임시 폴더 정리 후에도 남으며 저장 데이터나 환경 변수 전체를 수집하지 않습니다. 기존 v0.4.0 배포본에는 이 진단 기능이 없습니다.
-
-기존 `New game failed startup check` 메시지만으로는 다른 PC의 원인을 확정할 수 없습니다. Windows 스마트 앱 컨트롤이 EXE나 DLL을 차단한 경우 진단 코드만 재배포해도 차단이 해제되지는 않습니다. 앱별 예외 허용은 지원하지 않습니다. 배포 측 대응은 신뢰할 수 있는 인증서로 실행 파일과 DLL 등 모든 실행 코드를 서명하는 것입니다. [Microsoft FAQ](https://support.microsoft.com/en-us/windows/security/threat-malware-protection/smart-app-control-frequently-asked-questions), [코드 서명 안내](https://learn.microsoft.com/en-us/windows/security/book/application-security-application-and-driver-control).
-
-## 현재 배포 채널 제약
-
-소스 저장소 `badbed7/morning-bloom`은 비공개입니다. 여기에 게시된 Release는 접근 권한이 있는 사람만 다운로드할 수 있습니다. 일반 사용자의 자동 업데이트 대상은 기본적으로 **공개 배포 전용 저장소 `badbed7/morning-bloom-releases`**입니다. 이 저장소와 배포 연결이 마련되기 전에는 자동 업데이트 조회가 실패하고 포함된 게임을 실행합니다. 이 상태를 공개 자동 업데이트 완료로 간주하면 안 됩니다.
-
-소스 저장소 공개 전환이나 인증 토큰의 클라이언트 포함은 하지 않습니다.
-
-## 공개 배포 연결 최초 1회
-
-1. GitHub에서 `badbed7/morning-bloom-releases`를 Public으로 생성하고 README로 초기화합니다. 소스 파일은 넣지 않습니다.
-2. 배포 저장소에만 Contents read/write 권한을 가진 fine-grained token을 발급합니다.
-3. 비공개 소스 저장소 Settings → Secrets and variables → Actions에 `BLOOM_RELEASE_TOKEN` secret으로 등록합니다. 토큰을 채팅이나 코드에 붙여넣지 않습니다.
-4. 다른 배포 저장소 이름이면 Actions variable `BLOOM_RELEASE_REPO`에 `소유자/저장소`를 등록합니다. 이 값은 런처 빌드에 고정되므로 이미 배포된 런처의 주소는 바뀌지 않습니다.
-5. `release/VERSION`을 다음 버전으로 올려 main에 커밋합니다. 빌드·검증 후 소스 저장소 Release와 공개 배포 저장소 Release에 ZIP과 update.json이 게시됩니다.
-
-첫 공개 배포는 공개 feed 주소가 정확한 배포본을 공유하세요. 이후 같은 주소로 새 버전을 게시하면 기존 런처가 받습니다.
-
-## 빌드와 게시
-
-`Windows release` 워크플로는 main의 `release/VERSION` 변경 또는 수동 실행으로 동작합니다. 일반 코드 커밋만으로는 새 버전을 배포하지 않습니다. 버전은 `0.3.0`처럼 숫자 세 자리입니다. 기존 Release를 덮어쓰지 않으며 재배포는 새 버전을 사용합니다. 실패로 남은 draft는 관리자가 확인 후 정리할 수 있습니다.
-
-Windows x64 / Python 3.12에서 수동 빌드:
-
-```powershell
-python -m pip install -r python/requirements.txt -r release/requirements-build.txt
-python release/build_windows.py
+```mermaid
+flowchart TD
+    A[BAT 또는 런처 실행] --> B[중복 실행 잠금]
+    B --> C[GitHub 최신 정식 Release 확인]
+    C --> D{설치본보다 새로운 버전?}
+    D -- 아니오 --> H[기존 게임 실행]
+    D -- 예 --> E[ZIP 다운로드 및 크기·SHA-256 검사]
+    E --> F[임시 폴더에 해제·격리된 시작 검사]
+    F --> G[새 버전 설치·활성 버전 파일 원자적 교체]
+    G --> H
+    E -- 실패 --> H
+    F -- 실패 --> H
+    C -- 오프라인 --> I[기존 설치 또는 동봉 ZIP 확인]
+    I --> H
 ```
 
-출력은 `release-output`입니다. GitHub Actions는 게임·업데이터 단위/통합 테스트, 패키징한 게임의 `--smoke-test`, 런처 `--self-test`를 통과해야 게시합니다. Actions artifact도 14일 보관합니다. 실행 점검은 임시 저장 폴더만 사용합니다.
+업데이트 점검 후 게임을 시작하므로, 새 버전을 발견하면 별도의 수동 업데이트 버튼 없이 그 실행부터 적용합니다. 동봉 ZIP이 원격 최신 버전과 같으면 다운로드하지 않습니다. 신규 설치에서는 원격 버전과 동봉 버전 중 가장 최신의 정상 버전을 설치합니다. 둘 다 준비할 수 없으면 오류와 로그 경로를 표시합니다.
 
-## 검증 범위와 한계
+EXE는 `update.json`과 `MorningBloom-game.zip`, Python BAT는 `python-update.json`과 `MorningBloom-python.zip`을 사용합니다. 각각 `version`, `size`, `sha256`, 허용된 GitHub 다운로드 주소를 검사합니다. 두 방식은 같은 버전별 설치·원자적 교체 코드를 공유합니다.
 
-업데이트 신뢰 기준은 고정 GitHub HTTPS 배포 주소와 SHA-256입니다. 해시는 전송 손상을 검사하며 독립된 제작자 서명은 아닙니다. 현재 실행 파일에는 Windows Authenticode 서명이 없습니다. 코드 서명 인증서와 별도 업데이트 서명 키 연결은 후속 배포 강화 작업입니다.
+Python 버전은 EXE로 변환하지 않고 `.py` 파일을 별도 Python 프로세스로 실행합니다. 의존성은 Python 버전과 `requirements.txt` 해시별 가상 환경으로 보관하며 준비된 환경에서는 pip를 다시 실행하지 않습니다. 새 의존성 설치에 실패해도 이전 버전의 환경을 변경하지 않습니다.
 
-런처는 프로토콜 1을 지원하며 게임 파일을 자동 업데이트합니다. 런처 자체의 프로토콜 변경은 새 배포본 다운로드가 필요합니다. 새 버전 실행 점검은 모든 플레이 기능의 정상 동작을 보장하지 않습니다. 실제 Windows 바탕화면 배율·보안 경고·장시간 재배는 수동 검증 대상입니다.
+## 저장 보존과 실패 처리
+
+| 위치 | 용도 |
+| --- | --- |
+| `%LOCALAPPDATA%/MorningBloomPython` | 기존 일반·개발자 정원과 백업. 두 실행 방식이 공유 |
+| `%LOCALAPPDATA%/MorningBloomLauncher` | EXE 설치·현재 버전·업데이트 로그·공용 실행 잠금 |
+| `%LOCALAPPDATA%/MorningBloomPythonLauncher` | Python 설치·가상 환경·현재 버전·로그 |
+
+설치 파일만 교체합니다. 저장 폴더는 압축 해제와 삭제 대상에 포함하지 않습니다. 새 버전은 빈 임시 정원으로 시작 검사를 통과한 뒤에만 활성화합니다. 게임을 실제 실행할 때 기존 저장 이전·백업 기능을 사용합니다.
+
+다운로드 중단, 손상된 ZIP, 위험한 압축 경로, 의존성 설치 실패, 실행 점검 실패 시 현재 버전 포인터를 바꾸지 않습니다. 이전 설치는 남겨 둡니다. 저장 형식이 바뀔 수 있으므로 실제 게임을 실행한 이후에는 임의로 이전 버전으로 되돌리지 않습니다.
+
+BAT와 EXE는 공용 잠금을 게임 종료까지 유지합니다. 이미 실행 중이면 두 번째 런처는 종료하고 다음 실행에서 업데이트합니다. 실행 중인 게임을 강제로 종료하거나 그 파일을 덮어쓰지 않습니다.
+
+각 설치 폴더의 `update.log`는 조회·업데이트 실패, `startup-check.log`는 새 버전 시작 점검, Python의 `python-setup.log`는 의존성 설치 오류를 기록합니다.
+
+## 새 버전 배포
+
+1. 코드와 테스트를 완료합니다.
+2. `release/VERSION`을 이전보다 높은 버전으로 올립니다.
+3. main에 push하면 **Windows release**가 EXE와 Python BAT를 모두 빌드하고 실행 검사합니다.
+4. 모든 ZIP과 두 업데이트 JSON을 draft Release에 올린 뒤, 정식 최신 Release로 한 번에 게시합니다.
+5. 인증 정보 없이 두 공개 업데이트 주소를 조회해 게시 버전을 확인합니다. 사용자는 다음 실행에서 새 버전을 받습니다.
+
+별도의 배포 전용 저장소나 개인 액세스 토큰은 필요하지 않습니다. 워크플로는 현재 공개 저장소의 기본 `GITHUB_TOKEN`으로 Release를 게시합니다. 저장소를 비공개로 바꾸면 일반 사용자의 업데이트가 중단됩니다.
+
+Google 로그인의 공개 Client ID는 Actions variable `GOOGLE_OAUTH_CLIENT_ID`에 설정합니다. 두 패키지에 함께 포함하며 사용자 토큰이나 비밀번호는 패키지에 넣지 않습니다.
+
+Windows / Python 3.12에서 수동 빌드:
+
+```powershell
+py -3.12 -m pip install -r python/requirements.txt -r release/requirements-build.txt
+py -3.12 release/build_windows.py
+py -3.12 release/build_python.py
+```
+
+출력은 `release-output`입니다. 자동 빌드는 게임·업데이터 테스트와 EXE·Python 양쪽의 격리된 실행 검사를 통과해야 게시됩니다. 이전의 별도 `Python BAT release` 작업은 이 흐름으로 통합했습니다.
+
+## 범위
+
+새 버전 게임·리소스·Python 의존성을 업데이트합니다. 업데이트 프로토콜이나 런처 자체가 바뀌면 새 배포 ZIP을 한 번 받아야 합니다. 운영체제 보안 기능에 의해 차단된 EXE·DLL의 실행 허용 여부는 이 업데이트 기능과 별개입니다. HTTPS와 SHA-256은 전송 무결성을 검사하며 제작자 코드 서명을 대신하지 않습니다.

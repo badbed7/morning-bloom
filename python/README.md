@@ -4,9 +4,11 @@ Python 3.11~3.12와 PySide6 6.8.3을 사용하는 Windows 우선 데스크톱 �
 
 ## Windows 실행
 
-1. Python 3.12 **64비트**를 설치합니다(Python Launcher 포함).
-2. 저장소 전체를 내려받고 압축을 풉니다.
-3. 루트의 `run-python.bat`을 더블클릭합니다. 첫 실행은 인터넷에 연결해 전용 `.venv-py312` 환경을 만듭니다.
+1. Python 3.12 **64비트**를 설치합니다(Python Launcher와 Tcl/Tk 포함).
+2. [최신 Release](https://github.com/badbed7/morning-bloom/releases/latest)의 Python-BAT ZIP을 내려받고 전체 압축을 풉니다.
+3. `run-python.bat`을 더블클릭합니다. GitHub 최신 버전을 확인한 뒤 필요한 업데이트를 설치하고 Python 게임을 실행합니다. 첫 의존성 설치에는 인터넷이 필요합니다.
+
+게임과 의존성은 `%LOCALAPPDATA%/MorningBloomPythonLauncher`에서 버전별로 관리합니다. 저장은 기존 `MorningBloomPython` 폴더를 그대로 사용합니다. 업데이트 실패 시 기존 설치본을 실행합니다. v0.6.0 이하 BAT는 새 ZIP으로 한 번 교체하세요. 소스 저장소의 BAT도 배포 버전을 실행하므로, 로컬 코드를 개발할 때는 아래 직접 실행 명령을 사용합니다.
 
 `PySide6==6.8.3`은 Python 3.14 이상을 지원하지 않습니다. 설치 오류가 나면 `py -0p`에서 Python 3.12 64비트가 보이는지 확인하고 최신 `run-python.bat`을 사용하세요.
 
@@ -128,7 +130,7 @@ $env:MORNING_BLOOM_GOOGLE_CLIENT_ID = '발급된-ID.apps.googleusercontent.com'
 python -m morning_bloom
 ```
 
-배포 빌드는 GitHub 저장소의 **Settings → Secrets and variables → Actions → Variables**에 `GOOGLE_OAUTH_CLIENT_ID`를 등록합니다. Client ID는 공개 식별자이며 빌드 결과에 포함됩니다. 값을 등록한 뒤 MSIX나 Windows release를 다시 빌드해야 합니다. [Google 데스크톱 OAuth 안내](https://developers.google.com/identity/protocols/oauth2/native-app), [Drive 앱 데이터 안내](https://developers.google.com/workspace/drive/api/guides/appdata)를 따릅니다.
+배포 빌드는 GitHub 저장소의 **Settings → Secrets and variables → Actions → Variables**에 `GOOGLE_OAUTH_CLIENT_ID`를 등록합니다. Client ID는 공개 식별자이며 EXE와 Python BAT 패키지에 포함됩니다. 변경 후에는 새 버전을 빌드해야 합니다. [Google 데스크톱 OAuth 안내](https://developers.google.com/identity/protocols/oauth2/native-app), [Drive 앱 데이터 안내](https://developers.google.com/workspace/drive/api/guides/appdata)를 따릅니다.
 
 ## 검증
 
@@ -144,4 +146,4 @@ $env:QT_QPA_PLATFORM = 'offscreen'
 
 [햇빛 수집·정원 꾸미기](../docs/sunlight-interaction.ko.md)의 첫 범위를 구현했습니다. 생산 간격·대기 상한·배경 가격은 플레이 관찰 후 조정할 수 있습니다. 개발자 모드의 `+6시간`으로 재배와 햇빛 생산을 함께 시험할 수 있습니다.
 
-Windows 실행 파일은 v0.6.0에 포함합니다. 공개 자동 업데이트 채널은 아직 연결되지 않았으며 [배포 안내](../release/README.md)를 따릅니다. 다섯·여섯 번째 화분과 일괄 돌봄은 네 화분 플레이 관찰 이후 검토합니다. 정원 소품, 별꽃 정식 이름·아트, 온도, 장식장·꽃꽂이, 트레이·OS 알림도 후속 작업입니다. 현재 꽃과 햇빛 그림은 QPainter 도형 시제품입니다.
+Windows 실행 파일과 Python BAT는 v0.7.0부터 공개 GitHub Releases에서 자동 업데이트합니다. [배포 안내](../release/README.md)를 따릅니다. 다섯·여섯 번째 화분과 일괄 돌봄은 네 화분 플레이 관찰 이후 검토합니다. 정원 소품, 별꽃 정식 이름·아트, 온도, 장식장·꽃꽂이, 트레이·OS 알림도 후속 작업입니다. 현재 꽃과 햇빛 그림은 QPainter 도형 시제품입니다.

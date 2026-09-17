@@ -23,7 +23,7 @@ def main():
     if sys.platform != 'win32': raise SystemExit('Build on Windows x64 with Python 3.12')
     release_version = (ROOT / 'release/VERSION').read_text().strip()
     if not re.fullmatch(r'\d+\.\d+\.\d+', release_version): raise SystemExit('Invalid version')
-    repo = os.environ.get('BLOOM_RELEASE_REPO') or 'badbed7/morning-bloom-releases'
+    repo = os.environ.get('BLOOM_RELEASE_REPO') or 'badbed7/morning-bloom'
     if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', repo): raise SystemExit('Invalid repository')
     (ROOT / 'release/release_config.py').write_text(f'REPOSITORY = {repo!r}\n')
     common = [sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean', '--windowed', '--distpath', 'dist', '--workpath', 'build', '--specpath', 'build']
@@ -70,6 +70,7 @@ def main():
     shutil.copy(ROOT / 'dist/MorningBloom.exe', bootstrap)
     shutil.copy(payload, bootstrap)
     shutil.copy(output / 'update.json', bootstrap / 'bundled-update.json')
+    (bootstrap / 'run.bat').write_text('@echo off\r\nstart "" /wait "%~dp0MorningBloom.exe" %*\r\n', encoding='ascii')
     (bootstrap / 'READ-ME.txt').write_text(
         'Extract this entire ZIP, then run MorningBloom.exe. No Python installation needed.\n'
         'Keep MorningBloom-game.zip and bundled-update.json beside the launcher for first launch.\n'
@@ -92,15 +93,19 @@ def main():
     (output / 'release-notes.md').write_text(
         f'Morning Bloom {release_version}\n\n'
         'New in this release:\n'
+        '- Both Python BAT and Windows EXE launchers check public GitHub Releases before starting.\n'
+        '- Verified versioned updates preserve saved gardens and fall back after update failures.\n'
+        '- Python BAT retains Python execution, with dependencies cached independently of game versions.\n'
         '- Google account connection and private Google Drive garden backup and restore.\n'
         '- Spray-care minigame with three animated plant clicks.\n'
         '- Interactive flowers attached to the Windows desktop, with independent opacity and sunlight.\n'
         '- 20G mystery seeds, including a 0.1% ancient flower worth 500G.\n'
         '- Fertilizer rewards every 3 minutes, a five-item cap, and immediate input handling.\n'
         '- Save-schema migration that preserves existing gardens and excess fertilizer.\n\n'
-        'Download the Windows-x64 ZIP, extract all files and run MorningBloom.exe.\n'
-        'Includes Python and Qt. Automatic game updates are checked on launch.\n'
-        'If the public distribution feed is not connected yet, this package works offline and updates will be unavailable.\n'
+        'Download Python-BAT.zip and run run-python.bat (Python 3.12 x64 required), or use Windows-x64.zip and run MorningBloom.exe.\n'
+        'Always extract the entire ZIP. Both launchers update the game on launch.\n'
+        'Users on v0.6.0 or older must download this launcher once to switch to the working update feed.\n'
+        'Public updates: https://github.com/' + repo + '/releases\n'
         'Unsigned prototype; native executable startup and isolated game smoke test passed in Windows CI.\n', encoding='utf-8')
 
 if __name__ == '__main__': main()

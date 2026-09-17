@@ -1,4 +1,4 @@
-"""Opt-in real Explorer test, using only temporary game data.
+"""Opt-in real always-on-top overlay test, using temporary game data.
 
 Run with BLOOM_TEST_NATIVE_DESKTOP=1 and QT_QPA_PLATFORM=windows.
 Does not restart Explorer or modify desktop icons/wallpaper settings.
@@ -8,11 +8,12 @@ import sys
 import tempfile
 import time
 import unittest
+from ctypes import wintypes
 from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QWidget
 
 from morning_bloom.app import Window
 from morning_bloom.model import Garden
@@ -22,7 +23,7 @@ from morning_bloom.storage import Store
 @unittest.skipUnless(sys.platform == 'win32' and os.environ.get('BLOOM_TEST_NATIVE_DESKTOP') == '1',
                      'opt-in Windows desktop integration')
 class NativeDesktop(unittest.TestCase):
-    def test_real_parent_styles_move_opacity_collect_and_cleanup(self):
+    def test_topmost_style_move_opacity_collect_and_cleanup(self):
         app = QApplication.instance() or QApplication([])
         with tempfile.TemporaryDirectory() as tmp:
             now = time.time()
@@ -34,15 +35,32 @@ class NativeDesktop(unittest.TestCase):
             owner = Window(Store(Path(tmp) / 'garden.json'), garden)
             owner.show()
             app.processEvents()
+            cover = None
             try:
                 item_id = garden.collection[0]['id']
                 self.assertTrue(owner.desktop.place(item_id), owner.message.text())
                 widget = owner.desktop.windows[item_id]
                 hwnd, host = int(widget.winId()), widget.host
                 app.processEvents()
-                self.assertEqual(host.api.GetParent(hwnd), host.parent)
-                self.assertTrue(host.get_style(hwnd, -16) & 0x40000000)  # WS_CHILD
-                self.assertFalse(host.get_style(hwnd, -20) & 0x00000008)  # not TOPMOST
+                self.assertFalse(host.api.GetParent(hwnd))
+                self.assertFalse(host.get_style(hwnd, -16) & 0x40000000)  # not WS_CHILD
+                self.assertTrue(host.get_style(hwnd, -20) & 0x00000008)  # WS_EX_TOPMOST
+                cover = QWidget(None, Qt.Window)
+                cover.setGeometry(widget.geometry())
+                cover.show()
+                cover.raise_()
+                app.processEvents()
+                cover_hwnd = int(cover.winId())
+                self.assertFalse(host.get_style(cover_hwnd, -20) & 0x00000008)
+                host.api.GetWindow.argtypes = [wintypes.HWND, wintypes.UINT]
+                host.api.GetWindow.restype = wintypes.HWND
+                below, current = set(), hwnd
+                for _ in range(512):
+                    current = int(host.api.GetWindow(current, 2) or 0)  # GW_HWNDNEXT
+                    if not current or current in below:
+                        break
+                    below.add(current)
+                self.assertIn(cover_hwnd, below, 'normal overlapping window must remain below the flower')
                 old_x, old_y = host.position(hwnd)
                 host.move(widget, old_x + 8, old_y + 8)
                 self.assertNotEqual(host.position(hwnd), (old_x, old_y))
@@ -55,6 +73,9 @@ class NativeDesktop(unittest.TestCase):
                 self.assertTrue(owner.desktop.place(item_id))
                 self.assertEqual(owner.desktop.windows, {})
             finally:
+                if cover is not None:
+                    cover.close()
+                    cover.deleteLater()
                 owner.close()
                 owner.deleteLater()
                 app.processEvents()

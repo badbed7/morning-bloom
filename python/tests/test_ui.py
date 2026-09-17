@@ -173,8 +173,11 @@ class UI(unittest.TestCase):
                     viewport = window.pages.widget(SHOP_PAGE).findChild(QScrollArea).viewport()
                     for button in (*window.shop_picker.buttons.values(), window.buy_seed_button):
                         self.assertTrue(button.isVisible())
-                        self.assertTrue(viewport.rect().contains(button.mapTo(viewport, button.rect().topLeft())))
-                        self.assertTrue(viewport.rect().contains(button.mapTo(viewport, button.rect().bottomRight())))
+                        detail = (side, button.text(), button.geometry(), viewport.rect())
+                        self.assertTrue(viewport.rect().contains(
+                            button.mapTo(viewport, button.rect().topLeft())), detail)
+                        self.assertTrue(viewport.rect().contains(
+                            button.mapTo(viewport, button.rect().bottomRight())), detail)
                     window.navigate(-1)
                     window.pages.finish_transition()
             finally:

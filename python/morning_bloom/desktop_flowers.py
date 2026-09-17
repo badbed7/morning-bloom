@@ -1,4 +1,4 @@
-"""Interactive flowers in Explorer's desktop layer, sharing the garden ledger."""
+"""Interactive always-on-top flower overlays sharing the garden ledger."""
 import hashlib
 import math
 import random
@@ -41,7 +41,7 @@ def sun_positions(tokens, radius=88, existing=None):
 
 class DesktopFlower(QWidget):
     def __init__(self, owner, item_id, host):
-        super().__init__(None, Qt.Tool | Qt.FramelessWindowHint)
+        super().__init__(None, Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
         self.owner, self.item_id, self.host = owner, item_id, host
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setAttribute(Qt.WA_ShowWithoutActivating)
@@ -165,9 +165,10 @@ class DesktopFlowers:
         try:
             host.attach(widget, x, y)
             widget.show()
-            # Qt can update native styles while showing. Verify real parenting.
+            # Qt can recreate a native handle while showing. Verify and reapply
+            # the topmost position after the window becomes visible.
             if not host.valid(int(widget.winId())):
-                raise DesktopUnavailable('바탕화면 부착을 확인하지 못했어요.')
+                raise DesktopUnavailable('플로팅 꽃 창을 확인하지 못했어요.')
             host.move(widget, x, y)
         except Exception:
             widget.dispose()
@@ -191,7 +192,7 @@ class DesktopFlowers:
             # act() synchronizes and may already have disposed the tentative widget.
             self.remove(item_id)
             return False
-        self.owner.notify('Windows 바탕화면에 배치했어요. 우클릭하면 정원으로 돌아옵니다.', important=True)
+        self.owner.notify('화면 맨 위에 꽃을 배치했어요. 우클릭하면 정원으로 돌아옵니다.', important=True)
         return True
 
     def remove(self, item_id):

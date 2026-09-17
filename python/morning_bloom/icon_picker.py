@@ -12,6 +12,7 @@ class IconPicker(QWidget):
         self.group = QButtonGroup(self)
         self.group.setExclusive(True)
         self.setFixedHeight(76)
+        self.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
         self.setMinimumWidth(0)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)

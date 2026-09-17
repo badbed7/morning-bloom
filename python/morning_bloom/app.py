@@ -388,6 +388,7 @@ class Window(QWidget):
         fertilizer_row = QHBoxLayout(self.fertilizer_tools)
         fertilizer_row.setContentsMargins(8, 4, 4, 4)
         self.fertilizer_stock = QLabel()
+        self.fertilizer_stock.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         fertilizer_row.addWidget(self.fertilizer_stock, 1)
         self.make_fertilizer_button = QPushButton('비료 만들기')
         self.make_fertilizer_button.clicked.connect(self.open_fertilizer_game)
@@ -450,7 +451,7 @@ class Window(QWidget):
         self.desktop_opacity.valueChanged.connect(self.set_desktop_opacity)
         desktop_row.addWidget(self.desktop_opacity, 1)
         layout.addLayout(desktop_row)
-        desktop_hint = QLabel('정원의 꽃을 우클릭하면 Windows 바탕화면에 붙입니다.\n꽃 주변 햇빛을 클릭해 수집 · 꽃을 드래그해 이동')
+        desktop_hint = QLabel('정원의 꽃을 우클릭하면 화면 맨 위에 띄웁니다.\n꽃 주변 햇빛을 클릭해 수집 · 꽃을 드래그해 이동')
         desktop_hint.setWordWrap(True)
         desktop_hint.setObjectName('small')
         layout.addWidget(desktop_hint)
@@ -1128,7 +1129,18 @@ class Window(QWidget):
                 elif state == 'unavailable':
                     button.setText(label)
         self.fertilizer_tools.setVisible(garden.tutorial_reward_claimed)
-        self.fertilizer_stock.setText(f'비료 {garden.fertilizer} / {FERTILIZER_CAP}')
+        if garden.reward_wait > 0:
+            wait = math.ceil(garden.reward_wait)
+            reward_status = f'{wait // 60}:{wait % 60:02}'
+        elif garden.vacation:
+            reward_status = '휴가 중'
+        elif garden.fertilizer >= FERTILIZER_CAP:
+            reward_status = '가득 참'
+        else:
+            reward_status = '보상 가능'
+        self.fertilizer_stock.setText(
+            f'비료{garden.fertilizer}/{FERTILIZER_CAP} {reward_status}'
+        )
         self.fertilizer_stock.setToolTip(f'이전 버전 예비 비료 {garden.fertilizer_reserve}개 · 사용 시 자동 보충')
         self.fertilizer_button.setEnabled(garden.can_use_fertilizer)
         remaining = garden.remaining_seconds()

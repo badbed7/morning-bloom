@@ -93,7 +93,7 @@ class Meadow(QWidget):
 
     def tooltip_for(self, item):
         bonus = f' (분무 +{item["bonus_g"]}G)' if item['misted'] else ''
-        desktop = '바탕화면에 배치 중 · 우클릭으로 복귀' if item['id'] in self.garden.desktop_flowers else '우클릭으로 바탕화면에 배치'
+        desktop = '화면 맨 위에 표시 중 · 우클릭으로 복귀' if item['id'] in self.garden.desktop_flowers else '우클릭으로 화면 맨 위에 띄우기'
         return f'{plant_definition(item["species"]).name} · 판매 {sale_price(item)}G{bonus}\n돈주머니로 드래그하면 판매 · {desktop}'
 
     def contextMenuEvent(self, event):
@@ -101,7 +101,7 @@ class Meadow(QWidget):
         if not item:
             return
         menu = QMenu(self)
-        label = '정원으로 돌려놓기' if item['id'] in self.garden.desktop_flowers else 'Windows 바탕화면에 배치'
+        label = '정원으로 돌려놓기' if item['id'] in self.garden.desktop_flowers else '화면 맨 위에 띄우기'
         action = menu.addAction(label)
         if menu.exec(event.globalPos()) is action:
             self.desktopRequested.emit(item['id'])

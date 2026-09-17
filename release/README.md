@@ -4,8 +4,8 @@
 
 ## 사용자 실행
 
-- **Python 유지:** `MorningBloom-0.7.0-Python-BAT.zip`을 전부 풀고 `run-python.bat`을 실행합니다. Python 3.12 64비트, Python Launcher와 Tcl/Tk를 한 번 설치해야 합니다. 첫 의존성 설치에는 인터넷이 필요합니다.
-- **EXE:** `MorningBloom-0.7.0-Windows-x64.zip`을 전부 풀고 `MorningBloom.exe` 또는 같은 폴더의 `run.bat`을 실행합니다. Python을 따로 설치하지 않습니다.
+- **Python 유지:** 최신 `MorningBloom-<버전>-Python-BAT.zip`을 전부 풀고 `run-python.bat`을 실행합니다. Python 3.12 64비트, Python Launcher와 Tcl/Tk를 한 번 설치해야 합니다. 첫 의존성 설치에는 인터넷이 필요합니다.
+- **EXE:** 최신 `MorningBloom-<버전>-Windows-x64.zip`을 전부 풀고 `MorningBloom.exe` 또는 같은 폴더의 `run.bat`을 실행합니다. Python을 따로 설치하지 않습니다.
 
 BAT나 EXE만 다른 곳으로 옮기지 마세요. 함께 들어 있는 ZIP과 버전 정보를 보관하면 네트워크 오류 시에도 포함된 버전을 설치할 수 있습니다. Python 의존성이 이미 준비된 PC는 오프라인으로도 시작할 수 있습니다.
 

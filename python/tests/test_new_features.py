@@ -181,7 +181,7 @@ class InteractionTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.time_patch = patch('morning_bloom.app.time.time', return_value=NOW)
-        self.time_patch.start()
+        self.wall_clock = self.time_patch.start()
         self.store = Store(Path(self.temp.name) / 'garden.json')
         self.garden = growing()
         self.window = Window(self.store, self.garden)
@@ -262,6 +262,25 @@ class InteractionTests(unittest.TestCase):
             QTest.keyClick(game, Qt.Key_Space)
             self.assertEqual(game.round, 3)
 
+    def test_fertilizer_reward_wait_is_visible_and_counts_down(self):
+        self.garden.reward_wait = 180
+        self.garden.last_reward_id = 'visible-countdown'
+        self.window.refresh()
+        self.assertIn('3:00', self.window.fertilizer_stock.text())
+        self.window.setFixedSize(320, 320)
+        self.app.processEvents()
+        widest_line = max(
+            self.window.fertilizer_stock.fontMetrics().horizontalAdvance(line)
+            for line in self.window.fertilizer_stock.text().splitlines()
+        )
+        self.assertLessEqual(widest_line, self.window.fertilizer_stock.width())
+        self.wall_clock.return_value = NOW + 61
+        self.window.refresh()
+        self.assertIn('1:59', self.window.fertilizer_stock.text())
+        self.wall_clock.return_value = NOW + 180
+        self.window.refresh()
+        self.assertIn('보상 가능', self.window.fertilizer_stock.text())
+
     def test_random_name_time_and_value_are_hidden_until_bloom(self):
         self.garden.growth = self.garden.duration
         self.garden.harvest(NOW)
@@ -302,7 +321,7 @@ class InteractionTests(unittest.TestCase):
         self.assertEqual(self.window.desktop.windows, {})
         self.assertEqual(len(self.garden.collection), 1)
 
-    def test_desktop_attachment_failure_does_not_create_floating_fallback(self):
+    def test_floating_host_failure_preserves_garden(self):
         self.garden.growth = self.garden.duration
         self.garden.harvest(NOW)
         item_id = self.garden.collection[0]['id']

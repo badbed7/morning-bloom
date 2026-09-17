@@ -55,8 +55,10 @@ def _request(url, method='GET', token=None, body=None, content_type=None, timeou
             return response.read()
     except urllib.error.HTTPError as exc:
         try:
-            detail = json.loads(exc.read().decode('utf-8')).get('error', {})
-            message = detail.get('message') if isinstance(detail, dict) else detail
+            payload = json.loads(exc.read().decode('utf-8'))
+            detail = payload.get('error', {})
+            message = (detail.get('message') if isinstance(detail, dict)
+                       else payload.get('error_description') or detail)
         except (UnicodeDecodeError, json.JSONDecodeError, AttributeError):
             message = None
         raise CloudError(message or f'Google 요청 실패 ({exc.code})') from exc

@@ -1,11 +1,13 @@
+import io
 import json
 import tempfile
 import unittest
+import urllib.error
 import urllib.parse
 from pathlib import Path
 from unittest.mock import patch
 
-from morning_bloom.google_cloud import CloudError, GoogleDriveSync, configured_client_id, oauth_url
+from morning_bloom.google_cloud import CloudError, GoogleDriveSync, _request, configured_client_id, oauth_url
 from morning_bloom.model import Garden
 from morning_bloom.storage import SaveError, Store
 
@@ -30,6 +32,15 @@ class GoogleCloudSave(unittest.TestCase):
         self.assertEqual(query['state'], ['state'])
         self.assertIn('https://www.googleapis.com/auth/drive.appdata', query['scope'][0])
         self.assertNotIn('client_secret', query)
+
+    def test_google_error_keeps_description(self):
+        error = urllib.error.HTTPError(
+            'https://example.invalid', 400, 'Bad Request', {},
+            io.BytesIO(b'{"error":"invalid_request","error_description":"missing parameter"}'),
+        )
+        with patch('urllib.request.urlopen', side_effect=error):
+            with self.assertRaisesRegex(CloudError, 'missing parameter'):
+                _request('https://example.invalid')
 
     def test_upload_creates_private_app_data_file(self):
         sync = GoogleDriveSync(CLIENT_ID, {'refresh_token': 'refresh'}, clock=lambda: 200)

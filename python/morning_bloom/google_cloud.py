@@ -43,6 +43,24 @@ def configured_client_id():
     return ''
 
 
+def configured_client_secret():
+    value = os.environ.get('MORNING_BLOOM_GOOGLE_CLIENT_SECRET', '').strip()
+    if value:
+        return value
+    root = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parents[1]))
+    path = root / 'google-oauth-client-secret.txt'
+    if path.is_file():
+        return path.read_text(encoding='utf-8').strip()
+    return ''
+
+
+def _client_fields(client_id, client_secret):
+    fields = {'client_id': client_id}
+    if client_secret:
+        fields['client_secret'] = client_secret
+    return fields
+
+
 def _request(url, method='GET', token=None, body=None, content_type=None, timeout=20):
     headers = {'Accept': 'application/json', 'User-Agent': 'MorningBloom/1'}
     if token:
@@ -99,12 +117,24 @@ def oauth_url(client_id, redirect_uri, state, verifier):
     })
 
 
-def authorize(client_id, browser_open=webbrowser.open, timeout=180):
+def _wait_for_callback(server, result, timeout):
+    deadline = time.monotonic() + timeout
+    while 'state' not in result and time.monotonic() < deadline:
+        server.timeout = max(0, deadline - time.monotonic())
+        server.handle_request()
+
+
+def authorize(client_id, browser_open=webbrowser.open, timeout=180, client_secret=''):
     result = {}
 
     class Callback(BaseHTTPRequestHandler):
         def do_GET(self):
-            query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            parsed = urllib.parse.urlparse(self.path)
+            if parsed.path != '/oauth2callback':
+                self.send_response(204)
+                self.end_headers()
+                return
+            query = urllib.parse.parse_qs(parsed.query)
             result.update({key: values[0] for key, values in query.items() if values})
             page = '<meta charset="utf-8"><title>Morning Bloom</title><p>Morning Bloom으로 돌아가세요.</p>'
             self.send_response(200)
@@ -119,11 +149,10 @@ def authorize(client_id, browser_open=webbrowser.open, timeout=180):
     verifier = secrets.token_urlsafe(64)
     state = secrets.token_urlsafe(32)
     server = HTTPServer(('127.0.0.1', 0), Callback)
-    server.timeout = timeout
     redirect_uri = f'http://127.0.0.1:{server.server_port}/oauth2callback'
     try:
         browser_open(oauth_url(client_id, redirect_uri, state, verifier))
-        server.handle_request()
+        _wait_for_callback(server, result, timeout)
     finally:
         server.server_close()
     if result.get('state') != state:
@@ -134,7 +163,7 @@ def authorize(client_id, browser_open=webbrowser.open, timeout=180):
     if not code:
         raise CloudError('Google 로그인 시간이 만료되었습니다.')
     tokens = _form_request(TOKEN_URL, {
-        'client_id': client_id, 'code': code, 'code_verifier': verifier,
+        **_client_fields(client_id, client_secret), 'code': code, 'code_verifier': verifier,
         'grant_type': 'authorization_code', 'redirect_uri': redirect_uri,
     })
     if not tokens.get('access_token') or not tokens.get('refresh_token'):
@@ -214,8 +243,9 @@ def delete_credentials():
 
 
 class GoogleDriveSync:
-    def __init__(self, client_id=None, credentials=_UNSET, clock=time.time):
+    def __init__(self, client_id=None, credentials=_UNSET, clock=time.time, client_secret=None):
         self.client_id = (client_id if client_id is not None else configured_client_id()).strip()
+        self.client_secret = (client_secret if client_secret is not None else configured_client_secret()).strip()
         self.clock = clock
         try:
             if credentials is _UNSET:
@@ -229,7 +259,7 @@ class GoogleDriveSync:
 
     @property
     def configured(self):
-        return self.client_id.endswith('.apps.googleusercontent.com')
+        return self.client_id.endswith('.apps.googleusercontent.com') and bool(self.client_secret)
 
     @property
     def connected(self):
@@ -241,8 +271,8 @@ class GoogleDriveSync:
 
     def connect(self):
         if not self.configured:
-            raise CloudError('Google OAuth Client ID가 설정되지 않았습니다.')
-        tokens = authorize(self.client_id)
+            raise CloudError('Google OAuth 클라이언트 설정이 필요합니다.')
+        tokens = authorize(self.client_id, client_secret=self.client_secret)
         saved = {'refresh_token': tokens['refresh_token'], 'email': tokens.get('email', '')}
         save_credentials(saved)
         self.credentials = saved
@@ -269,7 +299,7 @@ class GoogleDriveSync:
         if not refresh:
             raise CloudError('Google 계정 연결이 필요합니다.')
         result = _form_request(TOKEN_URL, {
-            'client_id': self.client_id, 'refresh_token': refresh,
+            **_client_fields(self.client_id, self.client_secret), 'refresh_token': refresh,
             'grant_type': 'refresh_token',
         })
         self._access_token = result.get('access_token', '')

@@ -127,10 +127,11 @@ Qt `AppLocalDataLocation` 아래 `MorningBloomPython` 폴더를 사용합니다.
 
 ```powershell
 $env:MORNING_BLOOM_GOOGLE_CLIENT_ID = '발급된-ID.apps.googleusercontent.com'
+$env:MORNING_BLOOM_GOOGLE_CLIENT_SECRET = '발급된-Desktop-Client-secret'
 python -m morning_bloom
 ```
 
-배포 빌드는 GitHub 저장소의 **Settings → Secrets and variables → Actions → Variables**에 `GOOGLE_OAUTH_CLIENT_ID`를 등록합니다. Client ID는 공개 식별자이며 EXE와 Python BAT 패키지에 포함됩니다. 변경 후에는 새 버전을 빌드해야 합니다. [Google 데스크톱 OAuth 안내](https://developers.google.com/identity/protocols/oauth2/native-app), [Drive 앱 데이터 안내](https://developers.google.com/workspace/drive/api/guides/appdata)를 따릅니다.
+배포 빌드는 GitHub Actions variable `GOOGLE_OAUTH_CLIENT_ID`와 Actions secret `GOOGLE_OAUTH_CLIENT_SECRET`을 사용합니다. Google의 Desktop 클라이언트 값은 설치 앱에 포함되며 비밀 보안 경계로 취급할 수 없습니다. Actions secret은 저장소와 CI 로그의 우발적 노출을 막습니다. 변경 후에는 새 버전을 빌드해야 합니다. [Google 데스크톱 OAuth 안내](https://developers.google.com/identity/protocols/oauth2/native-app), [Drive 앱 데이터 안내](https://developers.google.com/workspace/drive/api/guides/appdata)를 따릅니다.
 
 ## 검증
 

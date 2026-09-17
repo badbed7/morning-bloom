@@ -516,7 +516,7 @@ class Window(QWidget):
         connected = configured and self.cloud.connected
         active = connected and not self.demo and not self._cloud_busy
         if not configured:
-            status = 'Google OAuth Client ID 설정이 필요합니다.'
+            status = 'Google OAuth 클라이언트 설정이 필요합니다.'
         elif connected:
             status = '연결됨 · ' + (self.cloud.email or 'Google 계정')
             if self.demo:

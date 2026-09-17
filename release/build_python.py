@@ -17,8 +17,11 @@ def main():
     version = (ROOT / 'release/VERSION').read_text(encoding='utf-8').strip()
     repository = os.environ.get('BLOOM_RELEASE_REPO', 'badbed7/morning-bloom')
     client_id = os.environ.get('GOOGLE_OAUTH_CLIENT_ID', '').strip()
+    client_secret = os.environ.get('GOOGLE_OAUTH_CLIENT_SECRET', '').strip()
     if client_id and not re.fullmatch(r'[A-Za-z0-9_-]+\.apps\.googleusercontent\.com', client_id):
         raise SystemExit('Invalid GOOGLE_OAUTH_CLIENT_ID')
+    if bool(client_id) != bool(client_secret):
+        raise SystemExit('GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET must be set together')
     output = ROOT / 'release-output'
     output.mkdir(exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='MorningBloom-python-build-') as temp:
@@ -32,6 +35,7 @@ def main():
             shutil.copyfile(source, target)
         if client_id:
             (stage / 'python/google-oauth-client-id.txt').write_text(client_id, encoding='utf-8')
+            (stage / 'python/google-oauth-client-secret.txt').write_text(client_secret, encoding='utf-8')
         payload = output / 'MorningBloom-python.zip'
         zip_folder(stage, payload)
         data = manifest(dict(protocol=1, version=version, size=payload.stat().st_size,

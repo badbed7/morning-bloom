@@ -44,6 +44,7 @@ jobs:
         run: python release/build_windows.py
         env:
           GOOGLE_OAUTH_CLIENT_ID: ${{ vars.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
       - name: Create unsigned Store submission package
         run: python release/build_msix.py
         env:

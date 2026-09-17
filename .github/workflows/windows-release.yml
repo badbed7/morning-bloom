@@ -37,11 +37,13 @@ jobs:
         env:
           BLOOM_RELEASE_REPO: ${{ github.repository }}
           GOOGLE_OAUTH_CLIENT_ID: ${{ vars.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
       - name: Build and test Python BAT package
         run: python release/build_python.py
         env:
           BLOOM_RELEASE_REPO: ${{ github.repository }}
           GOOGLE_OAUTH_CLIENT_ID: ${{ vars.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
       - uses: actions/upload-artifact@v4
         with:
           name: MorningBloom-Windows

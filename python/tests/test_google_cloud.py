@@ -7,21 +7,30 @@ import urllib.parse
 from pathlib import Path
 from unittest.mock import patch
 
-from morning_bloom.google_cloud import CloudError, GoogleDriveSync, _request, configured_client_id, oauth_url
+from morning_bloom.google_cloud import (
+    CloudError, GoogleDriveSync, _request, _wait_for_callback, configured_client_id,
+    configured_client_secret, oauth_url,
+)
 from morning_bloom.model import Garden
 from morning_bloom.storage import SaveError, Store
 
 
 CLIENT_ID = '123-example.apps.googleusercontent.com'
+CLIENT_SECRET = 'desktop-client-secret'
 
 
 class GoogleCloudSave(unittest.TestCase):
-    def test_packaged_client_id_is_loaded(self):
+    def test_packaged_client_credentials_are_loaded(self):
         with tempfile.TemporaryDirectory() as tmp, \
-                patch.dict('os.environ', {'MORNING_BLOOM_GOOGLE_CLIENT_ID': ''}), \
+                patch.dict('os.environ', {
+                    'MORNING_BLOOM_GOOGLE_CLIENT_ID': '',
+                    'MORNING_BLOOM_GOOGLE_CLIENT_SECRET': '',
+                }), \
                 patch('sys.frozen', True, create=True), patch('sys._MEIPASS', tmp, create=True):
             Path(tmp, 'google-oauth-client-id.txt').write_text(CLIENT_ID, encoding='utf-8')
+            Path(tmp, 'google-oauth-client-secret.txt').write_text(CLIENT_SECRET, encoding='utf-8')
             self.assertEqual(configured_client_id(), CLIENT_ID)
+            self.assertEqual(configured_client_secret(), CLIENT_SECRET)
 
     def test_oauth_url_uses_pkce_without_client_secret(self):
         query = urllib.parse.parse_qs(urllib.parse.urlparse(
@@ -41,6 +50,33 @@ class GoogleCloudSave(unittest.TestCase):
         with patch('urllib.request.urlopen', side_effect=error):
             with self.assertRaisesRegex(CloudError, 'missing parameter'):
                 _request('https://example.invalid')
+
+    def test_refresh_sends_desktop_client_credentials(self):
+        sync = GoogleDriveSync(
+            CLIENT_ID, {'refresh_token': 'refresh'}, clock=lambda: 200,
+            client_secret=CLIENT_SECRET,
+        )
+        with patch('morning_bloom.google_cloud._form_request', return_value={
+                'access_token': 'access', 'expires_in': 3600}) as request:
+            self.assertEqual(sync._token(), 'access')
+        self.assertEqual(request.call_args.args[1]['client_id'], CLIENT_ID)
+        self.assertEqual(request.call_args.args[1]['client_secret'], CLIENT_SECRET)
+
+    def test_oauth_ignores_requests_before_callback(self):
+        result = {}
+
+        class Server:
+            def __init__(self):
+                self.calls = 0
+
+            def handle_request(self):
+                self.calls += 1
+                if self.calls == 2:
+                    result['state'] = 'expected'
+
+        server = Server()
+        _wait_for_callback(server, result, 1)
+        self.assertEqual(server.calls, 2)
 
     def test_upload_creates_private_app_data_file(self):
         sync = GoogleDriveSync(CLIENT_ID, {'refresh_token': 'refresh'}, clock=lambda: 200)

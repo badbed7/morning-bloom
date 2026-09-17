@@ -28,14 +28,19 @@ def main():
     (ROOT / 'release/release_config.py').write_text(f'REPOSITORY = {repo!r}\n')
     common = [sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean', '--windowed', '--distpath', 'dist', '--workpath', 'build', '--specpath', 'build']
     google_id = os.environ.get('GOOGLE_OAUTH_CLIENT_ID', '').strip()
+    google_secret = os.environ.get('GOOGLE_OAUTH_CLIENT_SECRET', '').strip()
     if google_id and not re.fullmatch(r'[A-Za-z0-9_-]+\.apps\.googleusercontent\.com', google_id):
         raise SystemExit('Invalid GOOGLE_OAUTH_CLIENT_ID')
+    if bool(google_id) != bool(google_secret):
+        raise SystemExit('GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET must be set together')
     with tempfile.TemporaryDirectory(prefix='MorningBloom-build-config-') as config_dir:
         google_args = []
         if google_id:
             config = Path(config_dir) / 'google-oauth-client-id.txt'
             config.write_text(google_id, encoding='utf-8')
-            google_args = ['--add-data', str(config) + ';.']
+            secret = Path(config_dir) / 'google-oauth-client-secret.txt'
+            secret.write_text(google_secret, encoding='utf-8')
+            google_args = ['--add-data', str(config) + ';.', '--add-data', str(secret) + ';.']
         run(*common, '--onedir', '--name', 'MorningBloomGame', '--paths', 'python',
             '--add-data', str(ROOT / 'assets/fonts') + ';assets/fonts', *google_args,
             'release/game_entry.py')
@@ -93,6 +98,7 @@ def main():
     (output / 'release-notes.md').write_text(
         f'Morning Bloom {release_version}\n\n'
         'New in this release:\n'
+        '- Fixed Google Desktop OAuth token exchange and loopback callback handling.\n'
         '- Both Python BAT and Windows EXE launchers check public GitHub Releases before starting.\n'
         '- Verified versioned updates preserve saved gardens and fall back after update failures.\n'
         '- Python BAT retains Python execution, with dependencies cached independently of game versions.\n'

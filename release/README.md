@@ -61,7 +61,7 @@ BAT와 EXE는 공용 잠금을 게임 종료까지 유지합니다. 이미 실�
 
 별도의 배포 전용 저장소나 개인 액세스 토큰은 필요하지 않습니다. 워크플로는 현재 공개 저장소의 기본 `GITHUB_TOKEN`으로 Release를 게시합니다. 저장소를 비공개로 바꾸면 일반 사용자의 업데이트가 중단됩니다.
 
-Google 로그인의 공개 Client ID는 Actions variable `GOOGLE_OAUTH_CLIENT_ID`에 설정합니다. 두 패키지에 함께 포함하며 사용자 토큰이나 비밀번호는 패키지에 넣지 않습니다.
+Google Desktop OAuth 값은 Actions variable `GOOGLE_OAUTH_CLIENT_ID`와 Actions secret `GOOGLE_OAUTH_CLIENT_SECRET`에 설정합니다. 두 값은 설치 앱에 포함되지만 저장소와 CI 로그에는 직접 기록하지 않습니다. 사용자 토큰이나 비밀번호는 패키지에 넣지 않습니다.
 
 Windows / Python 3.12에서 수동 빌드:
 

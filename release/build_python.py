@@ -52,7 +52,13 @@ def main():
             'Internet is required to install dependencies for the first time. Later offline launches use the installed version.\n'
             'Saved gardens: %LOCALAPPDATA%/MorningBloomPython (shared with the EXE version).\n'
             'Game installations and dependency runtimes: %LOCALAPPDATA%/MorningBloomPythonLauncher.\n', encoding='utf-8')
-        subprocess.run([sys.executable, '-B', str(bootstrap / 'release/launcher.py'), '--python', '--verify-bundle'], check=True)
+        result = subprocess.run([sys.executable, '-B', str(bootstrap / 'release/launcher.py'), '--python', '--verify-bundle'])
+        if result.returncode:
+            log = Path(temp) / 'startup-check.log'
+            if log.is_file():
+                shutil.copyfile(log, output / 'python-startup-check.log')
+                sys.stderr.buffer.write(log.read_bytes())
+            raise SystemExit('Python BAT startup check failed; see release-output/python-startup-check.log')
         zip_folder(bootstrap, output / f'MorningBloom-{version}-Python-BAT.zip')
     print('Python BAT bundle verified and packaged.')
 

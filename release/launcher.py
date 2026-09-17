@@ -142,7 +142,14 @@ def main():
                 archive = 'MorningBloom-python.zip' if args.python_mode else 'MorningBloom-game.zip'
                 data = manifest(json.loads((bundle / name).read_text()), REPOSITORY, args.python_mode)
                 def check(executable):
-                    runtime = python_runtime(executable, installer.root, print) if args.python_mode else None
+                    try:
+                        runtime = python_runtime(executable, installer.root,
+                            lambda _: print('Preparing Python runtime...', flush=True)) if args.python_mode else None
+                    except Exception:
+                        setup_log = installer.root / 'python-setup.log'
+                        if setup_log.is_file():
+                            log_path.write_text(setup_log.read_text(encoding='utf-8', errors='replace'), encoding='utf-8')
+                        raise
                     return health_check(executable, log_path, runtime)
                 installer.install(bundle / archive, data, check)
         except Exception as exc:

@@ -3,13 +3,14 @@ import math
 import tempfile
 import unittest
 from collections import Counter
+from concurrent.futures import Future
 from copy import deepcopy
 from pathlib import Path
 from unittest.mock import patch
 
 from PySide6.QtCore import QPoint, Qt
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QMessageBox
 
 from morning_bloom.app import SETTINGS_PAGE, Window
 from morning_bloom.desktop_flowers import DesktopFlowers, sun_positions
@@ -173,6 +174,23 @@ class FakeDesktopHost:
         self.positions.pop(int(widget.winId()), None)
 
 
+class FakeCloud:
+    configured = True
+    connected = True
+    email = 'gardener@example.com'
+
+    def __init__(self, download=None):
+        self.download = download
+        self.uploads = []
+
+    def download_save(self):
+        return self.download
+
+    def upload_save(self, snapshot):
+        self.uploads.append(deepcopy(snapshot))
+        return NOW + 30
+
+
 class InteractionTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -281,6 +299,26 @@ class InteractionTests(unittest.TestCase):
         self.window.refresh()
         self.assertIn('보상 가능', self.window.fertilizer_stock.text())
 
+    def test_pot_flower_scale_does_not_change_with_notifications(self):
+        for side, expected_height in ((320, 112), (384, 152), (520, 200)):
+            self.window.setFixedSize(side, side)
+            self.app.processEvents()
+            before = (self.window.flower.width(), self.window.flower.height())
+            self.window.notify(
+                '저장 실패 · 기존 정원은 그대로 보존되며 잠시 후 다시 시도할 수 있습니다.\n두 번째 안내 줄',
+                important=True,
+            )
+            self.app.processEvents()
+            self.assertEqual((self.window.flower.width(), self.window.flower.height()), before)
+            self.assertEqual(self.window.flower.height(), expected_height)
+            self.window.notify('')
+            self.app.processEvents()
+            self.assertEqual((self.window.flower.width(), self.window.flower.height()), before)
+            self.assertLess(
+                self.window.water_button.mapTo(self.window, self.window.water_button.rect().bottomRight()).y(),
+                self.window.height(),
+            )
+
     def test_random_name_time_and_value_are_hidden_until_bloom(self):
         self.garden.growth = self.garden.duration
         self.garden.harvest(NOW)
@@ -320,6 +358,169 @@ class InteractionTests(unittest.TestCase):
         self.assertTrue(self.window.desktop.place(item_id))
         self.assertEqual(self.window.desktop.windows, {})
         self.assertEqual(len(self.garden.collection), 1)
+
+    def test_pot_collection_picker_uses_explicit_idempotent_floating_actions(self):
+        self.garden.growth = self.garden.duration
+        self.assertTrue(self.garden.harvest(NOW))
+        self.window.refresh()
+        self.assertEqual(self.window.collection_button.text(), '정원 꽃 1')
+        self.window.open_collection_picker()
+        self.app.processEvents()
+        picker = self.window._collection_picker
+        self.assertTrue(picker.isVisible())
+        self.assertEqual(picker.list.count(), 1)
+        item_id = self.garden.collection[0]['id']
+        self.assertTrue(self.garden.place_desktop(item_id, 24, 36))
+        picker.sync(force=True)
+        self.assertIn('표시 복원 대기', picker.list.item(0).toolTip())
+        self.assertTrue(picker.apply_action(item_id, True))
+        self.assertEqual(set(self.window.desktop.windows), {item_id})
+        self.assertTrue(picker.apply_action(item_id, True))
+        self.assertEqual(set(self.window.desktop.windows), {item_id})
+        self.assertIn('바탕화면 표시 중', picker.list.item(0).toolTip())
+        self.assertTrue(picker.apply_action(item_id, False))
+        self.assertEqual(self.window.desktop.windows, {})
+        self.assertNotIn(item_id, self.garden.desktop_flowers)
+
+    def test_pot_collection_picker_handles_empty_and_large_collections(self):
+        self.window.open_collection_picker()
+        self.app.processEvents()
+        picker = self.window._collection_picker
+        self.assertTrue(picker.empty.isVisible())
+        self.assertFalse(picker.list.isVisible())
+        self.garden.collection = [{
+            'id': f'stored-{index}', 'species': 'daisy', 'harvested_at': NOW,
+            'base_sale_g': 50, 'misted': False, 'bonus_g': 0,
+        } for index in range(100)]
+        self.window.refresh()
+        self.app.processEvents()
+        self.assertEqual(picker.list.count(), 100)
+        self.assertTrue(picker.list.isVisible())
+        self.assertGreater(picker.list.verticalScrollBar().maximum(), 0)
+
+    def test_minimize_preserves_floating_flowers_clock_and_normal_position(self):
+        self.garden.collection.append({
+            'id': 'stored-flower', 'species': 'daisy', 'harvested_at': NOW,
+            'base_sale_g': 50, 'misted': False, 'bonus_g': 0,
+        })
+        self.window.refresh()
+        self.assertTrue(self.window.set_desktop_flower('stored-flower', True))
+        self.window.move(72, 84)
+        self.app.processEvents()
+        self.window.open_collection_picker()
+        self.assertTrue(self.window._collection_picker.isVisible())
+        self.window.minimize_button.click()
+        self.app.processEvents()
+        self.assertTrue(self.window.isMinimized())
+        self.assertFalse(self.window._collection_picker.isVisible())
+        self.assertIn('stored-flower', self.window.desktop.windows)
+        self.assertTrue(self.window.clock.isActive())
+        self.assertEqual((self.garden.settings['x'], self.garden.settings['y']), (72, 84))
+        self.window.showNormal()
+        self.app.processEvents()
+        self.assertFalse(self.window.isMinimized())
+        self.assertTrue(self.window.flower.timer.isActive())
+
+    def test_cloud_restore_prompt_waits_until_window_is_restored(self):
+        envelope = {'saved_at': NOW + 10, 'save': self.garden.to_dict()}
+        self.window.showMinimized()
+        self.app.processEvents()
+        with patch('morning_bloom.app.QMessageBox.question', return_value=QMessageBox.No) as question:
+            self.window._consider_cloud_save(envelope, manual=True)
+            question.assert_not_called()
+            self.assertIsNotNone(self.window._pending_cloud_prompt)
+            self.window.showNormal()
+            self.app.processEvents()
+            question.assert_called_once()
+            self.assertIsNone(self.window._pending_cloud_prompt)
+
+    def test_connected_cloud_automatically_uploads_changed_local_save_every_five_minutes(self):
+        cloud = FakeCloud()
+        self.window.cloud = cloud
+        self.window._sync_cloud_controls()
+
+        def immediate(action, done, _message, silent_error=False):
+            self.assertTrue(silent_error)
+            done(action())
+            return True
+
+        with patch.object(self.window, '_run_cloud', side_effect=immediate) as run:
+            self.assertTrue(self.window.auto_backup_cloud())
+
+        self.assertEqual(self.window.cloud_auto.interval(), 5 * 60 * 1000)
+        self.assertEqual(run.call_count, 2)  # conflict check, then upload
+        self.assertEqual(len(cloud.uploads), 1)
+        self.assertEqual(cloud.uploads[0], self.garden.to_dict())
+        self.assertEqual(
+            self.window._cloud_last_uploaded_digest,
+            self.window._cloud_digest(self.garden.to_dict()),
+        )
+        state = json.loads(self.store.path.with_suffix('.cloud-sync.json').read_text(encoding='utf-8'))
+        self.assertEqual(state['digest'], self.window._cloud_last_uploaded_digest)
+        self.assertNotIn(cloud.email, json.dumps(state))
+        expected_digest = self.window._cloud_last_uploaded_digest
+        self.window._reset_cloud_state()
+        self.window._load_cloud_state()
+        self.assertEqual(self.window._cloud_last_uploaded_digest, expected_digest)
+        self.assertIn('5분마다 자동 백업', self.window.cloud_status.text())
+        self.assertIn('최근', self.window.cloud_status.text())
+
+    def test_auto_backup_checks_newer_cloud_before_uploading(self):
+        remote = self.garden.to_dict()
+        remote['coins'] += 77
+        cloud = FakeCloud({'saved_at': NOW + 10, 'save': remote})
+        self.window.cloud = cloud
+        self.window._cloud_known_saved_at = NOW
+        self.window._cloud_last_uploaded_digest = self.window._cloud_digest(self.garden.to_dict())
+        self.window._local_saved_at = NOW + 1000
+
+        def immediate(action, done, _message, silent_error=False):
+            self.assertTrue(silent_error)
+            done(action())
+            return True
+
+        with patch.object(self.window, '_run_cloud', side_effect=immediate), \
+                patch('morning_bloom.app.QMessageBox.question', return_value=QMessageBox.Yes) as question:
+            self.assertTrue(self.window.auto_backup_cloud())
+
+        question.assert_called_once()
+        self.assertEqual(cloud.uploads, [])
+        self.assertEqual(self.garden.coins, remote['coins'])
+
+    def test_first_sync_on_new_pc_never_overwrites_different_cloud_without_confirmation(self):
+        remote = self.garden.to_dict()
+        remote['coins'] += 23
+        cloud = FakeCloud({'saved_at': NOW - 1000, 'save': remote})
+        self.window.cloud = cloud
+        self.window._reset_cloud_state()
+
+        def immediate(action, done, _message, silent_error=False):
+            done(action())
+            return True
+
+        with patch.object(self.window, '_run_cloud', side_effect=immediate), \
+                patch('morning_bloom.app.QMessageBox.question', return_value=QMessageBox.Yes) as question:
+            self.assertTrue(self.window.auto_backup_cloud())
+
+        question.assert_called_once()
+        self.assertEqual(cloud.uploads, [])
+        self.assertEqual(self.garden.coins, remote['coins'])
+
+    def test_automatic_cloud_failure_stays_quiet_and_marks_next_retry(self):
+        self.window.cloud = FakeCloud()
+        failed = Future()
+        failed.set_exception(OSError('offline'))
+        self.window._cloud_future = failed
+        self.window._cloud_done = lambda _: None
+        self.window._cloud_busy = True
+        self.window._cloud_silent_error = True
+
+        with patch.object(self.window, 'notify') as notify:
+            self.window._poll_cloud()
+
+        notify.assert_not_called()
+        self.assertTrue(self.window._cloud_auto_error)
+        self.assertIn('다음 주기에 재시도', self.window.cloud_status.text())
 
     def test_floating_host_failure_preserves_garden(self):
         self.garden.growth = self.garden.duration

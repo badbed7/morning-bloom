@@ -177,8 +177,30 @@ class DesktopFlowers:
         return widget
 
     def place(self, item_id):
+        """Backward-compatible toggle used by the existing garden view."""
         if item_id in self.owner.garden.desktop_flowers:
-            return self.owner.act(lambda: self.owner.garden.return_desktop(item_id))
+            return self.return_to_garden(item_id)
+        return self.ensure_floating(item_id)
+
+    def ensure_floating(self, item_id):
+        if not any(item['id'] == item_id for item in self.owner.garden.collection):
+            self.owner.notify('보관한 꽃을 찾지 못했어요.', important=True)
+            return False
+        if item_id in self.owner.garden.desktop_flowers:
+            position = self.owner.garden.desktop_flowers[item_id]
+            try:
+                widget = self.windows.get(item_id)
+                if widget is not None and not widget.host.valid(int(widget.winId())):
+                    self.remove(item_id)
+                    widget = None
+                if widget is None:
+                    self.create(item_id, position['x'], position['y'])
+                self.windows[item_id].sync()
+                self.owner.notify('화면 맨 위에 꽃을 표시하고 있어요.', important=True)
+                return True
+            except (DesktopUnavailable, OSError) as exc:
+                self.owner.notify(str(exc), important=True)
+                return False
         try:
             self.retry_after = 0
             host = self.ensure_host()
@@ -194,6 +216,12 @@ class DesktopFlowers:
             return False
         self.owner.notify('화면 맨 위에 꽃을 배치했어요. 우클릭하면 정원으로 돌아옵니다.', important=True)
         return True
+
+    def return_to_garden(self, item_id):
+        if item_id not in self.owner.garden.desktop_flowers:
+            self.remove(item_id)
+            return True
+        return self.owner.act(lambda: self.owner.garden.return_desktop(item_id))
 
     def remove(self, item_id):
         widget = self.windows.pop(item_id, None)

@@ -1,4 +1,6 @@
 import argparse
+import hashlib
+import json
 import math
 import sys
 import time
@@ -6,7 +8,7 @@ from concurrent.futures import Future
 from threading import Thread
 from pathlib import Path
 
-from PySide6.QtCore import QLockFile, QPointF, QRectF, QStandardPaths, Qt, QTimer
+from PySide6.QtCore import QEvent, QLockFile, QPointF, QRectF, QStandardPaths, Qt, QTimer
 from PySide6.QtGui import QColor, QFont, QFontDatabase, QPainter
 from PySide6.QtWidgets import (
     QApplication,
@@ -20,12 +22,14 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QSizePolicy,
     QSlider,
+    QStackedLayout,
     QVBoxLayout,
     QWidget,
 )
 
 from .cosmetics import POT_SKINS, THEMES, garden_theme, pot_skin
 from .cosmetic_icons import skin_icon, theme_icon
+from .collection_picker import CollectionPicker
 from .flower_art import paint_potted_flower
 from .fertilizer_game import FertilizerGame
 from .mist_game import MistGame
@@ -41,6 +45,7 @@ from .storage import SaveError, Store
 
 POT_PAGE, SHOP_PAGE, GARDEN_PAGE, SETTINGS_PAGE = range(4)
 MAIN_PAGE_NAMES = ('화분', '상점', '정원')
+CLOUD_AUTO_BACKUP_MS = 5 * 60 * 1000
 
 
 def format_duration(seconds):
@@ -63,11 +68,17 @@ class Flower(QWidget):
         self.garden = garden
         self.phase = 0
         self.drops = 0
-        self.setMinimumHeight(0)
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Ignored)
+        self.setFixedHeight(112)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.animate)
         self.timer.setInterval(50)
+
+    def set_window_side(self, side):
+        """Keep scene scale stable while status and notification text changes."""
+        target = round(max(112, min(200, 112 + (side - 320) * .625)))
+        if self.height() != target:
+            self.setFixedHeight(target)
 
     def showEvent(self, event):
         self.timer.start()
@@ -111,19 +122,33 @@ class Window(QWidget):
         self._action_busy = False
         self._fertilizer_game = None
         self._mist_game = None
+        self._collection_picker = None
+        self._normal_position = QPointF(garden.settings['x'], garden.settings['y']).toPoint()
+        self._minimized = False
+        self._closing = False
+        self._message_text = ''
         self.cloud = cloud
         self._cloud_future = None
         self._cloud_done = None
         self._cloud_busy = False
+        self._cloud_silent_error = False
+        self._cloud_last_uploaded_digest = None
+        self._cloud_known_saved_at = None
+        self._cloud_last_backup_at = None
+        self._cloud_auto_error = False
+        self._pending_cloud_prompt = None
         self._local_saved_at = store.path.stat().st_mtime if getattr(store, 'path', None) and store.path.exists() else 0
+        self._load_cloud_state()
         self.desktop = DesktopFlowers(self)
         self.setWindowTitle('아침 한 송이')
-        self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint)
+        self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint | Qt.WindowMinimizeButtonHint)
         self.setWindowFlag(Qt.WindowStaysOnTopHint, garden.settings['topmost'])
         self._set_responsive_square()
         self._set_style()
         self._build_ui()
+        self.flower.set_window_side(min(self.width(), self.height()))
         self._place_window()
+        self._normal_position = self.pos()
         self.setWindowOpacity(garden.settings['opacity'])
 
         self.clock = QTimer(self)
@@ -136,8 +161,8 @@ class Window(QWidget):
         self.cloud_poll.setInterval(100)
         self.cloud_poll.timeout.connect(self._poll_cloud)
         self.cloud_auto = QTimer(self)
-        self.cloud_auto.setInterval(300000)
-        self.cloud_auto.timeout.connect(self.check_cloud)
+        self.cloud_auto.setInterval(CLOUD_AUTO_BACKUP_MS)
+        self.cloud_auto.timeout.connect(self.auto_backup_cloud)
         self.cloud_auto.start()
         self.cloud_start = QTimer(self)
         self.cloud_start.setSingleShot(True)
@@ -214,6 +239,13 @@ class Window(QWidget):
         self.next_page.setAccessibleName('다음 화면')
         self.next_page.clicked.connect(lambda: self.navigate(1))
         top.addWidget(self.next_page)
+        self.minimize_button = QPushButton('—')
+        self.minimize_button.setObjectName('quiet')
+        self.minimize_button.setFixedSize(28, 28)
+        self.minimize_button.setAccessibleName('최소화')
+        self.minimize_button.setToolTip('작업 표시줄로 최소화')
+        self.minimize_button.clicked.connect(self.showMinimized)
+        top.addWidget(self.minimize_button)
         close = QPushButton('X')
         close.setObjectName('quiet')
         close.setFixedSize(28, 28)
@@ -227,31 +259,41 @@ class Window(QWidget):
         self._build_pot_page()
         self._build_shop_page()
         self.collection_garden = CollectionGarden(self.garden, self.sell_flower, self.collect_sun)
-        self.collection_garden.meadow.desktopRequested.connect(self.desktop.place)
+        self.collection_garden.meadow.desktopRequested.connect(self.toggle_desktop_flower)
         self.pages.addWidget(self.collection_garden)
         self._build_settings_page()
 
         welcome = '' if self.garden.tutorial_used else '첫 꽃은 첫 물주기 후 60초에 피어요.'
-        self.message = QLabel(self.store.notice or welcome)
-        self.message.setWordWrap(True)
-        self.message.setMaximumHeight(30)
+        self.message = QLabel()
+        self.message.setWordWrap(False)
+        self.message.setFixedHeight(18)
         self.message.setMinimumWidth(0)
         self.message.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         self.message.setObjectName('small')
-        root.addWidget(self.message)
 
         footer = QHBoxLayout()
+        footer_status = QWidget()
+        self.footer_status = QStackedLayout(footer_status)
+        self.footer_status.setContentsMargins(0, 0, 0, 0)
         self.inventory = QLabel()
         self.inventory.setObjectName('small')
         self.inventory.setMinimumWidth(0)
         self.inventory.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
-        footer.addWidget(self.inventory, 1)
+        self.footer_status.addWidget(self.inventory)
+        self.footer_status.addWidget(self.message)
+        footer.addWidget(footer_status, 1)
+        self.collection_button = QPushButton()
+        self.collection_button.setFixedWidth(78)
+        self.collection_button.setAccessibleName('보관한 정원 꽃 목록 열기')
+        self.collection_button.clicked.connect(self.open_collection_picker)
+        footer.addWidget(self.collection_button)
         self.settings_button = QPushButton('설정')
         self.settings_button.setFixedWidth(72)
         self.settings_button.setAccessibleName('설정 열기 또는 이전 화면으로 돌아가기')
         self.settings_button.clicked.connect(self.toggle_settings_page)
         footer.addWidget(self.settings_button)
         root.addLayout(footer)
+        self.notify(self.store.notice or welcome, important=bool(self.store.notice))
         self.pages.currentChanged.connect(self._page_changed)
         self._page_changed(POT_PAGE)
         for button, direction in ((self.previous_page, -1), (self.previous_pot, -1),
@@ -264,6 +306,7 @@ class Window(QWidget):
         if index != POT_PAGE:
             self._cancel_fertilizer_game()
             self._cancel_mist_game()
+            self.close_collection_picker()
         is_settings = index == SETTINGS_PAGE
         if not is_settings:
             self._main_page = index
@@ -271,6 +314,7 @@ class Window(QWidget):
         self.previous_page.setEnabled(not is_settings)
         self.next_page.setEnabled(not is_settings)
         self.settings_button.setText('돌아가기' if is_settings else '설정')
+        self.collection_button.setVisible(index == POT_PAGE)
         if not is_settings:
             self.previous_page.setToolTip(MAIN_PAGE_NAMES[(index - 1) % 3] + '으로 이동')
             self.next_page.setToolTip(MAIN_PAGE_NAMES[(index + 1) % 3] + '으로 이동')
@@ -331,40 +375,35 @@ class Window(QWidget):
         outer.addLayout(selector)
 
         self.pot_slides = SlideStack()
+        self.pot_slides.setMinimumWidth(0)
+        self.pot_slides.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Expanding)
         outer.addWidget(self.pot_slides, 1)
         content = QWidget()
+        content.setMinimumWidth(0)
+        content.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         layout = QVBoxLayout(content)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
         self.flower = Flower(self.garden)
-        layout.addWidget(self.flower, 1)
+        layout.addWidget(self.flower)
+        controls_scroll = QScrollArea()
+        controls_scroll.setMinimumWidth(0)
+        controls_scroll.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Expanding)
+        controls_scroll.setFrameShape(QFrame.NoFrame)
+        controls_scroll.setWidgetResizable(True)
+        controls_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        controls = QWidget()
+        controls.setMinimumWidth(0)
+        controls.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        controls_layout = QVBoxLayout(controls)
+        controls_layout.setContentsMargins(0, 0, 0, 0)
+        controls_layout.setSpacing(4)
         self.status = QLabel()
         self.status.setAlignment(Qt.AlignCenter)
         self.status.setFixedHeight(18)
         self.status.setMinimumWidth(0)
         self.status.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
-        outer.insertWidget(1, self.status)
-        self.progress = QProgressBar()
-        self.progress.setRange(0, 100)
-        self.progress.setTextVisible(False)
-        self.progress.setFixedHeight(6)
-        layout.addWidget(self.progress)
-        self.remaining = QLabel()
-        self.remaining.setAlignment(Qt.AlignCenter)
-        self.remaining.setObjectName('small')
-        self.remaining.setFixedHeight(16)
-        layout.addWidget(self.remaining)
-        self.care_info = QLabel()
-        self.care_info.setAlignment(Qt.AlignCenter)
-        self.care_info.setObjectName('small')
-        self.care_info.setFixedHeight(16)
-        layout.addWidget(self.care_info)
-
-        self.species_picker = SeedPicker()
-        self.species_picker.selectionChanged.connect(self.refresh)
-        layout.addWidget(self.species_picker)
-        self.plant_button = self.button(layout, '씨앗 심기', self.plant_selected)
-
+        controls_layout.addWidget(self.status)
         row = QHBoxLayout()
         self.water_button = QPushButton('물주기')
         self.water_button.clicked.connect(lambda: self.care('water'))
@@ -375,14 +414,33 @@ class Window(QWidget):
         self.fertilizer_button = QPushButton('비료 -10분')
         self.fertilizer_button.clicked.connect(self.use_fertilizer)
         row.addWidget(self.fertilizer_button)
+        controls_layout.addLayout(row)
+        self.progress = QProgressBar()
+        self.progress.setRange(0, 100)
+        self.progress.setTextVisible(False)
+        self.progress.setFixedHeight(6)
+        controls_layout.addWidget(self.progress)
+        self.remaining = QLabel()
+        self.remaining.setAlignment(Qt.AlignCenter)
+        self.remaining.setObjectName('small')
+        self.remaining.setFixedHeight(16)
+        controls_layout.addWidget(self.remaining)
+        self.care_info = QLabel()
+        self.care_info.setAlignment(Qt.AlignCenter)
+        self.care_info.setObjectName('small')
+        self.care_info.setFixedHeight(16)
+        controls_layout.addWidget(self.care_info)
+
+        self.species_picker = SeedPicker()
+        self.species_picker.selectionChanged.connect(self.refresh)
+        controls_layout.addWidget(self.species_picker)
+        self.plant_button = self.button(controls_layout, '씨앗 심기', self.plant_selected)
+
         for button in (self.water_button, self.mist_button, self.fertilizer_button, self.plant_button):
             button.setFixedHeight(32)
-        layout.addLayout(row)
-        self.harvest_button = self.button(layout, '정원에 보관하기', self.harvest_flower)
+        self.harvest_button = self.button(controls_layout, '정원에 보관하기', self.harvest_flower)
         self.harvest_button.setObjectName('primary')
         self.harvest_button.setFixedHeight(32)
-        self.pot_slides.addWidget(content)
-
         self.fertilizer_tools = QWidget()
         self.fertilizer_tools.setObjectName('fertilizerTools')
         fertilizer_row = QHBoxLayout(self.fertilizer_tools)
@@ -394,7 +452,11 @@ class Window(QWidget):
         self.make_fertilizer_button.clicked.connect(self.open_fertilizer_game)
         self.make_fertilizer_button.setFixedHeight(28)
         fertilizer_row.addWidget(self.make_fertilizer_button)
-        outer.addWidget(self.fertilizer_tools)
+        controls_layout.addWidget(self.fertilizer_tools)
+        controls_layout.addStretch(1)
+        controls_scroll.setWidget(controls)
+        layout.addWidget(controls_scroll, 1)
+        self.pot_slides.addWidget(content)
 
         self.pages.addWidget(page)
 
@@ -512,6 +574,69 @@ class Window(QWidget):
         self.pages.addWidget(page)
         self._sync_cloud_controls()
 
+    def _cloud_state_path(self):
+        path = getattr(self.store, 'path', None)
+        return path.with_suffix('.cloud-sync.json') if path is not None else None
+
+    def _cloud_account_key(self):
+        email = (self.cloud.email if self.cloud and self.cloud.connected else '').strip().casefold()
+        return hashlib.sha256(email.encode('utf-8')).hexdigest() if email else ''
+
+    def _reset_cloud_state(self):
+        self._cloud_last_uploaded_digest = None
+        self._cloud_known_saved_at = None
+        self._cloud_last_backup_at = None
+        self._cloud_auto_error = False
+
+    def _load_cloud_state(self):
+        self._reset_cloud_state()
+        path, account = self._cloud_state_path(), self._cloud_account_key()
+        if self.demo or path is None or not account or not path.is_file():
+            return
+        try:
+            state = json.loads(path.read_text(encoding='utf-8'))
+            if (
+                not isinstance(state, dict)
+                or set(state) != {'schema', 'account', 'saved_at', 'digest'}
+                or state['schema'] != 1
+                or state['account'] != account
+                or type(state['saved_at']) not in (int, float)
+                or not math.isfinite(state['saved_at'])
+                or not isinstance(state['digest'], str)
+                or len(state['digest']) != 64
+            ):
+                return
+            self._cloud_known_saved_at = state['saved_at']
+            self._cloud_last_backup_at = state['saved_at']
+            self._cloud_last_uploaded_digest = state['digest']
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            return
+
+    def _save_cloud_state(self):
+        path, account = self._cloud_state_path(), self._cloud_account_key()
+        if (
+            self.demo or path is None or not account
+            or self._cloud_known_saved_at is None or self._cloud_last_uploaded_digest is None
+        ):
+            return False
+        temporary = path.with_suffix(path.suffix + '.tmp')
+        state = {
+            'schema': 1,
+            'account': account,
+            'saved_at': self._cloud_known_saved_at,
+            'digest': self._cloud_last_uploaded_digest,
+        }
+        try:
+            temporary.write_text(json.dumps(state, ensure_ascii=False), encoding='utf-8')
+            temporary.replace(path)
+            return True
+        except OSError:
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError:
+                pass
+            return False
+
     def _sync_cloud_controls(self):
         configured = bool(self.cloud and self.cloud.configured)
         connected = configured and self.cloud.connected
@@ -522,6 +647,12 @@ class Window(QWidget):
             status = '연결됨 · ' + (self.cloud.email or 'Google 계정')
             if self.demo:
                 status += ' · 테스트 정원은 동기화하지 않음'
+            else:
+                status += ' · 5분마다 자동 백업'
+                if self._cloud_auto_error:
+                    status += ' · 다음 주기에 재시도'
+                elif self._cloud_last_backup_at:
+                    status += ' · 최근 ' + time.strftime('%H:%M', time.localtime(self._cloud_last_backup_at))
         else:
             status = '연결하면 일반 정원을 비공개 앱 데이터에 저장합니다.'
         self.cloud_status.setText(status)
@@ -530,11 +661,12 @@ class Window(QWidget):
         self.cloud_backup_button.setEnabled(active)
         self.cloud_restore_button.setEnabled(active)
 
-    def _run_cloud(self, action, done, message):
+    def _run_cloud(self, action, done, message, silent_error=False):
         if not self.cloud or self._cloud_busy:
             return False
         self._cloud_busy = True
         self._cloud_done = done
+        self._cloud_silent_error = silent_error
         self._cloud_future = Future()
 
         def work():
@@ -555,13 +687,19 @@ class Window(QWidget):
             return
         self.cloud_poll.stop()
         future, done = self._cloud_future, self._cloud_done
+        silent_error = self._cloud_silent_error
         self._cloud_future = self._cloud_done = None
         self._cloud_busy = False
+        self._cloud_silent_error = False
         self._sync_cloud_controls()
         try:
             result = future.result()
         except (CloudError, OSError, ValueError) as exc:
-            self.notify('Google Drive 실패 · ' + str(exc), important=True)
+            if silent_error:
+                self._cloud_auto_error = True
+                self._sync_cloud_controls()
+            else:
+                self.notify('Google Drive 실패 · ' + str(exc), important=True)
             return
         done(result)
 
@@ -571,12 +709,18 @@ class Window(QWidget):
         if self.cloud.connected:
             return self._run_cloud(
                 self.cloud.disconnect,
-                lambda _: (self._sync_cloud_controls(), self.notify('Google 계정 연결을 해제했습니다.', important=True)),
+                self._after_cloud_disconnect,
                 'Google 연결을 해제하는 중…',
             )
         return self._run_cloud(self.cloud.connect, self._after_cloud_connect, '브라우저에서 Google 로그인을 완료하세요.')
 
+    def _after_cloud_disconnect(self, _result):
+        self._reset_cloud_state()
+        self._sync_cloud_controls()
+        self.notify('Google 계정 연결을 해제했습니다.', important=True)
+
     def _after_cloud_connect(self, _email):
+        self._load_cloud_state()
         self._sync_cloud_controls()
         self.notify('Google 계정이 연결되었습니다.', important=True)
         self.check_cloud()
@@ -590,17 +734,52 @@ class Window(QWidget):
             '클라우드 저장을 확인하는 중…',
         )
 
+    @staticmethod
+    def _cloud_digest(snapshot):
+        payload = json.dumps(snapshot, ensure_ascii=False, sort_keys=True, separators=(',', ':')).encode('utf-8')
+        return hashlib.sha256(payload).hexdigest()
+
+    def auto_backup_cloud(self):
+        """Upload changed local data every five minutes without overwriting a newer cloud save."""
+        if not self.cloud or not self.cloud.connected or self.demo or self._cloud_busy:
+            return False
+        if not self.persist():
+            return False
+        return self._run_cloud(
+            self.cloud.download_save,
+            self._finish_auto_backup_check,
+            '',
+            silent_error=True,
+        )
+
+    def _finish_auto_backup_check(self, envelope):
+        self._cloud_auto_error = False
+        self._sync_cloud_controls()
+        self._consider_cloud_save(envelope, manual=False, quiet=True)
+
     def backup_cloud(self, _checked=False, silent=False):
         if not self.cloud or not self.cloud.connected or self.demo or self._cloud_busy:
             return False
         if not self.persist():
             return False
         snapshot = self.garden.to_dict()
+        digest = self._cloud_digest(snapshot)
         return self._run_cloud(
             lambda: self.cloud.upload_save(snapshot),
-            lambda saved_at: self.notify('Google Drive 백업 완료', important=not silent),
+            lambda saved_at: self._after_cloud_backup(saved_at, digest, silent),
             '' if silent else 'Google Drive에 백업하는 중…',
+            silent_error=silent,
         )
+
+    def _after_cloud_backup(self, saved_at, digest, silent):
+        self._cloud_last_uploaded_digest = digest
+        self._cloud_known_saved_at = saved_at
+        self._cloud_last_backup_at = saved_at
+        self._cloud_auto_error = False
+        self._save_cloud_state()
+        self._sync_cloud_controls()
+        if not silent:
+            self.notify('Google Drive 백업 완료', important=True)
 
     def restore_cloud(self):
         if not self.cloud or not self.cloud.connected or self.demo or self._cloud_busy:
@@ -611,38 +790,68 @@ class Window(QWidget):
             '클라우드 저장을 불러오는 중…',
         )
 
-    def _consider_cloud_save(self, envelope, manual):
+    def _consider_cloud_save(self, envelope, manual, quiet=False):
         if envelope is None:
             if manual:
                 self.notify('Google Drive에 저장된 정원이 없습니다.', important=True)
             else:
-                self.backup_cloud()
-            return
-        cloud_newer = envelope['saved_at'] > self._local_saved_at + 1
-        if not manual and not cloud_newer:
-            if self._local_saved_at > envelope['saved_at'] + 1:
                 self.backup_cloud(silent=True)
+            return
+        local_digest = self._cloud_digest(self.garden.to_dict())
+        cloud_digest = self._cloud_digest(envelope['save'])
+        if not manual:
+            if cloud_digest == local_digest:
+                remote_changed = local_changed = False
+            elif self._cloud_last_uploaded_digest is None:
+                remote_changed = cloud_digest != local_digest
+                local_changed = False
             else:
-                self.notify('Google Drive와 동기화되었습니다.')
+                remote_changed = cloud_digest != self._cloud_last_uploaded_digest
+                local_changed = local_digest != self._cloud_last_uploaded_digest
+            if not remote_changed:
+                if local_changed:
+                    self.backup_cloud(silent=True)
+                else:
+                    self._cloud_last_uploaded_digest = local_digest
+                    self._cloud_known_saved_at = envelope['saved_at']
+                    self._cloud_last_backup_at = envelope['saved_at']
+                    self._cloud_auto_error = False
+                    self._save_cloud_state()
+                    self._sync_cloud_controls()
+                    if not quiet:
+                        self.notify('Google Drive와 동기화되었습니다.')
+                return
+        if self.isMinimized():
+            self._pending_cloud_prompt = (envelope, manual)
+            self.notify('Google Drive 저장을 확인하려면 창을 복원하세요.', important=True)
             return
         answer = QMessageBox.question(
             self,
             '클라우드 저장 복원',
-            'Google Drive의 정원으로 현재 정원을 교체할까요?\n현재 저장은 복원 전 백업으로 보존합니다.',
+            'Google Drive의 정원으로 현재 정원을 교체할까요?\n'
+            '현재 저장은 복원 전 백업으로 보존합니다.\n'
+            '아니요를 선택하면 로컬 정원을 Google Drive에 백업합니다.',
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,
         )
         if answer == QMessageBox.Yes:
             self._apply_cloud_save(envelope)
         else:
-            self.notify('로컬 정원을 유지했습니다. 클라우드 저장은 변경하지 않았습니다.', important=True)
+            self.notify('로컬 정원을 유지했습니다. Google Drive에 자동 백업합니다.', important=True)
+            self.backup_cloud(silent=True)
 
     def _apply_cloud_save(self, envelope):
         try:
             restored = self.store.replace_from_cloud(envelope['save'], self.now())
+            self.close_collection_picker()
             self.desktop.close()
             self.garden.restore(restored.to_dict())
             self._local_saved_at = self.store.path.stat().st_mtime
+            self._cloud_last_uploaded_digest = self._cloud_digest(self.garden.to_dict())
+            self._cloud_known_saved_at = envelope['saved_at']
+            self._cloud_last_backup_at = envelope['saved_at']
+            self._cloud_auto_error = False
+            self._save_cloud_state()
             self._apply_session_settings()
             self.refresh()
             self.notify('Google Drive 저장을 복원했습니다.', important=True)
@@ -786,9 +995,47 @@ class Window(QWidget):
 
     def notify(self, text, important=False):
         self._message_important = important
-        self.message.setText(text)
+        self._message_text = text
+        self.message.setText(text.replace('\n', ' '))
         self.message.setToolTip(text)
-        self.message.setVisible(bool(text) and (important or self.width() >= 360))
+        self.footer_status.setCurrentWidget(self.message if text else self.inventory)
+
+    def open_collection_picker(self):
+        if self.pages.currentIndex() != POT_PAGE:
+            return
+        if self._collection_picker is None:
+            self._collection_picker = CollectionPicker(
+                self,
+                self.garden,
+                self.set_desktop_flower,
+                lambda: set(self.desktop.windows),
+            )
+        self._collection_picker.sync(force=True)
+        screen = self.screen() or QApplication.primaryScreen()
+        if screen:
+            area = screen.availableGeometry()
+            picker = self._collection_picker
+            x = self.x() - picker.width() - 8
+            if x < area.left():
+                x = self.x() + self.width() + 8
+            x = max(area.left(), min(x, area.right() - picker.width() + 1))
+            y = max(area.top(), min(self.y(), area.bottom() - picker.height() + 1))
+            picker.move(x, y)
+        self._collection_picker.show()
+        self._collection_picker.raise_()
+        self._collection_picker.activateWindow()
+
+    def close_collection_picker(self):
+        if self._collection_picker is not None:
+            self._collection_picker.hide()
+
+    def set_desktop_flower(self, item_id, floating):
+        if floating:
+            return self.desktop.ensure_floating(item_id)
+        return self.desktop.return_to_garden(item_id)
+
+    def toggle_desktop_flower(self, item_id):
+        return self.set_desktop_flower(item_id, item_id not in self.garden.desktop_flowers)
 
     def act(self, callback):
         if self._action_busy:
@@ -803,7 +1050,7 @@ class Window(QWidget):
                 self.refresh()
                 return False
             if not self.persist():
-                error = self.message.text()
+                error = self._message_text
                 self.offset = before_offset
                 self.garden.restore(before)
                 self.refresh()
@@ -965,6 +1212,7 @@ class Window(QWidget):
             return enabled == self.demo
         self._cancel_fertilizer_game()
         self._cancel_mist_game()
+        self.close_collection_picker()
         self._action_busy = True
         target_lock = None
         try:
@@ -988,6 +1236,7 @@ class Window(QWidget):
             self.garden.restore(target_garden.to_dict())
             self.store, self.demo = target_store, enabled
             self._local_saved_at = target_store.path.stat().st_mtime
+            self._load_cloud_state()
             self.offset = max(0, target_garden.last_update - time.time()) if enabled else 0
             previous_lock = self._save_lock
             self._save_lock, target_lock = target_lock, None
@@ -1023,12 +1272,12 @@ class Window(QWidget):
         self.desktop_opacity.blockSignals(True)
         self.desktop_opacity.setValue(round(self.garden.desktop_opacity * 100))
         self.desktop_opacity.blockSignals(False)
-        position, visible = self.pos(), self.isVisible()
+        position, visible, minimized = self.pos(), self.isVisible(), self.isMinimized()
         self.setWindowFlag(Qt.WindowStaysOnTopHint, settings['topmost'])
         self.move(position)
         self.setWindowOpacity(settings['opacity'])
         if visible:
-            self.show()
+            self.showMinimized() if minimized else self.show()
 
     def toggle_topmost(self, checked):
         self.garden.settings['topmost'] = checked
@@ -1176,6 +1425,9 @@ class Window(QWidget):
         seeds = ' / '.join(f'{PLANTS[key].name} {garden.seed_count(key)}' for key in REGULAR_PLANTS)
         seeds += f' / 랜덤 {len(garden.mystery_seeds)}'
         self.inventory.setToolTip(f'씨앗 {seeds} · 보관 꽃 {len(garden.collection)}')
+        self.collection_button.setText(f'정원 꽃 {len(garden.collection)}')
+        if self._collection_picker is not None and self._collection_picker.isVisible():
+            self._collection_picker.sync()
         count = len(garden.pots)
         name = garden.display_name if garden.planted else '빈 화분'
         self.pot_name.setText(f'화분 {garden.selected + 1} / {count} · {name}')
@@ -1289,7 +1541,9 @@ class Window(QWidget):
 
     def persist(self):
         self.garden.advance(self.now())
-        self.garden.settings.update(x=self.x(), y=self.y())
+        if not self.isMinimized():
+            self._normal_position = self.pos()
+        self.garden.settings.update(x=self._normal_position.x(), y=self._normal_position.y())
         try:
             self.store.save(self.garden)
         except (SaveError, ValueError, OSError) as exc:
@@ -1300,12 +1554,49 @@ class Window(QWidget):
         return True
 
     def resizeEvent(self, event):
-        compact = self.width() < 360
-        self.message.setVisible(bool(self.message.text()) and (not compact or self._message_important))
-        self.flower.setMinimumHeight(0)
+        if hasattr(self, 'flower'):
+            self.flower.set_window_side(min(self.width(), self.height()))
+        if hasattr(self, 'message'):
+            self.notify(self._message_text, self._message_important)
         super().resizeEvent(event)
 
+    def moveEvent(self, event):
+        if hasattr(self, '_normal_position') and not self.isMinimized():
+            self._normal_position = event.pos()
+        super().moveEvent(event)
+
+    def _prepare_minimize(self):
+        self.pages.finish_transition()
+        self.pot_slides.finish_transition()
+        self.close_collection_picker()
+        self._cancel_fertilizer_game()
+        self._cancel_mist_game()
+        self.flower.timer.stop()
+        self.collection_garden.meadow.timer.stop()
+        self.persist()
+
+    def changeEvent(self, event):
+        if event.type() == QEvent.WindowStateChange and not self._closing:
+            minimized = self.isMinimized()
+            if minimized and not self._minimized:
+                self._minimized = True
+                self._prepare_minimize()
+            elif not minimized and self._minimized:
+                self._minimized = False
+                self.refresh()
+                if self.flower.isVisible():
+                    self.flower.timer.start()
+                if self.collection_garden.isVisible():
+                    self.collection_garden.meadow.timer.start()
+                if self._pending_cloud_prompt is not None:
+                    pending = self._pending_cloud_prompt
+                    self._pending_cloud_prompt = None
+                    QTimer.singleShot(0, lambda: self._consider_cloud_save(*pending))
+        super().changeEvent(event)
+
     def closeEvent(self, event):
+        self._closing = True
+        self.close_collection_picker()
         self._cancel_fertilizer_game()
         self._cancel_mist_game()
         if self.persist():
@@ -1319,6 +1610,8 @@ class Window(QWidget):
                 QMessageBox.No,
             )
             event.accept() if result == QMessageBox.Yes else event.ignore()
+        if not event.isAccepted():
+            self._closing = False
         if event.isAccepted():
             self.desktop.close()
             self.clock.stop()

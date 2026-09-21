@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from PySide6.QtCore import QPoint, Qt
+from PySide6.QtGui import QCloseEvent
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QMessageBox
 
@@ -209,6 +210,7 @@ class InteractionTests(unittest.TestCase):
         self.window.persist()
 
     def tearDown(self):
+        self.window.cloud = None
         self.window.close()
         self.window.deleteLater()
         self.app.processEvents()
@@ -464,6 +466,48 @@ class InteractionTests(unittest.TestCase):
         self.assertEqual(self.window._cloud_last_uploaded_digest, expected_digest)
         self.assertIn('5분마다 자동 백업', self.window.cloud_status.text())
         self.assertIn('최근', self.window.cloud_status.text())
+
+    def test_startup_download_applies_drive_save_before_auto_backup(self):
+        remote = self.garden.to_dict()
+        remote['coins'] += 31
+        cloud = FakeCloud({'saved_at': NOW + 10, 'save': remote})
+        self.window.cloud = cloud
+        pending = {}
+
+        def defer(action, done, _message, silent_error=False):
+            self.assertFalse(silent_error)
+            pending.update(action=action, done=done)
+            return True
+
+        with patch.object(self.window, '_run_cloud', side_effect=defer):
+            self.assertTrue(self.window.startup_cloud_sync())
+            self.assertFalse(self.window.pages.isEnabled())
+            self.assertFalse(self.window.cloud_auto.isActive())
+            self.assertEqual(cloud.uploads, [])
+            pending['done'](pending['action']())
+
+        self.assertEqual(self.window.garden.coins, remote['coins'])
+        self.assertEqual(cloud.uploads, [])
+        self.assertTrue(self.window.pages.isEnabled())
+        self.assertTrue(self.window.cloud_auto.isActive())
+
+    def test_close_uploads_latest_save_before_finishing(self):
+        cloud = FakeCloud()
+        self.window.cloud = cloud
+        self.window.garden.coins += 9
+        event = QCloseEvent()
+
+        def immediate(action, done, _message, silent_error=False):
+            done(action())
+            return True
+
+        with patch.object(self.window, '_run_cloud', side_effect=immediate), \
+                patch.object(self.window, 'close') as close:
+            self.window.closeEvent(event)
+
+        self.assertFalse(event.isAccepted())
+        self.assertEqual(cloud.uploads[-1]['coins'], self.window.garden.coins)
+        close.assert_called_once_with()
 
     def test_auto_backup_checks_newer_cloud_before_uploading(self):
         remote = self.garden.to_dict()

@@ -126,6 +126,8 @@ class Window(QWidget):
         self._normal_position = QPointF(garden.settings['x'], garden.settings['y']).toPoint()
         self._minimized = False
         self._closing = False
+        self._close_requested = False
+        self._close_uploading = False
         self._message_text = ''
         self.cloud = cloud
         self._cloud_future = None
@@ -136,6 +138,7 @@ class Window(QWidget):
         self._cloud_known_saved_at = None
         self._cloud_last_backup_at = None
         self._cloud_auto_error = False
+        self._startup_cloud_syncing = False
         self._pending_cloud_prompt = None
         self._local_saved_at = store.path.stat().st_mtime if getattr(store, 'path', None) and store.path.exists() else 0
         self._load_cloud_state()
@@ -163,11 +166,12 @@ class Window(QWidget):
         self.cloud_auto = QTimer(self)
         self.cloud_auto.setInterval(CLOUD_AUTO_BACKUP_MS)
         self.cloud_auto.timeout.connect(self.auto_backup_cloud)
-        self.cloud_auto.start()
         self.cloud_start = QTimer(self)
         self.cloud_start.setSingleShot(True)
-        self.cloud_start.timeout.connect(self.check_cloud)
-        self.cloud_start.start(1500)
+        self.cloud_start.timeout.connect(self.startup_cloud_sync)
+        if self.cloud and self.cloud.connected and not self.demo:
+            self.pages.setEnabled(False)
+            self.cloud_start.start(0)
         self.refresh()
 
     def _set_responsive_square(self):
@@ -647,6 +651,8 @@ class Window(QWidget):
             status = '연결됨 · ' + (self.cloud.email or 'Google 계정')
             if self.demo:
                 status += ' · 테스트 정원은 동기화하지 않음'
+            elif self._startup_cloud_syncing:
+                status += ' · Drive 저장 불러오는 중'
             else:
                 status += ' · 5분마다 자동 백업'
                 if self._cloud_auto_error:
@@ -695,13 +701,25 @@ class Window(QWidget):
         try:
             result = future.result()
         except (CloudError, OSError, ValueError) as exc:
+            if self._startup_cloud_syncing:
+                self._complete_startup_cloud_sync()
+            if self._close_uploading:
+                self._close_uploading = self._close_requested = False
+                self.pages.setEnabled(True)
+                self.cloud_auto.start()
+                self.notify('종료 전 Google Drive 백업 실패 · ' + str(exc), important=True)
+                return
             if silent_error:
                 self._cloud_auto_error = True
                 self._sync_cloud_controls()
             else:
                 self.notify('Google Drive 실패 · ' + str(exc), important=True)
+            if self._close_requested:
+                self._start_close_upload()
             return
         done(result)
+        if self._close_requested and not self._cloud_busy and not self._close_uploading:
+            self._start_close_upload()
 
     def toggle_cloud_connection(self):
         if not self.cloud:
@@ -715,6 +733,7 @@ class Window(QWidget):
         return self._run_cloud(self.cloud.connect, self._after_cloud_connect, '브라우저에서 Google 로그인을 완료하세요.')
 
     def _after_cloud_disconnect(self, _result):
+        self.cloud_auto.stop()
         self._reset_cloud_state()
         self._sync_cloud_controls()
         self.notify('Google 계정 연결을 해제했습니다.', important=True)
@@ -723,16 +742,32 @@ class Window(QWidget):
         self._load_cloud_state()
         self._sync_cloud_controls()
         self.notify('Google 계정이 연결되었습니다.', important=True)
-        self.check_cloud()
+        self.startup_cloud_sync()
 
-    def check_cloud(self):
+    def startup_cloud_sync(self):
         if not self.cloud or not self.cloud.connected or self.demo or self._cloud_busy:
             return False
+        self._startup_cloud_syncing = True
+        self.pages.setEnabled(False)
         return self._run_cloud(
             self.cloud.download_save,
-            lambda envelope: self._consider_cloud_save(envelope, manual=False),
-            '클라우드 저장을 확인하는 중…',
+            self._finish_startup_cloud_sync,
+            'Google Drive 저장을 먼저 불러오는 중…',
         )
+
+    def _finish_startup_cloud_sync(self, envelope):
+        if envelope is not None:
+            self._apply_cloud_save(envelope)
+        else:
+            self.notify('Google Drive 저장이 없어 로컬 정원으로 시작합니다.')
+        self._complete_startup_cloud_sync()
+
+    def _complete_startup_cloud_sync(self):
+        self._startup_cloud_syncing = False
+        self.pages.setEnabled(True)
+        if self.cloud and self.cloud.connected and not self.demo:
+            self.cloud_auto.start()
+        self._sync_cloud_controls()
 
     @staticmethod
     def _cloud_digest(snapshot):
@@ -780,6 +815,29 @@ class Window(QWidget):
         self._sync_cloud_controls()
         if not silent:
             self.notify('Google Drive 백업 완료', important=True)
+
+    def _start_close_upload(self):
+        if not self._close_requested or self._cloud_busy or self._close_uploading:
+            return False
+        if not self.persist():
+            self._close_requested = False
+            self.pages.setEnabled(True)
+            self.cloud_auto.start()
+            return False
+        snapshot = self.garden.to_dict()
+        digest = self._cloud_digest(snapshot)
+        self._close_uploading = True
+        return self._run_cloud(
+            lambda: self.cloud.upload_save(snapshot),
+            lambda saved_at: self._finish_close_upload(saved_at, digest),
+            '종료 전 Google Drive에 백업하는 중…',
+        )
+
+    def _finish_close_upload(self, saved_at, digest):
+        self._after_cloud_backup(saved_at, digest, silent=True)
+        self._close_requested = self._close_uploading = False
+        self._closing = True
+        self.close()
 
     def restore_cloud(self):
         if not self.cloud or not self.cloud.connected or self.demo or self._cloud_busy:
@@ -1595,23 +1653,34 @@ class Window(QWidget):
         super().changeEvent(event)
 
     def closeEvent(self, event):
-        self._closing = True
-        self.close_collection_picker()
-        self._cancel_fertilizer_game()
-        self._cancel_mist_game()
-        if self.persist():
+        if self._closing:
             event.accept()
         else:
-            result = QMessageBox.question(
-                self,
-                '저장 실패',
-                '저장하지 않고 종료할까요?',
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No,
-            )
-            event.accept() if result == QMessageBox.Yes else event.ignore()
-        if not event.isAccepted():
-            self._closing = False
+            self.close_collection_picker()
+            self._cancel_fertilizer_game()
+            self._cancel_mist_game()
+            if self.persist():
+                if self.cloud and self.cloud.connected and not self.demo:
+                    event.ignore()
+                    self._close_requested = True
+                    self.pages.setEnabled(False)
+                    self.cloud_auto.stop()
+                    if not self._cloud_busy:
+                        self._start_close_upload()
+                    else:
+                        self.notify('진행 중인 Google 작업 후 종료 백업을 시작합니다.', important=True)
+                    return
+                event.accept()
+            else:
+                result = QMessageBox.question(
+                    self,
+                    '저장 실패',
+                    '저장하지 않고 종료할까요?',
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.No,
+                )
+                event.accept() if result == QMessageBox.Yes else event.ignore()
+            self._closing = event.isAccepted()
         if event.isAccepted():
             self.desktop.close()
             self.clock.stop()

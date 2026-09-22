@@ -4,13 +4,16 @@ import tempfile
 import time
 from pathlib import Path
 
-from PySide6.QtGui import QFont, QFontDatabase
+from PySide6.QtCore import QRectF, Qt
+from PySide6.QtGui import QColor, QFont, QFontDatabase, QImage, QPainter
 from PySide6.QtWidgets import QApplication
 
 from morning_bloom.app import SHOP_PAGE, Window
 from morning_bloom.desktop_flowers import DesktopFlower
 from morning_bloom.model import Garden
 from morning_bloom.storage import Store
+from morning_bloom.flower_art import paint_collection_flower
+from morning_bloom.plant_catalog import PLANTS, DAY, HOUR
 
 
 def main():
@@ -62,8 +65,45 @@ def main():
         widget.grab().save(str(args.output / 'desktop-flower-preview.png'))
         widget.timer.stop()
         widget.close()
+        owner.shop_picker.buttons['lavender'].click()
+        app.processEvents()
+        owner.grab().save(str(args.output / 'vacation-flower-shop.png'))
+        owner.shop_picker.buttons['freesia'].click()
+        app.processEvents()
+        owner.grab().save(str(args.output / 'weekend-flower-shop.png'))
+        owner.open_wind_game()
+        game = owner._wind_game
+        app.processEvents()
+        game.start()
+        game.timer.stop()
+        for _ in range(25 * 60):
+            state = game.state
+            target = next((gate['y'] for gate in state.gates if not gate['checked']), .5)
+            state.step(1 / 60, state.y + state.velocity * .65 > target)
+        game.update_controls()
+        app.processEvents()
+        game.grab().save(str(args.output / 'wind-minigame.png'))
+        game.reject()
         owner.close()
         app.processEvents()
+    image = QImage(960, 810, QImage.Format_ARGB32_Premultiplied)
+    image.fill(QColor('#f7f1e5'))
+    painter = QPainter(image)
+    painter.setRenderHint(QPainter.Antialiasing)
+    flowers = ('rose', 'lily_of_the_valley', 'clover', 'daisy', 'tulip', 'sunflower', 'lavender', 'forget_me_not',
+               'pansy', 'cosmos', 'freesia')
+    for index, key in enumerate(flowers):
+        x, y = index % 4 * 240, index // 4 * 270
+        definition = PLANTS[key]
+        paint_collection_flower(painter, QRectF(x + 40, y + 18, 160, 210), definition)
+        painter.setPen(QColor('#5b5142'))
+        painter.drawText(QRectF(x, y + 224, 240, 22), Qt.AlignCenter, definition.name)
+        duration = (f'{definition.growth_seconds // DAY}일' if definition.growth_seconds >= DAY else
+                    f'{definition.growth_seconds // HOUR}시간')
+        painter.drawText(QRectF(x, y + 248, 240, 20), Qt.AlignCenter, duration)
+    painter.end()
+    image.save(str(args.output / 'reference-flowers.png'))
+    image.copy(0, 540, 720, 270).save(str(args.output / 'weekend-flowers.png'))
     print(args.output.resolve())
 
 

@@ -18,7 +18,7 @@ from morning_bloom.desktop_flowers import DesktopFlowers, sun_positions
 from morning_bloom.desktop_host import DesktopUnavailable
 from morning_bloom.flower_art import paint_collection_flower
 from morning_bloom.model import Garden, V8_FIELDS, FERTILIZER_CAP, REWARD_INTERVAL, empty_pot
-from morning_bloom.plant_catalog import roll_mystery_seed
+from morning_bloom.plant_catalog import LEGACY_REGULAR_PLANTS, REGULAR_PLANTS, roll_mystery_seed
 from morning_bloom.storage import SaveError, Store, migrate
 
 NOW = 1_700_000_000
@@ -75,14 +75,16 @@ class RulesAndMigration(unittest.TestCase):
         for key in V8_FIELDS:
             data.pop(key)
         data.update(schema=7, fertilizer=10, reward_wait=1750, last_reward_id='old')
+        data['seeds'] = {key: data['seeds'][key] for key in LEGACY_REGULAR_PLANTS}
         raw = json.dumps(data)
         with tempfile.TemporaryDirectory() as tmp:
             store = Store(Path(tmp) / 'garden.json')
             store.path.write_text(raw, encoding='utf-8')
             upgraded = store.load(NOW)
             self.assertEqual((upgraded.fertilizer, upgraded.fertilizer_reserve, upgraded.reward_wait), (5, 5, 130))
-            for key in ('pots', 'coins', 'seeds', 'collection', 'settings', 'owned_skins'):
+            for key in ('pots', 'coins', 'collection', 'settings', 'owned_skins'):
                 self.assertEqual(upgraded.to_dict()[key], data[key])
+            self.assertEqual(upgraded.seeds, {**dict.fromkeys(REGULAR_PLANTS, 0), **data['seeds']})
             store.save(upgraded)
             self.assertEqual(store.migration_backup.name, 'garden.json.v7-migration.bak')
             self.assertEqual(store.migration_backup.read_text(encoding='utf-8'), raw)
@@ -117,6 +119,7 @@ class RulesAndMigration(unittest.TestCase):
         for key in V8_FIELDS:
             data.pop(key)
         data.update(schema=7, fertilizer=11)
+        data['seeds'] = {key: data['seeds'][key] for key in LEGACY_REGULAR_PLANTS}
         with self.assertRaises(ValueError):
             migrate(data)
 
@@ -138,12 +141,13 @@ class RulesAndMigration(unittest.TestCase):
         garden = collected()
         garden.place_desktop(garden.collection[0]['id'], -240, 100)
         data = {**garden.to_dict(), 'schema': 8}
+        data['seeds'] = {key: data['seeds'][key] for key in LEGACY_REGULAR_PLANTS}
         raw = json.dumps(data)
         with tempfile.TemporaryDirectory() as tmp:
             store = Store(Path(tmp) / 'garden.json')
             store.path.write_text(raw, encoding='utf-8')
             upgraded = store.load(NOW)
-            self.assertEqual(upgraded.to_dict(), {**data, 'schema': Garden.CURRENT_SCHEMA})
+            self.assertEqual(upgraded.to_dict(), {**garden.to_dict(), 'schema': Garden.CURRENT_SCHEMA})
             store.save(upgraded)
             self.assertEqual(store.migration_backup.name, 'garden.json.v8-migration.bak')
             self.assertEqual(store.migration_backup.read_text(encoding='utf-8'), raw)
@@ -169,6 +173,7 @@ class RulesAndMigration(unittest.TestCase):
         for key in V8_FIELDS:
             data.pop(key)
         data.update(schema=7, reward_wait=100, last_reward_id='')
+        data['seeds'] = {key: data['seeds'][key] for key in LEGACY_REGULAR_PLANTS}
         with self.assertRaises(ValueError):
             migrate(data)
 

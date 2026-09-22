@@ -9,6 +9,7 @@ import sys
 import tempfile
 import zipfile
 from pathlib import Path
+from build_icons import generate_icons
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -26,7 +27,8 @@ def main():
     repo = os.environ.get('BLOOM_RELEASE_REPO') or 'badbed7/morning-bloom'
     if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', repo): raise SystemExit('Invalid repository')
     (ROOT / 'release/release_config.py').write_text(f'REPOSITORY = {repo!r}\n')
-    common = [sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean', '--windowed', '--distpath', 'dist', '--workpath', 'build', '--specpath', 'build']
+    icon = generate_icons(ROOT / 'assets/icons')
+    common = [sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean', '--windowed', '--distpath', 'dist', '--workpath', 'build', '--specpath', 'build', '--icon', str(icon)]
     google_id = os.environ.get('GOOGLE_OAUTH_CLIENT_ID', '').strip()
     google_secret = os.environ.get('GOOGLE_OAUTH_CLIENT_SECRET', '').strip()
     if google_id and not re.fullmatch(r'[A-Za-z0-9_-]+\.apps\.googleusercontent\.com', google_id):
@@ -44,7 +46,8 @@ def main():
         run(*common, '--onedir', '--name', 'MorningBloomGame', '--paths', 'python',
             '--add-data', str(ROOT / 'assets/fonts') + ';assets/fonts', *google_args,
             'release/game_entry.py')
-    run(*common, '--onefile', '--name', 'MorningBloom', '--paths', 'release', 'release/launcher.py')
+    run(*common, '--onefile', '--name', 'MorningBloom', '--paths', 'release',
+        '--add-data', str(icon) + ';assets/icons', 'release/launcher.py')
     game = ROOT / 'dist/MorningBloomGame'
     licenses = game / 'licenses'
     licenses.mkdir(exist_ok=True)

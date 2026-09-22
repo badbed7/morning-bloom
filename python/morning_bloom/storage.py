@@ -17,7 +17,7 @@ from .model import (
     _validate_settings,
     empty_pot,
 )
-from .plant_catalog import REGULAR_PLANTS, plant_definition
+from .plant_catalog import LEGACY_REGULAR_PLANTS, V10_REGULAR_PLANTS, REGULAR_PLANTS, plant_definition
 
 
 class SaveError(Exception):
@@ -79,7 +79,7 @@ def _v3_to_v4(data):
         'tutorial_used': data['tutorial_used'],
         'tutorial_reward_claimed': data['tutorial_used'],
         'coins': data['coins'],
-        'seeds': {key: data['seeds'].get(key, 0) for key in REGULAR_PLANTS},
+        'seeds': {key: data['seeds'].get(key, 0) for key in LEGACY_REGULAR_PLANTS},
         'collection': [], 'vacation': data['vacation'],
         'settings': deepcopy(data['settings']), 'pots': [],
         'selected': data['selected'],
@@ -202,9 +202,29 @@ def _v7_to_v8(data):
 
 def _v8_to_v9(data):
     migrated = {**deepcopy(data), 'schema': 9}
-    state = Garden.from_dict(migrated)
+    state = Garden.from_dict(_v10_to_v11(_v9_to_v10(migrated)))
     if not set(state.desktop_flowers) <= {item['id'] for item in state.collection}:
         raise ValueError('v8 바탕화면 꽃 식별')
+    return migrated
+
+
+def _v9_to_v10(data):
+    seeds = data.get('seeds')
+    if not isinstance(seeds, dict) or set(seeds) != set(LEGACY_REGULAR_PLANTS):
+        raise ValueError('v9 씨앗 항목 오류')
+    migrated = {**deepcopy(data), 'schema': 10,
+                'seeds': {**dict.fromkeys(V10_REGULAR_PLANTS, 0), **seeds}}
+    _v10_to_v11(migrated)
+    return migrated
+
+
+def _v10_to_v11(data):
+    seeds = data.get('seeds')
+    if not isinstance(seeds, dict) or set(seeds) != set(V10_REGULAR_PLANTS):
+        raise ValueError('v10 씨앗 항목 오류')
+    migrated = {**deepcopy(data), 'schema': 11,
+                'seeds': {**dict.fromkeys(REGULAR_PLANTS, 0), **seeds}}
+    Garden.from_dict(migrated)
     return migrated
 
 
@@ -238,6 +258,10 @@ def migrate(data):
         migrated = _v7_to_v8(migrated)
     if migrated.get('schema') == 8:
         migrated = _v8_to_v9(migrated)
+    if migrated.get('schema') == 9:
+        migrated = _v9_to_v10(migrated)
+    if migrated.get('schema') == 10:
+        migrated = _v10_to_v11(migrated)
     return migrated
 
 
@@ -267,11 +291,11 @@ class Store:
                     raise SaveError('새 버전의 저장 파일입니다. 원본을 보존하고 앱을 업데이트하세요.')
                 migrated = migrate(data)
                 state = Garden.from_dict(migrated)
-                if isinstance(data, dict) and data.get('schema') in (1, 2, 3, 4, 5, 6, 7, 8):
+                if isinstance(data, dict) and data.get('schema') in range(1, Garden.CURRENT_SCHEMA):
                     self._migration_source = raw
-                    if data['schema'] in (5, 6, 7, 8):
+                    if data['schema'] >= 5:
                         self.migration_backup = self.path.with_suffix(f'.json.v{data["schema"]}-migration.bak')
-                    self.notice = '기존 저장을 v9로 이전했습니다. 꽃·재화·꾸미기·바탕화면 배치를 보존합니다.'
+                    self.notice = f'기존 저장을 v{Garden.CURRENT_SCHEMA}으로 이전했습니다. 꽃·재화·꾸미기·바탕화면 배치를 보존합니다.'
                 elif path == self.backup:
                     self.notice = '직전 정상 백업에서 복구했습니다.'
                 state.advance(now)

@@ -2,6 +2,8 @@
 
 현재 배포 경로는 공개 저장소 [badbed7/morning-bloom Releases](https://github.com/badbed7/morning-bloom/releases)입니다. GitHub 계정이나 토큰 없이 업데이트를 받습니다. 사용자 배포에는 MSIX를 사용하지 않습니다.
 
+빌드는 `release/build_icons.py`로 데이지 꽃머리 PNG·다중 해상도 ICO를 생성하고 게임 EXE와 런처에 포함합니다. Python BAT 묶음에도 런처용 ICO를 포함합니다. 게임 창은 같은 그림을 자체 생성하므로 소스 실행에도 아이콘이 표시됩니다.
+
 ## 사용자 실행
 
 - **Python 유지:** 최신 `MorningBloom-<버전>-Python-BAT.zip`을 전부 풀고 `run-python.bat`을 실행합니다. Python 3.12 64비트, Python Launcher와 Tcl/Tk를 한 번 설치해야 합니다. 첫 의존성 설치에는 인터넷이 필요합니다.

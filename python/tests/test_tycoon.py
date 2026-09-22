@@ -15,6 +15,7 @@ from morning_bloom.model import (
     REWARD_INTERVAL, TYCOON_POT_DEFAULTS, TYCOON_RULE, WATER_INTERVAL, V8_FIELDS,
 )
 from morning_bloom.storage import SaveError, Store, migrate
+from morning_bloom.plant_catalog import LEGACY_REGULAR_PLANTS
 
 NOW = 1_700_000_000
 
@@ -29,6 +30,7 @@ def growing(species='starflower', now=NOW):
 
 def v5_data(garden):
     data = garden.to_dict()
+    data['seeds'] = {key: data['seeds'][key] for key in LEGACY_REGULAR_PLANTS}
     for key in V8_FIELDS:
         data.pop(key)
     for key in ('fertilizer', 'reward_wait', 'last_reward_id', 'owned_skins', 'equipped_skin'):

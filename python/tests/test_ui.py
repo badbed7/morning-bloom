@@ -154,11 +154,11 @@ class UI(unittest.TestCase):
                 for side in (320, 384, 520):
                     window.setFixedSize(side, side)
                     self.app.processEvents()
-                    for button in (*window.species_picker.buttons.values(), window.plant_button):
+                    for button in (*(button for button in window.species_picker.buttons.values() if button.isVisible()), window.plant_button):
                         self.assertTrue(button.isVisible())
                         self.assertTrue(window.rect().contains(button.mapTo(window, button.rect().topLeft())))
                         self.assertTrue(window.rect().contains(button.mapTo(window, button.rect().bottomRight())))
-                    buttons = list(window.species_picker.buttons.values())
+                    buttons = [button for button in window.species_picker.buttons.values() if button.isVisible()]
                     for left, right in zip(buttons, buttons[1:]):
                         self.assertLess(left.geometry().right(), right.geometry().left())
                     window.notify('저장 실패 · 행동을 되돌렸습니다.', important=True)
@@ -171,7 +171,7 @@ class UI(unittest.TestCase):
                     window.pages.finish_transition()
                     self.app.processEvents()
                     viewport = window.pages.widget(SHOP_PAGE).findChild(QScrollArea).viewport()
-                    for button in (*window.shop_picker.buttons.values(), window.buy_seed_button):
+                    for button in (*(button for button in window.shop_picker.buttons.values() if button.isVisible()), window.buy_seed_button):
                         self.assertTrue(button.isVisible())
                         detail = (side, button.text(), button.geometry(), viewport.rect())
                         self.assertTrue(viewport.rect().contains(

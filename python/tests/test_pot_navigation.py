@@ -10,6 +10,7 @@ from PySide6.QtWidgets import QApplication, QComboBox
 
 from morning_bloom.app import POT_PAGE, SHOP_PAGE, Window
 from morning_bloom.model import Garden
+from morning_bloom.plant_catalog import REGULAR_PLANTS
 from morning_bloom.storage import SaveError, Store
 
 
@@ -60,7 +61,7 @@ class PotNavigation(unittest.TestCase):
             self.window.pages.widget(POT_PAGE).findChildren(QComboBox),
             [],
         )
-        self.assertEqual(set(self.window.species_picker.buttons), {'daisy', 'starflower', 'tulip', 'random'})
+        self.assertEqual(set(self.window.species_picker.buttons), {*REGULAR_PLANTS, 'random'})
         self.assertTrue(all(not button.icon().isNull() for button in self.window.species_picker.buttons.values()))
         self.assertEqual(self.window.pot_name.text(), '화분 1 / 2 · 데이지')
         self.assertIn('성장 중', self.window.pot_name.toolTip())

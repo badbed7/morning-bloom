@@ -10,6 +10,7 @@ import tempfile
 from pathlib import Path
 
 from build_windows import ROOT, zip_folder
+from build_icons import generate_icons
 from update_core import manifest
 
 
@@ -24,6 +25,7 @@ def main():
         raise SystemExit('GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET must be set together')
     output = ROOT / 'release-output'
     output.mkdir(exist_ok=True)
+    icon = generate_icons(ROOT / 'assets/icons')
     with tempfile.TemporaryDirectory(prefix='MorningBloom-python-build-') as temp:
         stage = Path(temp) / 'game'
         paths = list((ROOT / 'python/morning_bloom').rglob('*.py'))
@@ -44,6 +46,8 @@ def main():
         (output / 'python-update.json').write_text(json.dumps(data, indent=2), encoding='utf-8')
         bootstrap = Path(temp) / 'bootstrap'
         (bootstrap / 'release').mkdir(parents=True)
+        (bootstrap / 'assets/icons').mkdir(parents=True)
+        shutil.copyfile(icon, bootstrap / 'assets/icons/morning-bloom.ico')
         for name in ('run-python.bat', 'release/launcher.py', 'release/update_core.py', 'release/release_config.py'):
             shutil.copyfile(ROOT / name, bootstrap / name)
         (bootstrap / 'release/release_config.py').write_text(f'REPOSITORY = {repository!r}\n', encoding='utf-8')

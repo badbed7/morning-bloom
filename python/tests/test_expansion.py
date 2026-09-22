@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 
 from morning_bloom.model import DAY, HOUR, Garden, SingleGarden
+from morning_bloom.plant_catalog import REGULAR_PLANTS
 from morning_bloom.storage import SaveError, Store
 
 
@@ -93,7 +94,7 @@ class SaveMigration(unittest.TestCase):
             store = Store(Path(tmp) / 'garden.json')
             store.path.write_text(json.dumps(legacy), encoding='utf-8')
             garden = store.load(100)
-            self.assertEqual(garden.seeds, {'daisy': 2, 'starflower': 0, 'tulip': 0})
+            self.assertEqual(garden.seeds, {key: 2 if key == 'daisy' else 0 for key in REGULAR_PLANTS})
             self.assertEqual(garden.collection[0]['base_sale_g'], 50)
             self.assertEqual(garden.collection[0]['bonus_g'], 0)
 

@@ -6,6 +6,7 @@ from pathlib import Path
 from morning_bloom.cosmetics import POT_SKINS
 from morning_bloom.model import Garden, SUN_INTERVAL, SUN_PENDING_CAP, TYCOON_POT_DEFAULTS, V8_FIELDS
 from morning_bloom.storage import SaveError, Store
+from morning_bloom.plant_catalog import LEGACY_REGULAR_PLANTS, REGULAR_PLANTS
 
 
 def flower(index=0, species='daisy'):
@@ -17,6 +18,7 @@ def flower(index=0, species='daisy'):
 
 def v4_data(garden):
     data = garden.to_dict()
+    data['seeds'] = {key: data['seeds'][key] for key in LEGACY_REGULAR_PLANTS}
     for key in V8_FIELDS:
         data.pop(key)
     for key in (
@@ -152,12 +154,14 @@ class CosmeticsAndMigration(unittest.TestCase):
         data.pop('owned_skins')
         data.pop('equipped_skin')
         data['schema'] = 6
+        data['seeds'] = {key: data['seeds'][key] for key in LEGACY_REGULAR_PLANTS}
         raw = json.dumps(data, ensure_ascii=False)
         with tempfile.TemporaryDirectory() as tmp:
             store = Store(Path(tmp) / 'garden.json')
             store.path.write_text(raw, encoding='utf-8')
             garden = store.load(100)
             self.assertEqual(garden.to_dict(), {**data, **additions, 'schema': Garden.CURRENT_SCHEMA,
+                                              'seeds': {**dict.fromkeys(REGULAR_PLANTS, 0), **data['seeds']},
                                               'owned_skins': ['terracotta'], 'equipped_skin': 'terracotta'})
             store.save(garden)
             self.assertEqual(store.migration_backup.name, 'garden.json.v6-migration.bak')

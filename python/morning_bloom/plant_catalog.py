@@ -53,7 +53,48 @@ PLANTS = {
     ),
 }
 
+LEGACY_REGULAR_PLANTS = tuple(PLANTS)
+PLANTS.update({
+    'rose': PlantDefinition(
+        'rose', '장미', 3 * DAY, 50, 150, 'start_only', '겹겹이 피는 붉은 꽃 · 3일',
+        18, 26, '#f27179', '#bd485b', '#719460', '#c98c67'),
+    'lily_of_the_valley': PlantDefinition(
+        'lily_of_the_valley', '은방울꽃', 14 * DAY, 160, 560, 'start_only',
+        '휴가용 · 14일 · 접속하지 않아도 개화까지 성장',
+        15, 23, '#fff8e7', '#e8dfc9', '#70945b', '#c98c67'),
+    'clover': PlantDefinition(
+        'clover', '토끼풀', 6 * HOUR, 10, 20, 'start_only', '세 잎과 작은 흰 꽃 · 6시간',
+        15, 25, '#fff8dc', '#bfd084', '#729b5f', '#c98c67'),
+    'sunflower': PlantDefinition(
+        'sunflower', '해바라기', 5 * DAY, 75, 240, 'start_only',
+        '휴가용 · 5일 · 접속하지 않아도 개화까지 성장',
+        20, 28, '#ffd15b', '#98683d', '#6d965d', '#c98c67'),
+    'lavender': PlantDefinition(
+        'lavender', '라벤더', 7 * DAY, 100, 330, 'start_only',
+        '휴가용 · 7일 · 접속하지 않아도 개화까지 성장',
+        18, 27, '#b68bd0', '#84609e', '#719366', '#c98c67'),
+    'forget_me_not': PlantDefinition(
+        'forget_me_not', '물망초', 12 * HOUR, 15, 32, 'start_only', '파란 꽃송이와 노란 꽃심 · 12시간',
+        15, 24, '#87b7ed', '#f6d66c', '#729663', '#c98c67'),
+})
+V10_REGULAR_PLANTS = tuple(PLANTS)
+PLANTS.update({
+    'pansy': PlantDefinition(
+        'pansy', '팬지', 2 * DAY, 35, 100, 'start_only',
+        '주말용 · 2일 · 접속하지 않아도 개화까지 성장',
+        15, 23, '#a480c0', '#f7d86b', '#789965', '#c98c67'),
+    'cosmos': PlantDefinition(
+        'cosmos', '코스모스', 3 * DAY, 50, 150, 'start_only',
+        '주말용 · 3일 · 접속하지 않아도 개화까지 성장',
+        18, 26, '#f5a7c7', '#f6d65c', '#809d68', '#c98c67'),
+    'freesia': PlantDefinition(
+        'freesia', '프리지아', 4 * DAY, 65, 195, 'start_only',
+        '주말용 · 4일 · 접속하지 않아도 개화까지 성장',
+        15, 24, '#f6d45d', '#eeb945', '#799965', '#c98c67'),
+})
 REGULAR_PLANTS = tuple(PLANTS)
+WEEKEND_PLANTS = ('pansy', 'cosmos', 'freesia')
+VACATION_PLANTS = WEEKEND_PLANTS + ('sunflower', 'lavender', 'lily_of_the_valley')
 RANDOM_SEED_PRICE = 20
 PLANTS['ancient'] = PlantDefinition(
     key='ancient', name='고대 꽃', growth_seconds=2 * DAY,

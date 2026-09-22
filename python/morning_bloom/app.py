@@ -32,15 +32,17 @@ from .cosmetics import POT_SKINS, THEMES, garden_theme, pot_skin
 from .cosmetic_icons import skin_icon, theme_icon
 from .collection_picker import CollectionPicker
 from .flower_art import paint_potted_flower
+from .app_icon import daisy_icon
 from .fertilizer_game import FertilizerGame
 from .mist_game import MistGame
+from .wind_game import WindGame
 from .desktop_flowers import DesktopFlowers
 from .garden_view import CollectionGarden, sale_price
 from .google_cloud import CloudError, GoogleDriveSync
 from .model import FERTILIZER_CAP, FERTILIZER_SECONDS, POT_PRICES, TYCOON_RULE
 from .icon_picker import IconPicker
 from .navigation import SlideStack, chevron_icon
-from .plant_catalog import PLANTS, REGULAR_PLANTS, RANDOM_SEED_PRICE, plant_definition
+from .plant_catalog import PLANTS, REGULAR_PLANTS, VACATION_PLANTS, WEEKEND_PLANTS, RANDOM_SEED_PRICE, plant_definition
 from .seed_picker import SeedPicker
 from .storage import SaveError, Store
 
@@ -123,6 +125,7 @@ class Window(QWidget):
         self._action_busy = False
         self._fertilizer_game = None
         self._mist_game = None
+        self._wind_game = None
         self._collection_picker = None
         self._normal_position = QPointF(garden.settings['x'], garden.settings['y']).toPoint()
         self._minimized = False
@@ -145,6 +148,7 @@ class Window(QWidget):
         self._load_cloud_state()
         self.desktop = DesktopFlowers(self)
         self.setWindowTitle('아침 한 송이')
+        self.setWindowIcon(daisy_icon())
         self.setWindowFlags(Qt.Window | Qt.FramelessWindowHint | Qt.WindowMinimizeButtonHint)
         self.setWindowFlag(Qt.WindowStaysOnTopHint, garden.settings['topmost'])
         self._set_responsive_square()
@@ -224,6 +228,12 @@ class Window(QWidget):
         root.setSpacing(4)
         top = QHBoxLayout()
         top.setSpacing(3)
+        self.logo = QLabel()
+        self.logo.setPixmap(self.windowIcon().pixmap(22, 22))
+        self.logo.setFixedSize(22, 22)
+        self.logo.setAccessibleName('Morning Bloom 데이지')
+        self.logo.mousePressEvent = self.drag
+        top.addWidget(self.logo)
         self.title = QLabel('개발자 · 테스트 정원' if self.demo else '아침 한 송이')
         self.title.setObjectName('title')
         self.title.setMinimumWidth(0)
@@ -287,6 +297,13 @@ class Window(QWidget):
         self.footer_status.addWidget(self.inventory)
         self.footer_status.addWidget(self.message)
         footer.addWidget(footer_status, 1)
+        self.wind_button = QPushButton('바람놀이')
+        self.wind_button.setFixedWidth(66)
+        self.wind_button.setStyleSheet('padding:4px 2px;')
+        self.wind_button.setAccessibleName('홀씨 바람놀이 열기')
+        self.wind_button.setToolTip('누르고 놓아 홀씨 날리기 · 골드 보상 · 대기 없이 반복')
+        self.wind_button.clicked.connect(self.open_wind_game)
+        footer.addWidget(self.wind_button)
         self.collection_button = QPushButton()
         self.collection_button.setFixedWidth(78)
         self.collection_button.setAccessibleName('보관한 정원 꽃 목록 열기')
@@ -908,6 +925,7 @@ class Window(QWidget):
             restored = self.store.replace_from_cloud(envelope['save'], self.now())
             self.close_collection_picker()
             self.desktop.close()
+            self._cancel_wind_game()
             self.garden.restore(restored.to_dict())
             self._local_saved_at = self.store.path.stat().st_mtime
             self._cloud_last_uploaded_digest = self._cloud_digest(self.garden.to_dict())
@@ -1162,6 +1180,7 @@ class Window(QWidget):
             self._mist_game.reject()
 
     def open_mist_game(self):
+        self._cancel_wind_game()
         if self._mist_game is not None:
             self._mist_game.raise_()
             return
@@ -1207,6 +1226,7 @@ class Window(QWidget):
             self._fertilizer_game.reject()
 
     def open_fertilizer_game(self):
+        self._cancel_wind_game()
         self._cancel_mist_game()
         if not self.garden.tutorial_reward_claimed:
             self.notify('첫 꽃을 정원에 보관하면 비료 만들기가 열려요.', important=True)
@@ -1242,6 +1262,44 @@ class Window(QWidget):
 
         game.completed.connect(complete)
         game.finished.connect(lambda result: setattr(self, '_fertilizer_game', None))
+        game.open()
+        game.raise_()
+        game.activateWindow()
+        game.start_button.setFocus(Qt.OtherFocusReason)
+
+    def _cancel_wind_game(self):
+        if self._wind_game is not None:
+            self._wind_game.reject()
+
+    def open_wind_game(self):
+        if self._startup_cloud_syncing or self._close_requested or self._closing or self.cloud_start.isActive():
+            return
+        if self._wind_game is not None:
+            self._wind_game.raise_()
+            return
+        self._cancel_fertilizer_game()
+        self._cancel_mist_game()
+        game = WindGame(self)
+        self._wind_game = game
+        store, demo = self.store, self.demo
+        settled_id = None
+
+        def complete(game_id, coins):
+            nonlocal settled_id
+            if (self._wind_game is not game or self.store is not store or self.demo != demo
+                    or game_id != game.game_id or settled_id == game_id
+                    or not game.finished_game or coins != game.state.reward):
+                return
+            if coins == 0 or self.act(lambda: self.garden.reward_wind(coins)):
+                settled_id = game_id
+                game.reward_result(True, f'꽃가루 {game.state.score}점 · 골드 +{coins}G! 바로 다시 도전하세요.')
+                if coins:
+                    self.notify(f'홀씨 바람놀이 · 골드 +{coins}G', important=True)
+            else:
+                game.reward_result(False, '보상을 저장하지 못했어요. 아래 버튼으로 다시 시도하세요.')
+
+        game.completed.connect(complete)
+        game.finished.connect(lambda _: setattr(self, '_wind_game', None))
         game.open()
         game.raise_()
         game.activateWindow()
@@ -1286,6 +1344,7 @@ class Window(QWidget):
         self._cancel_fertilizer_game()
         self._cancel_mist_game()
         self.close_collection_picker()
+        self._cancel_wind_game()
         self._action_busy = True
         target_lock = None
         try:
@@ -1367,9 +1426,13 @@ class Window(QWidget):
             self._fertilizer_game.setWindowOpacity(self.windowOpacity())
         if self._mist_game is not None:
             self._mist_game.setWindowOpacity(self.windowOpacity())
+        if self._wind_game is not None:
+            self._wind_game.setWindowOpacity(self.windowOpacity())
 
     def refresh(self):
         garden = self.garden
+        self.wind_button.setEnabled(not (self._startup_cloud_syncing or self._close_requested
+                                         or self._closing or self.cloud_start.isActive()))
         self._sync_developer_controls()
         garden.advance(self.now())
         counts = {'첫 물': 0, '물': 0, '분무': 0, '개화': 0}
@@ -1523,6 +1586,9 @@ class Window(QWidget):
             f'첫 물 이후 성장 · 분무 판매 +{item.mist_bonus}G'
         )
         self.shop_info.setToolTip(item.shop_tag + '\n첫 물 후 성장 · 반복 돌봄은 선택')
+        if species in VACATION_PLANTS:
+            purpose = '주말용' if species in WEEKEND_PLANTS else '휴가용'
+            self.shop_info.setText(self.shop_info.text() + f'\n{purpose} · 접속 없이 개화까지 성장 · 휴가 모드는 꺼 두세요')
         self.buy_seed_button.setText(f'{item.name} 씨앗 구매 · {item.seed_price}G')
         self.buy_seed_button.setEnabled(garden.coins >= item.seed_price)
         if species == 'random':
@@ -1644,6 +1710,8 @@ class Window(QWidget):
         self.close_collection_picker()
         self._cancel_fertilizer_game()
         self._cancel_mist_game()
+        if self._wind_game is not None:
+            self._wind_game.pause()
         self.flower.timer.stop()
         self.collection_garden.meadow.timer.stop()
         self.persist()
@@ -1674,6 +1742,7 @@ class Window(QWidget):
             self.close_collection_picker()
             self._cancel_fertilizer_game()
             self._cancel_mist_game()
+            self._cancel_wind_game()
             if self.persist():
                 if self.cloud and self.cloud.connected and not self.demo:
                     event.ignore()
@@ -1712,8 +1781,12 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--demo', action='store_true', help='별도 테스트 정원과 설정의 +6시간 버튼')
     args = parser.parse_args()
+    if sys.platform == 'win32':
+        import ctypes
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID('badbed.MorningBloom')
     app = QApplication(sys.argv[:1])
     app.setApplicationName('MorningBloomPython')
+    app.setWindowIcon(daisy_icon())
     root = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parents[2]))
     font = root / 'assets/fonts/NotoSansKR-Subset.otf'
     if font.exists():

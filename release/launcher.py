@@ -158,6 +158,10 @@ def main():
         return 0
     root = tk.Tk()
     root.title('Morning Bloom')
+    icon_root = Path(getattr(sys, '_MEIPASS', bundle))
+    icon = icon_root / 'assets/icons/morning-bloom.ico'
+    if icon.is_file():
+        root.iconbitmap(str(icon))
     root.geometry('480x140')
     root.resizable(False, False)
     status = tk.StringVar(value='Morning Bloom 시작 중…')

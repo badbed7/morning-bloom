@@ -7,7 +7,7 @@ import math
 import secrets
 
 from .cosmetics import POT_SKINS, THEMES, garden_theme, pot_skin
-from .plant_catalog import DAY, HOUR, PLANTS, REGULAR_PLANTS, RANDOM_SEED_PRICE, plant_definition, roll_mystery_seed
+from .plant_catalog import DAY, HOUR, PLANTS, REGULAR_PLANTS, VACATION_PLANTS, RANDOM_SEED_PRICE, plant_definition, roll_mystery_seed
 
 OFFLINE_CAP = 3 * DAY
 MID_WATER_EARLY = 22 * HOUR
@@ -167,7 +167,7 @@ def _validate_legacy_collection(items):
 @dataclass
 class Garden:
     """Shared inventory with up to four independently simulated pots."""
-    CURRENT_SCHEMA: ClassVar[int] = 9
+    CURRENT_SCHEMA: ClassVar[int] = 11
 
     last_update: float
     schema: int = CURRENT_SCHEMA
@@ -201,6 +201,7 @@ class Garden:
     def __post_init__(self):
         if not self.pots:
             self.pots = [empty_pot()]
+        self.seeds = {**dict.fromkeys(REGULAR_PLANTS, 0), **self.seeds}
 
     @property
     def pot(self):
@@ -345,6 +346,12 @@ class Garden:
             return len(self.mystery_seeds)
         return self.seeds.get(species, 0)
 
+    def reward_wind(self, coins):
+        if type(coins) is not int or coins <= 0:
+            return False
+        self.coins += coins
+        return True
+
     def can_plant(self, species):
         if species not in (*REGULAR_PLANTS, 'random') or self.planted or self.vacation:
             return False
@@ -379,13 +386,15 @@ class Garden:
     def advance(self, now):
         if not _number(now) or now <= self.last_update:
             return
-        elapsed = min(now - self.last_update, OFFLINE_CAP)
+        offline = now - self.last_update
+        elapsed = min(offline, OFFLINE_CAP)
         self.last_update = now
         if self.vacation:
             return
         self.reward_wait = max(0.0, self.reward_wait - elapsed)
         for pot in self.pots:
-            self._advance_pot(pot, elapsed)
+            growth_elapsed = min(offline, pot['duration']) if pot['species'] in VACATION_PLANTS else elapsed
+            self._advance_pot(pot, growth_elapsed)
         self._advance_sunlight(elapsed, now)
 
     def _advance_sunlight(self, elapsed, now):

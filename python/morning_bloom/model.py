@@ -50,6 +50,11 @@ def empty_pot():
 POT_FIELDS = tuple(empty_pot())
 
 
+def growth_stage(pot):
+    ratio = pot['growth'] / pot['duration'] if pot['planted'] else 0
+    return sum(ratio >= value for value in (.1, .35, .7, 1))
+
+
 @dataclass
 class SingleGarden:
     """Legacy schema-two shape retained only for validated save migration."""
@@ -162,7 +167,7 @@ def _validate_legacy_collection(items):
 @dataclass
 class Garden:
     """Shared inventory with up to four independently simulated pots."""
-    CURRENT_SCHEMA: ClassVar[int] = 8
+    CURRENT_SCHEMA: ClassVar[int] = 9
 
     last_update: float
     schema: int = CURRENT_SCHEMA
@@ -247,7 +252,7 @@ class Garden:
 
     @property
     def stage(self):
-        return sum(self.ratio >= value for value in (.1, .35, .7, 1))
+        return growth_stage(self.pot)
 
     @property
     def health(self):
@@ -527,9 +532,14 @@ class Garden:
             self.seeds[species] += 1
         return True
 
+    def desktop_source(self, item_id):
+        for pot in self.pots:
+            if pot['planted'] and pot['plant_id'] == item_id:
+                return pot
+        return next((item for item in self.collection if item['id'] == item_id), None)
+
     def place_desktop(self, item_id, x, y):
-        if (not any(item['id'] == item_id for item in self.collection)
-                or not _number(x) or not _number(y)):
+        if self.desktop_source(item_id) is None or not _number(x) or not _number(y):
             return False
         self.desktop_flowers[item_id] = {'x': round(x), 'y': round(y)}
         return True
@@ -706,7 +716,8 @@ class Garden:
             raise ValueError('중복 꽃 ID')
         if not set(data['mystery_plants']) <= active_ids:
             raise ValueError('존재하지 않는 랜덤 재배')
-        if not isinstance(data['desktop_flowers'], dict) or not set(data['desktop_flowers']) <= collection_ids:
+        if (not isinstance(data['desktop_flowers'], dict)
+                or not set(data['desktop_flowers']) <= collection_ids | active_ids):
             raise ValueError('바탕화면 꽃 식별')
         for position in data['desktop_flowers'].values():
             if (not isinstance(position, dict) or set(position) != {'x', 'y'}

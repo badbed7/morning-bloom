@@ -16,7 +16,8 @@ from PySide6.QtWidgets import QApplication, QMessageBox
 from morning_bloom.app import SETTINGS_PAGE, Window
 from morning_bloom.desktop_flowers import DesktopFlowers, sun_positions
 from morning_bloom.desktop_host import DesktopUnavailable
-from morning_bloom.model import Garden, V8_FIELDS, FERTILIZER_CAP, REWARD_INTERVAL
+from morning_bloom.flower_art import paint_collection_flower
+from morning_bloom.model import Garden, V8_FIELDS, FERTILIZER_CAP, REWARD_INTERVAL, empty_pot
 from morning_bloom.plant_catalog import roll_mystery_seed
 from morning_bloom.storage import SaveError, Store, migrate
 
@@ -131,6 +132,36 @@ class RulesAndMigration(unittest.TestCase):
         self.assertFalse(garden.collect_sun(token))
         self.assertEqual(garden.sunlight, 1)
         self.assertTrue(garden.sell(flower_id))
+        self.assertEqual(garden.desktop_flowers, {})
+
+    def test_v8_migration_preserves_placements_and_backs_up_original(self):
+        garden = collected()
+        garden.place_desktop(garden.collection[0]['id'], -240, 100)
+        data = {**garden.to_dict(), 'schema': 8}
+        raw = json.dumps(data)
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Store(Path(tmp) / 'garden.json')
+            store.path.write_text(raw, encoding='utf-8')
+            upgraded = store.load(NOW)
+            self.assertEqual(upgraded.to_dict(), {**data, 'schema': Garden.CURRENT_SCHEMA})
+            store.save(upgraded)
+            self.assertEqual(store.migration_backup.name, 'garden.json.v8-migration.bak')
+            self.assertEqual(store.migration_backup.read_text(encoding='utf-8'), raw)
+            self.assertEqual(store.load(NOW).to_dict(), upgraded.to_dict())
+
+    def test_growing_desktop_reference_survives_harvest_and_rejects_empty_pot(self):
+        garden = growing()
+        item_id = garden.pot['plant_id']
+        self.assertTrue(garden.place_desktop(item_id, -320, 120))
+        garden = Garden.from_dict(garden.to_dict())
+        self.assertEqual(garden.collection, [])
+        self.assertEqual(garden.sun_tokens, [])
+        garden.growth = garden.duration
+        self.assertTrue(garden.harvest(NOW))
+        self.assertEqual(garden.desktop_flowers, {item_id: {'x': -320, 'y': 120}})
+        self.assertEqual(garden.collection[0]['id'], item_id)
+        self.assertFalse(garden.place_desktop(None, 0, 0))
+        self.assertTrue(garden.sell(item_id))
         self.assertEqual(garden.desktop_flowers, {})
 
     def test_legacy_wait_without_reward_id_is_rejected_before_shortening(self):
@@ -383,6 +414,68 @@ class InteractionTests(unittest.TestCase):
         self.assertTrue(picker.apply_action(item_id, False))
         self.assertEqual(self.window.desktop.windows, {})
         self.assertNotIn(item_id, self.garden.desktop_flowers)
+
+    def test_growing_pot_menu_float_tracks_plant_through_selection_harvest_and_sale(self):
+        item_id = self.garden.pot['plant_id']
+        with patch('morning_bloom.app.QMenu') as menu_class:
+            menu = menu_class.return_value
+            menu.exec.return_value = menu.addAction.return_value
+            self.window.flower.customContextMenuRequested.emit(QPoint(100, 80))
+            menu.addAction.assert_called_once_with('화면 맨 위에 띄우기')
+        widget = self.window.desktop.windows[item_id]
+        self.assertTrue(widget.growing)
+        self.assertEqual(widget.suns, {})
+        self.assertIn(item_id, self.store.load(NOW).desktop_flowers)
+        self.assertTrue(self.window.set_desktop_flower(item_id, True))
+        self.assertIs(self.window.desktop.windows[item_id], widget)
+
+        self.garden.pots.append(empty_pot())
+        self.garden.selected = 1
+        for ratio, stage in ((0, 0), (.1, 1), (.35, 2), (.7, 3), (1, 4)):
+            self.garden.pots[0]['growth'] = self.garden.pots[0]['duration'] * ratio
+            self.window.refresh()
+            with patch('morning_bloom.desktop_flowers.paint_collection_flower',
+                       wraps=paint_collection_flower) as paint:
+                widget.grab()
+            self.assertEqual(paint.call_args.kwargs['stage'], stage)
+        self.assertTrue(widget.growing)
+        self.assertEqual(widget.item['plant_id'], item_id)
+        self.assertFalse(self.garden.planted)
+        self.assertEqual(widget.suns, {})
+        with patch('morning_bloom.app.QMenu') as menu_class:
+            self.window.flower.customContextMenuRequested.emit(QPoint(100, 80))
+            menu_class.assert_not_called()
+
+        self.garden.selected = 0
+        self.assertTrue(self.window.act(self.window.harvest_flower))
+        self.assertIs(self.window.desktop.windows[item_id], widget)
+        self.assertFalse(widget.growing)
+        self.assertEqual(len(widget.suns), 1)
+        self.assertTrue(self.window.sell_flower(item_id))
+        self.assertNotIn(item_id, self.window.desktop.windows)
+
+    def test_growing_pot_return_restore_and_save_failure_preserve_plant(self):
+        item_id = self.garden.pot['plant_id']
+        before = deepcopy(self.garden.pot)
+        with patch.object(self.store, 'save', side_effect=SaveError('full')):
+            self.assertFalse(self.window.set_desktop_flower(item_id, True))
+        self.assertEqual(self.window.desktop.windows, {})
+        self.assertEqual(self.garden.desktop_flowers, {})
+        self.assertTrue(self.window.set_desktop_flower(item_id, True))
+        position = deepcopy(self.garden.desktop_flowers[item_id])
+        self.window.desktop.close()
+        self.garden.restore(self.store.load(NOW).to_dict())
+        self.window.desktop.sync()
+        widget = self.window.desktop.windows[item_id]
+        self.assertTrue(widget.growing)
+        self.assertEqual(widget.host.position(int(widget.winId())), (position['x'], position['y']))
+        with patch('morning_bloom.app.QMenu') as menu_class:
+            menu = menu_class.return_value
+            menu.exec.return_value = menu.addAction.return_value
+            self.window.flower.customContextMenuRequested.emit(QPoint(100, 80))
+            menu.addAction.assert_called_once_with('화분으로 돌려놓기')
+        self.assertEqual(self.window.desktop.windows, {})
+        self.assertEqual(self.garden.pot, before)
 
     def test_pot_collection_picker_handles_empty_and_large_collections(self):
         self.window.open_collection_picker()

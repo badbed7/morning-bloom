@@ -196,7 +196,15 @@ def _v7_to_v8(data):
     migrated.update(schema=8, fertilizer=min(5, data['fertilizer']),
                     fertilizer_reserve=max(0, data['fertilizer'] - 5),
                     reward_wait=max(0.0, data['reward_wait'] - 1620))
-    Garden.from_dict(migrated)
+    _v8_to_v9(migrated)
+    return migrated
+
+
+def _v8_to_v9(data):
+    migrated = {**deepcopy(data), 'schema': 9}
+    state = Garden.from_dict(migrated)
+    if not set(state.desktop_flowers) <= {item['id'] for item in state.collection}:
+        raise ValueError('v8 바탕화면 꽃 식별')
     return migrated
 
 
@@ -228,6 +236,8 @@ def migrate(data):
         migrated = _v6_to_v7(migrated)
     if migrated.get('schema') == 7:
         migrated = _v7_to_v8(migrated)
+    if migrated.get('schema') == 8:
+        migrated = _v8_to_v9(migrated)
     return migrated
 
 
@@ -257,11 +267,11 @@ class Store:
                     raise SaveError('새 버전의 저장 파일입니다. 원본을 보존하고 앱을 업데이트하세요.')
                 migrated = migrate(data)
                 state = Garden.from_dict(migrated)
-                if isinstance(data, dict) and data.get('schema') in (1, 2, 3, 4, 5, 6, 7):
+                if isinstance(data, dict) and data.get('schema') in (1, 2, 3, 4, 5, 6, 7, 8):
                     self._migration_source = raw
-                    if data['schema'] in (5, 6, 7):
+                    if data['schema'] in (5, 6, 7, 8):
                         self.migration_backup = self.path.with_suffix(f'.json.v{data["schema"]}-migration.bak')
-                    self.notice = '기존 저장을 v8로 이전했습니다. 꽃·재화·꾸미기 보존 · 초과 비료는 예비 재고로 보관합니다.'
+                    self.notice = '기존 저장을 v9로 이전했습니다. 꽃·재화·꾸미기·바탕화면 배치를 보존합니다.'
                 elif path == self.backup:
                     self.notice = '직전 정상 백업에서 복구했습니다.'
                 state.advance(now)

@@ -30,16 +30,16 @@ class NativeDesktop(unittest.TestCase):
             garden = Garden(now)
             garden.plant(now)
             garden.care('water', now)
-            garden.growth = garden.duration
-            garden.harvest(now)
             owner = Window(Store(Path(tmp) / 'garden.json'), garden)
             owner.show()
             app.processEvents()
             cover = None
             try:
-                item_id = garden.collection[0]['id']
+                item_id = garden.pot['plant_id']
                 self.assertTrue(owner.desktop.place(item_id), owner.message.text())
                 widget = owner.desktop.windows[item_id]
+                self.assertTrue(widget.growing)
+                self.assertEqual(widget.suns, {})
                 hwnd, host = int(widget.winId()), widget.host
                 app.processEvents()
                 self.assertFalse(host.api.GetParent(hwnd))
@@ -74,6 +74,10 @@ class NativeDesktop(unittest.TestCase):
                 self.assertNotEqual(host.position(hwnd), (old_x, old_y))
                 owner.desktop_opacity.setValue(45)
                 self.assertAlmostEqual(widget.windowOpacity(), .45, delta=.01)
+                garden.growth = garden.duration
+                self.assertTrue(owner.act(owner.harvest_flower))
+                self.assertIs(owner.desktop.windows[item_id], widget)
+                self.assertFalse(widget.growing)
                 point = next(iter(widget.suns.values()))
                 QTest.mouseClick(widget, Qt.LeftButton, pos=point.toPoint())
                 self.assertEqual(garden.sunlight, 1)

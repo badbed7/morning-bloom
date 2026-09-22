@@ -167,7 +167,7 @@ class PotNavigation(unittest.TestCase):
         self.assertIsNone(self.window.pot_slides._animation)
         self.assertEqual(self.window.pot_slides._overlays, [])
         self.window.previous_pot.click()
-        self.window.setFixedSize(384, 384)
+        self.window.setFixedSize(self.window.width() + 32, self.window.height() + 32)
         self.app.processEvents()
         self.assertEqual(self.window.pot_slides._overlays, [])
         self.window.next_pot.click()

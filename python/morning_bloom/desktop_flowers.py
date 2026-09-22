@@ -10,6 +10,7 @@ from PySide6.QtWidgets import QApplication, QMenu, QWidget
 
 from .desktop_host import DesktopUnavailable, WindowsDesktopHost
 from .flower_art import paint_collection_flower
+from .model import growth_stage
 from .plant_catalog import plant_definition
 
 
@@ -52,7 +53,6 @@ class DesktopFlower(QWidget):
         self.drag_start = None
         self.pressed_sun = None
         self.moved = False
-        self.setToolTip('드래그로 이동 · 햇빛 클릭 수집 · 우클릭으로 정원에 돌려놓기')
         self.timer = QTimer(self)
         self.timer.setInterval(60)
         self.timer.timeout.connect(self.animate)
@@ -61,7 +61,10 @@ class DesktopFlower(QWidget):
 
     def sync(self):
         garden = self.owner.garden
-        self.item = next((item for item in garden.collection if item['id'] == self.item_id), None)
+        self.item = garden.desktop_source(self.item_id)
+        self.growing = self.item is not None and 'plant_id' in self.item
+        self.setToolTip('드래그로 이동 · 우클릭으로 화분에 돌려놓기' if self.growing else
+                       '드래그로 이동 · 햇빛 클릭 수집 · 우클릭으로 정원에 돌려놓기')
         tokens = [token for token in garden.sun_tokens if token['source_flower_id'] == self.item_id]
         # Keep existing positions after collection so neighboring suns do not jump.
         existing = {key: point - QPointF(128, 128) for key, point in self.suns.items()}
@@ -86,7 +89,8 @@ class DesktopFlower(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
         paint_collection_flower(painter, QRectF(68, 32, 120, 182), plant_definition(self.item['species']),
-                                self.phase, self.owner.garden.equipped_skin)
+                                self.phase, self.owner.garden.equipped_skin,
+                                stage=growth_stage(self.item) if self.growing else 4)
         for point in self.suns.values():
             painter.setPen(QPen(QColor('#e4b448'), 2))
             for index in range(8):
@@ -135,7 +139,7 @@ class DesktopFlower(QWidget):
 
     def contextMenuEvent(self, event):
         menu = QMenu(self)
-        action = menu.addAction('정원으로 돌려놓기')
+        action = menu.addAction('화분으로 돌려놓기' if self.growing else '정원으로 돌려놓기')
         if menu.exec(event.globalPos()) is action:
             self.owner.act(lambda: self.owner.garden.return_desktop(self.item_id))
 
@@ -183,8 +187,8 @@ class DesktopFlowers:
         return self.ensure_floating(item_id)
 
     def ensure_floating(self, item_id):
-        if not any(item['id'] == item_id for item in self.owner.garden.collection):
-            self.owner.notify('보관한 꽃을 찾지 못했어요.', important=True)
+        if self.owner.garden.desktop_source(item_id) is None:
+            self.owner.notify('띄울 식물을 찾지 못했어요.', important=True)
             return False
         if item_id in self.owner.garden.desktop_flowers:
             position = self.owner.garden.desktop_flowers[item_id]
@@ -214,7 +218,7 @@ class DesktopFlowers:
             # act() synchronizes and may already have disposed the tentative widget.
             self.remove(item_id)
             return False
-        self.owner.notify('화면 맨 위에 꽃을 배치했어요. 우클릭하면 정원으로 돌아옵니다.', important=True)
+        self.owner.notify('화면 맨 위에 식물을 배치했어요. 우클릭하면 되돌릴 수 있어요.', important=True)
         return True
 
     def return_to_garden(self, item_id):

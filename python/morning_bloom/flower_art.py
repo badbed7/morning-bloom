@@ -67,13 +67,13 @@ def paint_potted_flower(painter, definition, stage=4, phase=0, planted=True, dro
     painter.restore()
 
 
-def paint_collection_flower(painter, rect, definition, phase=0, skin='terracotta'):
+def paint_collection_flower(painter, rect, definition, phase=0, skin='terracotta', stage=4):
     """Fit the flower itself, without the empty sides of the growing scene."""
     scale = min(rect.width() / 138, rect.height() / 190)
     painter.save()
     painter.translate(rect.center().x() - 190 * scale, rect.top() + 16 * scale)
     painter.scale(scale, scale)
-    paint_potted_flower(painter, definition, phase=phase, skin=skin)
+    paint_potted_flower(painter, definition, stage=stage, phase=phase, skin=skin)
     painter.restore()
 
 

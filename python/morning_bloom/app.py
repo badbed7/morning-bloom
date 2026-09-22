@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QMenu,
     QMessageBox,
     QProgressBar,
     QPushButton,
@@ -389,6 +390,10 @@ class Window(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
         self.flower = Flower(self.garden)
+        self.flower.setToolTip('식물을 우클릭하면 바탕화면에 띄우거나 되돌릴 수 있어요.')
+        self.flower.setFocusPolicy(Qt.StrongFocus)
+        self.flower.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.flower.customContextMenuRequested.connect(self.pot_desktop_menu)
         layout.addWidget(self.flower)
         controls_scroll = QScrollArea()
         controls_scroll.setMinimumWidth(0)
@@ -521,7 +526,7 @@ class Window(QWidget):
         desktop_hint.setWordWrap(True)
         desktop_hint.setObjectName('small')
         layout.addWidget(desktop_hint)
-        self.button(layout, '바탕화면 꽃 모두 정원으로', self.return_all_desktop)
+        self.button(layout, '바탕화면 식물 모두 되돌리기', self.return_all_desktop)
         cloud_title = QLabel('Google Drive 저장')
         cloud_title.setObjectName('section')
         layout.addWidget(cloud_title)
@@ -1086,6 +1091,16 @@ class Window(QWidget):
     def close_collection_picker(self):
         if self._collection_picker is not None:
             self._collection_picker.hide()
+
+    def pot_desktop_menu(self, position):
+        if not self.garden.planted:
+            return
+        item_id = self.garden.pot['plant_id']
+        floating = item_id not in self.garden.desktop_flowers
+        menu = QMenu(self.flower)
+        action = menu.addAction('화면 맨 위에 띄우기' if floating else '화분으로 돌려놓기')
+        if menu.exec(self.flower.mapToGlobal(position)) is action:
+            self.set_desktop_flower(item_id, floating)
 
     def set_desktop_flower(self, item_id, floating):
         if floating:

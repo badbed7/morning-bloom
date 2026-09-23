@@ -101,7 +101,7 @@ PLANTS['ancient'] = PlantDefinition(
     seed_price=0, sale_price=500, care_profile='start_only',
     shop_tag='랜덤 씨앗에서만 발견 · 0.1%',
     temperature_min=16, temperature_max=26,
-    petal_color='#b59bdc', center_color='#f6d878',
+    petal_color='#70bfe9', center_color='#e2bd6e',
     leaf_color='#659b91', pot_color='#8a759b',
 )
 

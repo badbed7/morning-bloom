@@ -2,7 +2,7 @@
 import math
 
 from PySide6.QtCore import QPointF, QRectF, Qt
-from PySide6.QtGui import QColor, QPainterPath, QPen
+from PySide6.QtGui import QColor, QLinearGradient, QPainterPath, QPen
 
 from .cosmetics import pot_skin
 
@@ -31,6 +31,8 @@ def paint_potted_flower(painter, definition, stage=4, phase=0, planted=True, dro
     painter.drawEllipse(QRectF(143, 101, 94, 12))
     if planted:
         top = 98 - stage * 18
+        if definition.key == 'ancient' and stage >= 3:
+            top += 20
         sway = math.sin(phase) * 3
         painter.setPen(QPen(QColor('#64835b'), 5, Qt.SolidLine, Qt.RoundCap))
         if not (stage >= 3 and definition.key in ('lily_of_the_valley', 'freesia')):
@@ -44,13 +46,7 @@ def paint_potted_flower(painter, definition, stage=4, phase=0, planted=True, dro
             painter.save()
             painter.translate(190 + sway, top)
             if definition.key == 'ancient':
-                painter.setPen(QPen(QColor('#d8bc6b'), 1.5))
-                painter.drawEllipse(QRectF(-33, -33, 66, 66))
-                painter.setPen(Qt.NoPen)
-                _starflower(painter, definition, stage == 4)
-                painter.rotate(36)
-                painter.scale(.65, .65)
-                _starflower(painter, definition, stage == 4)
+                _ancient(painter, definition, stage == 4, phase)
             elif definition.key == 'tulip':
                 _tulip(painter, definition, stage == 4)
             elif definition.key == 'starflower':
@@ -126,6 +122,61 @@ def _starflower(painter, definition, opened):
         painter.restore()
     painter.setBrush(QColor(definition.center_color))
     painter.drawEllipse(QRectF(-7, -7, 14, 14))
+
+
+def _ancient(painter, definition, opened, phase):
+    painter.save()
+    if not opened:
+        painter.scale(.72, .72)
+    if opened:
+        for index in range(3):
+            painter.save()
+            painter.rotate(index * 120 + phase * 18)
+            aura = QPainterPath(QPointF(-36, 9))
+            aura.cubicTo(-43, -10, -36, -27, -23, -35)
+            aura.cubicTo(-14, -41, -5, -42, 3, -38)
+            color = QColor('#e5c581')
+            color.setAlpha(95 + round(55 * (1 + math.sin(phase * 1.5 + index * 2)) / 2))
+            painter.setPen(QPen(color, 1.4, Qt.SolidLine, Qt.RoundCap))
+            painter.setBrush(Qt.NoBrush)
+            painter.drawPath(aura)
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(QColor('#fff5d0'))
+            painter.drawEllipse(QPointF(3, -38), 1.7, 1.7)
+            painter.restore()
+    painter.setPen(Qt.NoPen)
+    painter.setBrush(QColor('#d9bb78'))
+    for index in range(8):
+        painter.save()
+        painter.rotate(index * 45)
+        tip = 44 if index % 2 == 0 else 39
+        ray = QPainterPath(QPointF(0, -19))
+        ray.lineTo(-2.6, -tip + 8)
+        ray.lineTo(0, -tip)
+        ray.lineTo(2.6, -tip + 8)
+        ray.closeSubpath()
+        painter.drawPath(ray)
+        painter.restore()
+    painter.setPen(Qt.NoPen)
+    petal_color = QLinearGradient(0, -5, 0, -32)
+    petal_color.setColorAt(0, QColor('#ffffff'))
+    petal_color.setColorAt(.34, QColor('#b7e4fb'))
+    petal_color.setColorAt(.7, QColor('#7ccaf0'))
+    petal_color.setColorAt(1, QColor(definition.petal_color))
+    painter.setBrush(petal_color)
+    for index in range(8):
+        painter.save()
+        painter.rotate(index * 45)
+        petal = QPainterPath(QPointF(0, -3))
+        petal.cubicTo(-7, -9, -14, -23, 0, -31)
+        petal.cubicTo(14, -23, 7, -9, 0, -3)
+        painter.drawPath(petal)
+        painter.restore()
+    painter.setBrush(QColor(definition.center_color))
+    painter.drawEllipse(QPointF(0, 0), 8, 8)
+    painter.setBrush(QColor('#fff9e8'))
+    painter.drawEllipse(QPointF(0, 0), 4, 4)
+    painter.restore()
 
 
 def _rose(painter, definition):

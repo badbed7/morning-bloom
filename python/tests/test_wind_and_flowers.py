@@ -7,11 +7,12 @@ from pathlib import Path
 from unittest.mock import patch
 
 from PySide6.QtCore import QEvent, Qt
-from PySide6.QtGui import QIcon
+from PySide6.QtGui import QIcon, QImage, QPainter
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
 from morning_bloom.app import SHOP_PAGE, Window
+from morning_bloom.flower_art import _ancient
 from morning_bloom.model import Garden, DAY, OFFLINE_CAP
 from morning_bloom.plant_catalog import PLANTS, REGULAR_PLANTS, V10_REGULAR_PLANTS, VACATION_PLANTS, WEEKEND_PLANTS
 from morning_bloom.storage import Store, SaveError, migrate
@@ -22,6 +23,24 @@ NEW_FLOWERS = ('rose', 'lily_of_the_valley', 'clover', 'sunflower', 'lavender', 
 
 
 class NewFlowers(unittest.TestCase):
+    def test_ancient_bloom_has_blue_white_petals_and_moving_curved_aura(self):
+        def render(phase):
+            image = QImage(100, 100, QImage.Format_ARGB32_Premultiplied)
+            image.fill(Qt.transparent)
+            painter = QPainter(image)
+            painter.setRenderHint(QPainter.Antialiasing)
+            painter.translate(50, 50)
+            _ancient(painter, PLANTS['ancient'], True, phase)
+            painter.end()
+            return image
+
+        first, later = render(0), render(1.2)
+        outer = first.pixelColor(50, 25)
+        inner = first.pixelColor(50, 40)
+        self.assertGreater(outer.blue(), outer.red())
+        self.assertGreater(inner.red(), outer.red())
+        self.assertNotEqual(bytes(first.bits()), bytes(later.bits()))
+
     def test_purchase_care_offline_harvest_and_sale_for_each_new_flower(self):
         for species in NEW_FLOWERS:
             with self.subTest(species=species):

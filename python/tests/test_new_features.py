@@ -589,6 +589,25 @@ class InteractionTests(unittest.TestCase):
         self.assertTrue(self.window.pages.isEnabled())
         self.assertTrue(self.window.cloud_auto.isActive())
 
+    def test_unchanged_drive_save_does_not_prompt_again_after_startup_restore(self):
+        remote = self.garden.to_dict()
+        remote['last_update'] = NOW - 100
+        envelope = {'saved_at': NOW - 10, 'save': remote}
+        cloud = FakeCloud(envelope)
+        self.window.cloud = cloud
+        self.assertTrue(self.window._apply_cloud_save(envelope))
+        self.assertEqual(self.window._cloud_last_uploaded_digest, self.window._cloud_digest(remote))
+
+        def immediate(action, done, _message, silent_error=False):
+            self.assertTrue(silent_error)
+            done(action())
+            return True
+
+        with patch.object(self.window, '_run_cloud', side_effect=immediate), \
+                patch('morning_bloom.app.QMessageBox.question', side_effect=AssertionError('false conflict')):
+            self.assertTrue(self.window.auto_backup_cloud())
+        self.assertEqual(len(cloud.uploads), 1)
+
     def test_close_uploads_latest_save_before_finishing(self):
         cloud = FakeCloud()
         self.window.cloud = cloud

@@ -928,7 +928,7 @@ class Window(QWidget):
             self._cancel_wind_game()
             self.garden.restore(restored.to_dict())
             self._local_saved_at = self.store.path.stat().st_mtime
-            self._cloud_last_uploaded_digest = self._cloud_digest(self.garden.to_dict())
+            self._cloud_last_uploaded_digest = self._cloud_digest(envelope['save'])
             self._cloud_known_saved_at = envelope['saved_at']
             self._cloud_last_backup_at = envelope['saved_at']
             self._cloud_auto_error = False

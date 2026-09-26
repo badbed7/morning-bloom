@@ -23,7 +23,11 @@ MIST_INTERVAL = 15 * 60
 FERTILIZER_SECONDS = 10 * 60
 FERTILIZER_CAP = 5
 REWARD_INTERVAL = 3 * 60
+WIND_BASE_SECONDS = 2 * HOUR
+WIND_REWARD_GOLD = 8
+WIND_MAX_UPGRADE = 10
 V8_FIELDS = {'fertilizer_reserve', 'mystery_seeds', 'mystery_plants', 'desktop_flowers', 'desktop_opacity'}
+V12_FIELDS = {'wind_progress', 'wind_upgrade', 'last_wind_reward_id'}
 TYCOON_POT_DEFAULTS = dict(water_wait=0.0, mist_wait=0.0, water_count=0,
                            mist_count=0, fertilizer_used=0, fertilizer_limit=0)
 LEGACY_SPECIES = ('daisy', 'tulip')
@@ -167,7 +171,7 @@ def _validate_legacy_collection(items):
 @dataclass
 class Garden:
     """Shared inventory with up to four independently simulated pots."""
-    CURRENT_SCHEMA: ClassVar[int] = 11
+    CURRENT_SCHEMA: ClassVar[int] = 12
 
     last_update: float
     schema: int = CURRENT_SCHEMA
@@ -193,6 +197,9 @@ class Garden:
     fertilizer_reserve: int = 0
     reward_wait: float = 0.0
     last_reward_id: str | None = None
+    wind_progress: float = 0.0
+    wind_upgrade: int = 0
+    last_wind_reward_id: str | None = None
     vacation: bool = False
     settings: dict = field(default_factory=lambda: dict(opacity=1.0, topmost=True, x=-99999, y=-99999))
     pots: list = field(default_factory=list)
@@ -346,10 +353,23 @@ class Garden:
             return len(self.mystery_seeds)
         return self.seeds.get(species, 0)
 
-    def reward_wind(self, coins):
-        if type(coins) is not int or coins <= 0:
+    @property
+    def wind_speed(self):
+        return 2 ** self.wind_upgrade
+
+    def reward_wind(self, game_id, coins):
+        if (
+            not isinstance(game_id, str)
+            or not 1 <= len(game_id) <= 128
+            or game_id == self.last_wind_reward_id
+            or type(coins) is not int
+            or coins != WIND_REWARD_GOLD
+            or self.wind_progress < WIND_BASE_SECONDS
+        ):
             return False
         self.coins += coins
+        self.wind_progress = 0.0
+        self.last_wind_reward_id = game_id
         return True
 
     def can_plant(self, species):
@@ -686,6 +706,15 @@ class Garden:
             raise ValueError('비료 지급 기록')
         if data['reward_wait'] > 0 and data['last_reward_id'] is None:
             raise ValueError('비료 지급 기록 없음')
+        if not _number(data['wind_progress']) or not 0 <= data['wind_progress'] <= WIND_BASE_SECONDS:
+            raise ValueError('홀씨 이동 진행도')
+        if type(data['wind_upgrade']) is not int or not 0 <= data['wind_upgrade'] <= WIND_MAX_UPGRADE:
+            raise ValueError('홀씨 강화 단계')
+        if data['last_wind_reward_id'] is not None and (
+            not isinstance(data['last_wind_reward_id'], str)
+            or not 1 <= len(data['last_wind_reward_id']) <= 128
+        ):
+            raise ValueError('홀씨 보상 기록')
         if not _number(data['sun_elapsed']) or not 0 <= data['sun_elapsed'] < SUN_INTERVAL:
             raise ValueError('햇빛 생산 시간')
         if type(data['sun_cursor']) is not int or data['sun_cursor'] < 0:

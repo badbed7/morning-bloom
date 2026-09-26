@@ -17,7 +17,7 @@ from morning_bloom.app import SETTINGS_PAGE, Window
 from morning_bloom.desktop_flowers import DesktopFlowers, sun_positions
 from morning_bloom.desktop_host import DesktopUnavailable
 from morning_bloom.flower_art import paint_collection_flower
-from morning_bloom.model import Garden, V8_FIELDS, FERTILIZER_CAP, REWARD_INTERVAL, empty_pot
+from morning_bloom.model import Garden, V8_FIELDS, V12_FIELDS, FERTILIZER_CAP, REWARD_INTERVAL, empty_pot
 from morning_bloom.plant_catalog import LEGACY_REGULAR_PLANTS, REGULAR_PLANTS, roll_mystery_seed
 from morning_bloom.storage import SaveError, Store, migrate
 
@@ -72,7 +72,7 @@ class RulesAndMigration(unittest.TestCase):
     def test_v7_preserves_all_inventory_and_raw_backup(self):
         garden = growing()
         data = garden.to_dict()
-        for key in V8_FIELDS:
+        for key in V8_FIELDS | V12_FIELDS:
             data.pop(key)
         data.update(schema=7, fertilizer=10, reward_wait=1750, last_reward_id='old')
         data['seeds'] = {key: data['seeds'][key] for key in LEGACY_REGULAR_PLANTS}
@@ -116,7 +116,7 @@ class RulesAndMigration(unittest.TestCase):
 
     def test_bad_legacy_inventory_is_not_silently_clamped(self):
         data = Garden(NOW).to_dict()
-        for key in V8_FIELDS:
+        for key in V8_FIELDS | V12_FIELDS:
             data.pop(key)
         data.update(schema=7, fertilizer=11)
         data['seeds'] = {key: data['seeds'][key] for key in LEGACY_REGULAR_PLANTS}
@@ -141,6 +141,8 @@ class RulesAndMigration(unittest.TestCase):
         garden = collected()
         garden.place_desktop(garden.collection[0]['id'], -240, 100)
         data = {**garden.to_dict(), 'schema': 8}
+        for key in V12_FIELDS:
+            data.pop(key)
         data['seeds'] = {key: data['seeds'][key] for key in LEGACY_REGULAR_PLANTS}
         raw = json.dumps(data)
         with tempfile.TemporaryDirectory() as tmp:
@@ -170,7 +172,7 @@ class RulesAndMigration(unittest.TestCase):
 
     def test_legacy_wait_without_reward_id_is_rejected_before_shortening(self):
         data = Garden(NOW).to_dict()
-        for key in V8_FIELDS:
+        for key in V8_FIELDS | V12_FIELDS:
             data.pop(key)
         data.update(schema=7, reward_wait=100, last_reward_id='')
         data['seeds'] = {key: data['seeds'][key] for key in LEGACY_REGULAR_PLANTS}

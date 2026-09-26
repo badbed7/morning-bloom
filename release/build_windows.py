@@ -100,9 +100,11 @@ def main():
     zip_folder(bootstrap, output / f'MorningBloom-{release_version}-Windows-x64.zip')
     (output / 'release-notes.md').write_text(
         f'Morning Bloom {release_version}\n\n'
-        '## 버그 수정\n\n'
-        '- Google Drive 저장을 복원한 뒤 5분 자동 백업 확인 때 같은 저장을 새 변경으로 잘못 판단하여 "클라우드 저장 복원" 창이 반복되던 문제를 수정했습니다.\n'
-        '- 다른 PC에서 실제로 변경한 저장은 계속 확인합니다. 기존 정원 저장 형식과 데이터는 유지됩니다.\n\n'
+        '## 민들레 씨앗 여행 개편\n\n'
+        '- 상단 게이지 아래의 민들레 씨앗을 가장 오른쪽 빈 화분까지 누르고 이동합니다.\n'
+        '- 강화 0단계는 실제 누르기 누적 2시간이며, 진행도는 자동 저장되어 다음 실행에서 이어집니다.\n'
+        '- 화분 도착 즉시 별꽃 판매 속도의 2시간 가치인 8G를 지급하고 중복 보상을 차단합니다.\n'
+        '- 저장 v12가 진행도·강화 단계·마지막 지급 ID를 보존하며 v1~v11 저장을 자동 이전합니다.\n\n'
         '## 다운로드\n\n'
         f'- Python 실행: `MorningBloom-{release_version}-Python-BAT.zip` 전체 압축 해제 후 `run-python.bat` 실행. Python 3.12 64비트가 필요합니다.\n'
         f'- EXE 실행: `MorningBloom-{release_version}-Windows-x64.zip` 전체 압축 해제 후 `MorningBloom.exe` 실행. Python 설치가 필요 없습니다.\n'

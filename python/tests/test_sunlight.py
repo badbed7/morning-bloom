@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 from morning_bloom.cosmetics import POT_SKINS
-from morning_bloom.model import Garden, SUN_INTERVAL, SUN_PENDING_CAP, TYCOON_POT_DEFAULTS, V8_FIELDS
+from morning_bloom.model import Garden, SUN_INTERVAL, SUN_PENDING_CAP, TYCOON_POT_DEFAULTS, V8_FIELDS, V12_FIELDS
 from morning_bloom.storage import SaveError, Store
 from morning_bloom.plant_catalog import LEGACY_REGULAR_PLANTS, REGULAR_PLANTS
 
@@ -19,7 +19,7 @@ def flower(index=0, species='daisy'):
 def v4_data(garden):
     data = garden.to_dict()
     data['seeds'] = {key: data['seeds'][key] for key in LEGACY_REGULAR_PLANTS}
-    for key in V8_FIELDS:
+    for key in V8_FIELDS | V12_FIELDS:
         data.pop(key)
     for key in (
         'sunlight', 'sun_tokens', 'sun_elapsed', 'sun_cursor',
@@ -150,7 +150,7 @@ class CosmeticsAndMigration(unittest.TestCase):
     def test_v6_migration_preserves_inventory_and_creates_original_backup(self):
         data = Garden(100, coins=432, sunlight=30, fertilizer=2, collection=[flower()],
                       owned_themes=['grass', 'sky'], equipped_theme='sky').to_dict()
-        additions = {key: data.pop(key) for key in V8_FIELDS}
+        additions = {key: data.pop(key) for key in V8_FIELDS | V12_FIELDS}
         data.pop('owned_skins')
         data.pop('equipped_skin')
         data['schema'] = 6

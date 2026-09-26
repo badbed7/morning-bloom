@@ -39,7 +39,7 @@ from .wind_game import WindGame
 from .desktop_flowers import DesktopFlowers
 from .garden_view import CollectionGarden, sale_price
 from .google_cloud import CloudError, GoogleDriveSync
-from .model import FERTILIZER_CAP, FERTILIZER_SECONDS, POT_PRICES, TYCOON_RULE
+from .model import FERTILIZER_CAP, FERTILIZER_SECONDS, POT_PRICES, TYCOON_RULE, WIND_BASE_SECONDS, WIND_REWARD_GOLD
 from .icon_picker import IconPicker
 from .navigation import SlideStack, chevron_icon
 from .plant_catalog import PLANTS, REGULAR_PLANTS, VACATION_PLANTS, WEEKEND_PLANTS, RANDOM_SEED_PRICE, plant_definition
@@ -297,11 +297,11 @@ class Window(QWidget):
         self.footer_status.addWidget(self.inventory)
         self.footer_status.addWidget(self.message)
         footer.addWidget(footer_status, 1)
-        self.wind_button = QPushButton('바람놀이')
+        self.wind_button = QPushButton('씨앗여행')
         self.wind_button.setFixedWidth(66)
         self.wind_button.setStyleSheet('padding:4px 2px;')
-        self.wind_button.setAccessibleName('홀씨 바람놀이 열기')
-        self.wind_button.setToolTip('누르고 놓아 홀씨 날리기 · 골드 보상 · 대기 없이 반복')
+        self.wind_button.setAccessibleName('민들레 씨앗 화분 여행 열기')
+        self.wind_button.setToolTip(f'누적 2시간 누르기 · 화분 도착 시 {WIND_REWARD_GOLD}G · 진행도 저장')
         self.wind_button.clicked.connect(self.open_wind_game)
         footer.addWidget(self.wind_button)
         self.collection_button = QPushButton()
@@ -1279,10 +1279,18 @@ class Window(QWidget):
             return
         self._cancel_fertilizer_game()
         self._cancel_mist_game()
-        game = WindGame(self)
+        game = WindGame(self, self.garden.wind_progress, self.garden.wind_upgrade)
         self._wind_game = game
         store, demo = self.store, self.demo
         settled_id = None
+
+        def progress(value):
+            if self._wind_game is not game or self.store is not store or self.demo != demo:
+                return
+            self.garden.wind_progress = max(
+                self.garden.wind_progress,
+                min(float(WIND_BASE_SECONDS), float(value)),
+            )
 
         def complete(game_id, coins):
             nonlocal settled_id
@@ -1290,16 +1298,22 @@ class Window(QWidget):
                     or game_id != game.game_id or settled_id == game_id
                     or not game.finished_game or coins != game.state.reward):
                 return
-            if coins == 0 or self.act(lambda: self.garden.reward_wind(coins)):
+            if self.act(lambda: self.garden.reward_wind(game_id, coins)):
                 settled_id = game_id
-                game.reward_result(True, f'꽃가루 {game.state.score}점 · 골드 +{coins}G! 바로 다시 도전하세요.')
-                if coins:
-                    self.notify(f'홀씨 바람놀이 · 골드 +{coins}G', important=True)
+                game.reward_result(True, f'화분 도착 · 2시간 가치의 골드 +{coins}G!')
+                self.notify(f'민들레 씨앗 도착 · 골드 +{coins}G', important=True)
             else:
                 game.reward_result(False, '보상을 저장하지 못했어요. 아래 버튼으로 다시 시도하세요.')
 
+        def closed(_result):
+            if self._wind_game is game:
+                self._wind_game = None
+                if self.store is store and self.demo == demo and not self._closing:
+                    self.persist()
+
+        game.progressed.connect(progress)
         game.completed.connect(complete)
-        game.finished.connect(lambda _: setattr(self, '_wind_game', None))
+        game.finished.connect(closed)
         game.open()
         game.raise_()
         game.activateWindow()

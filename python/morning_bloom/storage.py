@@ -12,6 +12,7 @@ from .model import (
     SingleGarden,
     TYCOON_POT_DEFAULTS,
     V8_FIELDS,
+    V12_FIELDS,
     _number,
     _validate_legacy_collection,
     _validate_settings,
@@ -152,7 +153,7 @@ def _v4_to_v5(data):
 
 
 def _v5_to_v6(data):
-    expected = set(Garden(0).to_dict()) - V8_FIELDS - {'fertilizer', 'reward_wait', 'last_reward_id', 'owned_skins', 'equipped_skin'}
+    expected = set(Garden(0).to_dict()) - V8_FIELDS - V12_FIELDS - {'fertilizer', 'reward_wait', 'last_reward_id', 'owned_skins', 'equipped_skin'}
     old_pot_fields = set(empty_pot()) - set(TYCOON_POT_DEFAULTS)
     if (not isinstance(data, dict) or set(data) != expected or type(data.get('schema')) is not int
             or data['schema'] != 5 or not isinstance(data['pots'], list) or not 1 <= len(data['pots']) <= 2):
@@ -170,7 +171,7 @@ def _v5_to_v6(data):
 
 
 def _v6_to_v7(data):
-    expected = set(Garden(0).to_dict()) - V8_FIELDS - {'owned_skins', 'equipped_skin'}
+    expected = set(Garden(0).to_dict()) - V8_FIELDS - V12_FIELDS - {'owned_skins', 'equipped_skin'}
     if (not isinstance(data, dict) or set(data) != expected
             or type(data.get('schema')) is not int or data['schema'] != 6):
         raise ValueError('v6 저장 항목 오류')
@@ -181,7 +182,7 @@ def _v6_to_v7(data):
 
 
 def _v7_to_v8(data):
-    expected = set(Garden(0).to_dict()) - V8_FIELDS
+    expected = set(Garden(0).to_dict()) - V8_FIELDS - V12_FIELDS
     if not isinstance(data, dict) or set(data) != expected or type(data.get('schema')) is not int or data['schema'] != 7:
         raise ValueError('v7 저장 항목 오류')
     if type(data['fertilizer']) is not int or not 0 <= data['fertilizer'] <= 10:
@@ -202,7 +203,7 @@ def _v7_to_v8(data):
 
 def _v8_to_v9(data):
     migrated = {**deepcopy(data), 'schema': 9}
-    state = Garden.from_dict(_v10_to_v11(_v9_to_v10(migrated)))
+    state = Garden.from_dict(_v11_to_v12(_v10_to_v11(_v9_to_v10(migrated))))
     if not set(state.desktop_flowers) <= {item['id'] for item in state.collection}:
         raise ValueError('v8 바탕화면 꽃 식별')
     return migrated
@@ -214,7 +215,7 @@ def _v9_to_v10(data):
         raise ValueError('v9 씨앗 항목 오류')
     migrated = {**deepcopy(data), 'schema': 10,
                 'seeds': {**dict.fromkeys(V10_REGULAR_PLANTS, 0), **seeds}}
-    _v10_to_v11(migrated)
+    _v11_to_v12(_v10_to_v11(migrated))
     return migrated
 
 
@@ -224,6 +225,18 @@ def _v10_to_v11(data):
         raise ValueError('v10 씨앗 항목 오류')
     migrated = {**deepcopy(data), 'schema': 11,
                 'seeds': {**dict.fromkeys(REGULAR_PLANTS, 0), **seeds}}
+    _v11_to_v12(migrated)
+    return migrated
+
+
+def _v11_to_v12(data):
+    expected = set(Garden(0).to_dict()) - V12_FIELDS
+    if not isinstance(data, dict) or set(data) != expected or data.get('schema') != 11:
+        raise ValueError('v11 저장 항목 오류')
+    migrated = deepcopy(data)
+    defaults = Garden(0).to_dict()
+    migrated.update({key: defaults[key] for key in V12_FIELDS})
+    migrated['schema'] = 12
     Garden.from_dict(migrated)
     return migrated
 
@@ -262,6 +275,8 @@ def migrate(data):
         migrated = _v9_to_v10(migrated)
     if migrated.get('schema') == 10:
         migrated = _v10_to_v11(migrated)
+    if migrated.get('schema') == 11:
+        migrated = _v11_to_v12(migrated)
     return migrated
 
 

@@ -12,7 +12,7 @@ from PySide6.QtWidgets import QApplication
 from morning_bloom.app import Window
 from morning_bloom.model import (
     FERTILIZER_CAP, Garden, HOUR, MIST_INTERVAL, POT_PRICES,
-    REWARD_INTERVAL, TYCOON_POT_DEFAULTS, TYCOON_RULE, WATER_INTERVAL, V8_FIELDS,
+    REWARD_INTERVAL, TYCOON_POT_DEFAULTS, TYCOON_RULE, WATER_INTERVAL, V8_FIELDS, V12_FIELDS,
 )
 from morning_bloom.storage import SaveError, Store, migrate
 from morning_bloom.plant_catalog import LEGACY_REGULAR_PLANTS
@@ -31,7 +31,7 @@ def growing(species='starflower', now=NOW):
 def v5_data(garden):
     data = garden.to_dict()
     data['seeds'] = {key: data['seeds'][key] for key in LEGACY_REGULAR_PLANTS}
-    for key in V8_FIELDS:
+    for key in V8_FIELDS | V12_FIELDS:
         data.pop(key)
     for key in ('fertilizer', 'reward_wait', 'last_reward_id', 'owned_skins', 'equipped_skin'):
         data.pop(key)

@@ -207,6 +207,10 @@ class FertilizerGame(QDialog):
         self.completed.emit(self.game_id, success, self.rewarded)
 
     def eventFilter(self, watched, event):
+        if (watched is self.stop_button and event.type() == QEvent.MouseButtonPress
+                and event.button() == Qt.LeftButton and self.running):
+            self.stop_round()
+            return True
         if watched is self.stop_button and event.type() == QEvent.MouseButtonDblClick:
             # Ignore the second press of an OS double-click, not every valid
             # keyboard/mouse input inside a global half-second dead period.

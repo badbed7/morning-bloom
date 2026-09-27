@@ -14,6 +14,7 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from morning_bloom.app import SETTINGS_PAGE, Window
+from morning_bloom.google_cloud import CloudError
 from morning_bloom.desktop_flowers import DesktopFlowers, sun_positions
 from morning_bloom.desktop_host import DesktopUnavailable
 from morning_bloom.flower_art import paint_collection_flower
@@ -320,6 +321,16 @@ class InteractionTests(unittest.TestCase):
             QTest.keyClick(game, Qt.Key_Space)
             self.assertEqual(game.round, 3)
 
+    def test_fertilizer_mouse_press_stops_before_release_once(self):
+        self.window.open_fertilizer_game()
+        game = self.window._fertilizer_game
+        game.start()
+        button = game.stop_button
+        QTest.mousePress(button, Qt.LeftButton)
+        self.assertEqual(game.round, 2)
+        QTest.mouseRelease(button, Qt.LeftButton)
+        self.assertEqual(game.round, 2)
+
     def test_fertilizer_reward_wait_is_visible_and_counts_down(self):
         self.garden.reward_wait = 180
         self.garden.last_reward_id = 'visible-countdown'
@@ -403,7 +414,7 @@ class InteractionTests(unittest.TestCase):
         self.garden.growth = self.garden.duration
         self.assertTrue(self.garden.harvest(NOW))
         self.window.refresh()
-        self.assertEqual(self.window.collection_button.text(), '정원 꽃 1')
+        self.assertFalse(hasattr(self.window, 'collection_button'))
         self.window.open_collection_picker()
         self.app.processEvents()
         picker = self.window._collection_picker
@@ -540,6 +551,7 @@ class InteractionTests(unittest.TestCase):
         cloud = FakeCloud()
         self.window.cloud = cloud
         self.window._sync_cloud_controls()
+        self.window._cloud_pending_path().touch()
 
         def immediate(action, done, _message, silent_error=False):
             self.assertTrue(silent_error)
@@ -609,6 +621,7 @@ class InteractionTests(unittest.TestCase):
                 patch('morning_bloom.app.QMessageBox.question', side_effect=AssertionError('false conflict')):
             self.assertTrue(self.window.auto_backup_cloud())
         self.assertEqual(len(cloud.uploads), 1)
+        self.assertFalse(self.window._cloud_pending_path().exists())
 
     def test_close_uploads_latest_save_before_finishing(self):
         cloud = FakeCloud()
@@ -627,6 +640,39 @@ class InteractionTests(unittest.TestCase):
         self.assertFalse(event.isAccepted())
         self.assertEqual(cloud.uploads[-1]['coins'], self.window.garden.coins)
         close.assert_called_once_with()
+
+    def test_failed_close_upload_keeps_local_save_and_allows_exit(self):
+        self.window.cloud = FakeCloud()
+        self.window.garden.coins += 9
+        self.assertTrue(self.window.persist())
+        self.window._close_requested = self.window._close_uploading = True
+        self.window._cloud_busy = True
+        self.window._cloud_future = Future()
+        self.window._cloud_future.set_exception(CloudError('Token has been expired or revoked.'))
+        self.window._cloud_done = lambda _: None
+
+        with patch('morning_bloom.app.QMessageBox.warning') as warning, \
+                patch.object(self.window, 'close') as close:
+            self.window._poll_cloud()
+
+        warning.assert_called_once()
+        close.assert_called_once_with()
+        self.assertTrue(self.window._closing)
+        self.assertEqual(self.store.load(NOW).coins, self.window.garden.coins)
+        self.assertTrue(self.window._cloud_pending_path().exists())
+
+    def test_failed_close_upload_prompts_before_overwriting_local_save_on_restart(self):
+        remote = self.garden.to_dict()
+        self.garden.coins += 9
+        self.window._cloud_pending_path().touch()
+
+        with patch('morning_bloom.app.QMessageBox.question', return_value=QMessageBox.No) as question, \
+                patch.object(self.window, 'backup_cloud', return_value=True) as backup:
+            self.window._finish_startup_cloud_sync({'saved_at': NOW + 10, 'save': remote})
+
+        question.assert_called_once()
+        backup.assert_called_once_with(silent=True)
+        self.assertEqual(self.garden.coins, remote['coins'] + 9)
 
     def test_auto_backup_checks_newer_cloud_before_uploading(self):
         remote = self.garden.to_dict()

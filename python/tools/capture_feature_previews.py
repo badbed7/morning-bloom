@@ -35,7 +35,15 @@ def main():
         owner = Window(Store(Path(tmp) / 'preview.json'), garden)
         owner.setFixedSize(384, 384)
         owner.show()
+        app.processEvents()
+        owner.grab().save(str(args.output / 'pot-main.png'))
         owner.pages.setCurrentIndex(SHOP_PAGE)
+        app.processEvents()
+        owner.grab().save(str(args.output / 'shop-overview.png'))
+        owner.setFixedSize(320, 320)
+        app.processEvents()
+        owner.grab().save(str(args.output / 'shop-compact.png'))
+        owner.setFixedSize(384, 384)
         owner.shop_picker.buttons['random'].click()
         app.processEvents()
         owner.grab().save(str(args.output / 'random-seed-shop.png'))
@@ -76,10 +84,7 @@ def main():
         app.processEvents()
         game.start()
         game.timer.stop()
-        for _ in range(25 * 60):
-            state = game.state
-            target = next((gate['y'] for gate in state.gates if not gate['checked']), .5)
-            state.step(1 / 60, state.y + state.velocity * .65 > target)
+        game.state.step(25 * 60, True)
         game.update_controls()
         app.processEvents()
         game.grab().save(str(args.output / 'wind-minigame.png'))
@@ -91,7 +96,7 @@ def main():
     painter = QPainter(image)
     painter.setRenderHint(QPainter.Antialiasing)
     flowers = ('rose', 'lily_of_the_valley', 'clover', 'daisy', 'tulip', 'sunflower', 'lavender', 'forget_me_not',
-               'pansy', 'cosmos', 'freesia')
+               'pansy', 'cosmos', 'freesia', 'ancient')
     for index, key in enumerate(flowers):
         x, y = index % 4 * 240, index // 4 * 270
         definition = PLANTS[key]

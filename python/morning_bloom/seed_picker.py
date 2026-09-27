@@ -39,6 +39,8 @@ class SeedPicker(IconPicker):
         super().__init__([(key, PLANTS[key].name, seed_packet_icon(PLANTS[key]))
                           for key in REGULAR_PLANTS] + [('random', '랜덤', seed_packet_icon())])
         self.shop = shop
+        if shop:
+            self.setFixedHeight(88)
         self.page = 0
         self.page_size = 3
         self.previous = QPushButton(self)

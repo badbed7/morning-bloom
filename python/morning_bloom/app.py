@@ -9,7 +9,7 @@ from threading import Thread
 from pathlib import Path
 
 from PySide6.QtCore import QEvent, QLockFile, QPointF, QRectF, QStandardPaths, Qt, QTimer
-from PySide6.QtGui import QColor, QFont, QFontDatabase, QPainter
+from PySide6.QtGui import QColor, QFont, QFontDatabase, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -63,6 +63,30 @@ def format_duration(seconds):
     if hours:
         return f'{hours}시간 {minutes}분'
     return f'{minutes}분 {seconds}초'
+
+
+def currency_icon(sun=False):
+    pixmap = QPixmap(40, 40)
+    pixmap.setDevicePixelRatio(2)
+    pixmap.fill(Qt.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing)
+    if sun:
+        painter.setPen(QPen(QColor('#d69a2c'), 1.5))
+        for x1, y1, x2, y2 in ((10, 1, 10, 4), (10, 16, 10, 19),
+                                (1, 10, 4, 10), (16, 10, 19, 10),
+                                (3, 3, 5, 5), (15, 15, 17, 17),
+                                (3, 17, 5, 15), (15, 5, 17, 3)):
+            painter.drawLine(x1, y1, x2, y2)
+        painter.setBrush(QColor('#ffd65a'))
+        painter.drawEllipse(QRectF(5, 5, 10, 10))
+    else:
+        painter.setPen(QPen(QColor('#aa782e'), 1.3))
+        painter.setBrush(QColor('#e7bd67'))
+        painter.drawEllipse(QRectF(2, 2, 16, 16))
+        painter.drawText(QRectF(2, 2, 16, 16), Qt.AlignCenter, 'G')
+    painter.end()
+    return pixmap
 
 
 class Flower(QWidget):
@@ -304,11 +328,6 @@ class Window(QWidget):
         self.wind_button.setToolTip(f'누적 2시간 누르기 · 화분 도착 시 {WIND_REWARD_GOLD}G · 진행도 저장')
         self.wind_button.clicked.connect(self.open_wind_game)
         footer.addWidget(self.wind_button)
-        self.collection_button = QPushButton()
-        self.collection_button.setFixedWidth(78)
-        self.collection_button.setAccessibleName('보관한 정원 꽃 목록 열기')
-        self.collection_button.clicked.connect(self.open_collection_picker)
-        footer.addWidget(self.collection_button)
         self.settings_button = QPushButton('설정')
         self.settings_button.setFixedWidth(72)
         self.settings_button.setAccessibleName('설정 열기 또는 이전 화면으로 돌아가기')
@@ -336,7 +355,6 @@ class Window(QWidget):
         self.previous_page.setEnabled(not is_settings)
         self.next_page.setEnabled(not is_settings)
         self.settings_button.setText('돌아가기' if is_settings else '설정')
-        self.collection_button.setVisible(index == POT_PAGE)
         if not is_settings:
             self.previous_page.setToolTip(MAIN_PAGE_NAMES[(index - 1) % 3] + '으로 이동')
             self.next_page.setToolTip(MAIN_PAGE_NAMES[(index + 1) % 3] + '으로 이동')
@@ -604,6 +622,18 @@ class Window(QWidget):
         path = getattr(self.store, 'path', None)
         return path.with_suffix('.cloud-sync.json') if path is not None else None
 
+    def _cloud_pending_path(self):
+        path = self._cloud_state_path()
+        return path.with_suffix('.pending') if path is not None else None
+
+    def _clear_cloud_pending(self):
+        path = self._cloud_pending_path()
+        if path is not None:
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                pass
+
     def _cloud_account_key(self):
         email = (self.cloud.email if self.cloud and self.cloud.connected else '').strip().casefold()
         return hashlib.sha256(email.encode('utf-8')).hexdigest() if email else ''
@@ -727,9 +757,18 @@ class Window(QWidget):
                 self._complete_startup_cloud_sync()
             if self._close_uploading:
                 self._close_uploading = self._close_requested = False
-                self.pages.setEnabled(True)
-                self.cloud_auto.start()
-                self.notify('종료 전 Google Drive 백업 실패 · ' + str(exc), important=True)
+                pending = self._cloud_pending_path()
+                if pending is not None:
+                    try:
+                        pending.touch()
+                    except OSError:
+                        pass
+                QMessageBox.warning(
+                    self, 'Google Drive 백업 실패',
+                    f'{exc}\n\n로컬 정원은 저장했습니다. Google 계정을 다시 연결한 뒤 백업하세요.',
+                )
+                self._closing = True
+                self.close()
                 return
             if silent_error:
                 self._cloud_auto_error = True
@@ -779,7 +818,12 @@ class Window(QWidget):
 
     def _finish_startup_cloud_sync(self, envelope):
         if envelope is not None:
-            self._apply_cloud_save(envelope)
+            pending = self._cloud_pending_path()
+            if (pending is not None and pending.exists()
+                    and self._cloud_digest(self.garden.to_dict()) != self._cloud_digest(envelope['save'])):
+                self._consider_cloud_save(envelope, manual=True)
+            else:
+                self._apply_cloud_save(envelope)
         else:
             self.notify('Google Drive 저장이 없어 로컬 정원으로 시작합니다.')
         self._complete_startup_cloud_sync()
@@ -834,6 +878,7 @@ class Window(QWidget):
         self._cloud_last_backup_at = saved_at
         self._cloud_auto_error = False
         self._save_cloud_state()
+        self._clear_cloud_pending()
         self._sync_cloud_controls()
         if not silent:
             self.notify('Google Drive 백업 완료', important=True)
@@ -933,6 +978,7 @@ class Window(QWidget):
             self._cloud_last_backup_at = envelope['saved_at']
             self._cloud_auto_error = False
             self._save_cloud_state()
+            self._clear_cloud_pending()
             self._apply_session_settings()
             self.refresh()
             self.notify('Google Drive 저장을 복원했습니다.', important=True)
@@ -945,9 +991,22 @@ class Window(QWidget):
         page, layout = self._scrollable_page()
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(6)
-        self.shop_wallet = QLabel()
-        self.shop_wallet.setObjectName('small')
-        layout.addWidget(self.shop_wallet)
+        wallet = QHBoxLayout()
+        wallet.setSpacing(5)
+        for name, icon in (('gold', currency_icon()), ('sunlight', currency_icon(True)),
+                           ('pots', skin_icon(POT_SKINS['terracotta']).pixmap(20, 20))):
+            icon_label = QLabel()
+            icon_label.setPixmap(icon)
+            icon_label.setFixedSize(20, 20)
+            icon_label.setToolTip({'gold': '골드', 'sunlight': '햇빛', 'pots': '화분'}[name])
+            wallet.addWidget(icon_label)
+            value = QLabel()
+            value.setStyleSheet('font-size:14px;font-weight:600;color:#705a40;')
+            wallet.addWidget(value)
+            setattr(self, 'shop_' + name, value)
+            wallet.addSpacing(8)
+        wallet.addStretch()
+        layout.addLayout(wallet)
         seed_title = QLabel('재배 상점 · 골드')
         seed_title.setObjectName('section')
         layout.addWidget(seed_title)
@@ -1575,7 +1634,6 @@ class Window(QWidget):
         seeds = ' / '.join(f'{PLANTS[key].name} {garden.seed_count(key)}' for key in REGULAR_PLANTS)
         seeds += f' / 랜덤 {len(garden.mystery_seeds)}'
         self.inventory.setToolTip(f'씨앗 {seeds} · 보관 꽃 {len(garden.collection)}')
-        self.collection_button.setText(f'정원 꽃 {len(garden.collection)}')
         if self._collection_picker is not None and self._collection_picker.isVisible():
             self._collection_picker.sync()
         count = len(garden.pots)
@@ -1590,9 +1648,12 @@ class Window(QWidget):
                 f'화분 {target + 1}로 이동' if 0 <= target < count else
                 '첫 화분이에요' if direction < 0 else '마지막 화분이에요'
             )
-        self.shop_wallet.setText(
-            f'보유 {garden.coins}G · 햇빛 {garden.sunlight} · 화분 {len(garden.pots)}/{len(POT_PRICES)}개'
-        )
+        self.shop_gold.setText(f'{garden.coins}G')
+        self.shop_gold.setAccessibleName(f'골드 {garden.coins}G')
+        self.shop_sunlight.setText(str(garden.sunlight))
+        self.shop_sunlight.setAccessibleName(f'햇빛 {garden.sunlight}')
+        self.shop_pots.setText(f'{len(garden.pots)}/{len(POT_PRICES)}')
+        self.shop_pots.setAccessibleName(f'화분 {len(garden.pots)}/{len(POT_PRICES)}')
         species = self.shop_picker.selected
         item = plant_definition('daisy' if species == 'random' else species)
         self.shop_info.setText(

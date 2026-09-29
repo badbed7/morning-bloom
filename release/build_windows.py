@@ -100,11 +100,11 @@ def main():
     zip_folder(bootstrap, output / f'MorningBloom-{release_version}-Windows-x64.zip')
     (output / 'release-notes.md').write_text(
         f'Morning Bloom {release_version}\n\n'
-        '## 민들레 씨앗 여행 개편\n\n'
-        '- 상단 게이지 아래의 민들레 씨앗을 가장 오른쪽 빈 화분까지 누르고 이동합니다.\n'
-        '- 강화 0단계는 실제 누르기 누적 2시간이며, 진행도는 자동 저장되어 다음 실행에서 이어집니다.\n'
-        '- 화분 도착 즉시 별꽃 판매 속도의 2시간 가치인 8G를 지급하고 중복 보상을 차단합니다.\n'
-        '- 저장 v12가 진행도·강화 단계·마지막 지급 ID를 보존하며 v1~v11 저장을 자동 이전합니다.\n\n'
+        '## 홀씨 바람놀이 개편\n\n'
+        '- 누르면 홀씨가 상승하고 놓으면 내려옵니다. 천장·바닥에 닿아도 계속 날 수 있습니다.\n'
+        '- 시작 후 활성 비행 시간은 손을 놓아도 누적됩니다. 누적 1시간에 민들레 1송이와 햇빛 1개를 받습니다.\n'
+        '- 고리 10개마다 1G를 지급하고, 고리 적립 수와 진행도를 다음 실행까지 보존합니다.\n'
+        '- 저장 v13은 v12의 진행 비율을 보존해 이전하며, 중복 보상과 저장 실패를 처리합니다.\n\n'
         '## 다운로드\n\n'
         f'- Python 실행: `MorningBloom-{release_version}-Python-BAT.zip` 전체 압축 해제 후 `run-python.bat` 실행. Python 3.12 64비트가 필요합니다.\n'
         f'- EXE 실행: `MorningBloom-{release_version}-Windows-x64.zip` 전체 압축 해제 후 `MorningBloom.exe` 실행. Python 설치가 필요 없습니다.\n'

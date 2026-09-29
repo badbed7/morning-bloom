@@ -13,7 +13,7 @@ from PySide6.QtWidgets import QApplication
 from morning_bloom.app import SHOP_PAGE, Window
 from morning_bloom.flower_art import _ancient
 from morning_bloom.model import (
-    Garden, DAY, OFFLINE_CAP, V12_FIELDS, WIND_BASE_SECONDS, WIND_REWARD_GOLD,
+    Garden, DAY, OFFLINE_CAP, V12_FIELDS, V13_FIELDS, WIND_BASE_SECONDS,
 )
 from morning_bloom.plant_catalog import PLANTS, REGULAR_PLANTS, V10_REGULAR_PLANTS, VACATION_PLANTS, WEEKEND_PLANTS
 from morning_bloom.storage import Store, SaveError, migrate
@@ -81,14 +81,14 @@ class NewFlowers(unittest.TestCase):
 
     def test_v9_save_and_cloud_upgrade_preserve_every_existing_value(self):
         original = Garden(NOW, coins=456, sunlight=23).to_dict()
-        for key in V12_FIELDS:
+        for key in V12_FIELDS | V13_FIELDS:
             original.pop(key)
         original['schema'] = 9
         original['seeds'] = dict(daisy=2, starflower=4, tulip=6)
         defaults = Garden(0).to_dict()
         expected = {**original, 'schema': Garden.CURRENT_SCHEMA,
                     'seeds': {**dict.fromkeys(REGULAR_PLANTS, 0), **original['seeds']},
-                    **{key: defaults[key] for key in V12_FIELDS}}
+                    **{key: defaults[key] for key in V12_FIELDS | V13_FIELDS}}
         raw = json.dumps(original)
         with tempfile.TemporaryDirectory() as tmp:
             store = Store(Path(tmp) / 'garden.json')
@@ -134,7 +134,7 @@ class NewFlowers(unittest.TestCase):
         garden.care('water', NOW)
         garden.place_desktop(garden.pot['plant_id'], -320, 120)
         original = garden.to_dict()
-        for key in V12_FIELDS:
+        for key in V12_FIELDS | V13_FIELDS:
             original.pop(key)
         original.update(schema=10, seeds={key: garden.seeds[key] for key in V10_REGULAR_PLANTS})
         raw = json.dumps(original)
@@ -155,50 +155,96 @@ class NewFlowers(unittest.TestCase):
 
     def test_v11_upgrade_adds_saved_wind_journey_fields(self):
         old = Garden(NOW, coins=432).to_dict()
-        for key in V12_FIELDS:
+        for key in V12_FIELDS | V13_FIELDS:
             old.pop(key)
         old['schema'] = 11
         upgraded = migrate(old)
         self.assertEqual(upgraded['schema'], Garden.CURRENT_SCHEMA)
         self.assertEqual((upgraded['wind_progress'], upgraded['wind_upgrade'], upgraded['last_wind_reward_id']),
                          (0.0, 0, None))
+        self.assertEqual(upgraded['wind_ring_hits'], 0)
         self.assertEqual(upgraded['coins'], 432)
+
+    def test_v12_progress_keeps_percentage_and_uses_one_hour_target(self):
+        old = Garden(NOW, wind_progress=1800, wind_upgrade=3, coins=432).to_dict()
+        old.pop('wind_ring_hits')
+        old.update(schema=12, wind_progress=3600)
+        upgraded = migrate(old)
+        self.assertEqual((upgraded['wind_progress'], upgraded['wind_upgrade'], upgraded['wind_ring_hits']),
+                         (1800, 3, 0))
+        self.assertEqual(upgraded['coins'], 432)
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Store(Path(tmp) / 'garden.json')
+            store.path.write_text(json.dumps(old), encoding='utf-8')
+            self.assertEqual(store.load(NOW).wind_progress, 1800)
+            store.save(store.load(NOW))
+            self.assertEqual(store.migration_backup.name, 'garden.json.v12-migration.bak')
 
 
 class WindPhysics(unittest.TestCase):
-    def test_base_journey_requires_two_hours_of_pressed_time(self):
+    def test_progress_counts_flight_without_holding_and_bounces_at_edges(self):
         state = WindState()
-        self.assertFalse(state.step(WIND_BASE_SECONDS, False))
-        self.assertEqual(state.progress, 0)
-        self.assertTrue(state.step(WIND_BASE_SECONDS - 1, True))
-        self.assertFalse(state.ended)
-        self.assertEqual(state.reward, 0)
-        self.assertTrue(state.step(1, True))
+        state.press()
+        self.assertLess(state.velocity, 0)
+        state.step(.1, False)
+        self.assertGreater(state.progress, 0)
+        self.assertLess(state.y, .5)
+        state.y = .944
+        state.velocity = 2
+        state.step(.1, False)
+        self.assertLessEqual(state.y, .945)
+        self.assertLess(state.velocity, 0)
+        state.y = .056
+        state.velocity = -2
+        state.step(.1, True)
+        self.assertGreaterEqual(state.y, .055)
+        self.assertGreater(state.velocity, 0)
+        state.progress = WIND_BASE_SECONDS - .05
+        state.step(.1, False)
         self.assertTrue(state.ended)
-        self.assertEqual((state.progress, state.reward), (WIND_BASE_SECONDS, WIND_REWARD_GOLD))
+        self.assertEqual(state.progress, WIND_BASE_SECONDS)
 
-    def test_upgrade_multiplies_pressed_progress_but_base_distance_stays_fixed(self):
+    def test_old_upgrade_does_not_shorten_new_target(self):
         state = WindState(upgrade=1)
-        state.step(WIND_BASE_SECONDS / 2, True)
-        self.assertTrue(state.ended)
-        self.assertEqual(state.speed, 2)
+        state.step(.1, True)
+        self.assertAlmostEqual(state.progress, .1)
 
     def test_invalid_time_and_post_arrival_input_do_not_change_progress(self):
         state = WindState()
         for seconds in (float('nan'), float('inf'), -1):
-            self.assertFalse(state.step(seconds, True))
-        state.step(WIND_BASE_SECONDS, True)
+            self.assertEqual(state.step(seconds, True), 0)
+        state.progress = WIND_BASE_SECONDS - .1
+        state.step(.1, True)
         before = state.progress
-        self.assertFalse(state.step(10, True))
+        self.assertEqual(state.step(10, True), 0)
         self.assertEqual(state.progress, before)
+
+    def test_ring_contact_once_and_persistent_ten_ring_reward(self):
+        state = WindState(hits=9)
+        state.gates = [dict(x=state.player_x + .02, y=state.y, collected=False)]
+        self.assertEqual(state.step(.1, False), 1)
+        self.assertEqual(state.step(.1, False), 0)
+        garden = Garden(NOW, wind_ring_hits=9)
+        self.assertTrue(garden.reward_wind_ring(state.hits))
+        self.assertEqual((garden.coins, garden.wind_ring_hits), (121, 10))
+        self.assertFalse(garden.reward_wind_ring(10))
+        self.assertEqual(Garden.from_dict(garden.to_dict()).wind_ring_hits, 10)
 
     def test_arrival_reward_is_saved_once_and_resets_progress(self):
         garden = Garden(NOW, wind_progress=WIND_BASE_SECONDS)
-        self.assertTrue(garden.reward_wind('arrival', WIND_REWARD_GOLD))
-        self.assertEqual((garden.coins, garden.wind_progress), (120 + WIND_REWARD_GOLD, 0))
-        self.assertFalse(garden.reward_wind('arrival', WIND_REWARD_GOLD))
-        self.assertFalse(garden.reward_wind('other', WIND_REWARD_GOLD - 1))
+        self.assertTrue(garden.complete_wind('arrival', NOW))
+        self.assertEqual((garden.sunlight, garden.wind_progress, garden.collection[0]['species']),
+                         (1, 0, 'dandelion'))
+        self.assertEqual(garden.sun_tokens, [])
+        self.assertFalse(garden.complete_wind('arrival', NOW))
+        self.assertFalse(garden.complete_wind('other', NOW))
         self.assertEqual(Garden.from_dict(garden.to_dict()).last_wind_reward_id, 'arrival')
+        self.assertNotIn('dandelion', REGULAR_PLANTS)
+        self.assertFalse(garden.buy_seed('dandelion'))
+        garden.advance(NOW + 1200)
+        self.assertEqual(len(garden.sun_tokens), 1)
+        self.assertTrue(garden.sell(garden.collection[0]['id']))
+        self.assertEqual(garden.coins, 121)
 
 
 class ContentUI(unittest.TestCase):
@@ -293,35 +339,60 @@ class ContentUI(unittest.TestCase):
         self.assertEqual(self.garden.coins, 120)
 
     def arrive(self, game):
-        game.state.progress = WIND_BASE_SECONDS - 1
+        game.state.progress = WIND_BASE_SECONDS - .05
         self.garden.wind_progress = game.state.progress
-        game.held_sources.add('button')
         game.last_tick = 100
-        with patch('morning_bloom.wind_game.time.monotonic', return_value=101):
+        with patch('morning_bloom.wind_game.time.monotonic', return_value=100.1):
             game.tick()
 
     def test_rewards_save_once_allow_immediate_replay_and_retry_failed_save(self):
         game = self.game()
         self.arrive(game)
-        self.assertEqual(self.garden.coins, 120 + WIND_REWARD_GOLD)
+        self.assertEqual((self.garden.coins, self.garden.sunlight, len(self.garden.collection)), (120, 1, 1))
         old_id = game.game_id
-        game.completed.emit(old_id, WIND_REWARD_GOLD)
-        self.assertEqual(self.store.load(NOW).coins, 120 + WIND_REWARD_GOLD)
+        game.completed.emit(old_id)
+        self.assertEqual(len(self.store.load(NOW).collection), 1)
         game.start_button.click()
         game.timer.stop()
         self.assertNotEqual(game.game_id, old_id)
-        game.completed.emit(old_id, WIND_REWARD_GOLD)
-        self.assertEqual(self.garden.coins, 120 + WIND_REWARD_GOLD)
+        game.completed.emit(old_id)
+        self.assertEqual(len(self.garden.collection), 1)
         with patch.object(self.store, 'save', side_effect=SaveError('full')):
             self.arrive(game)
-        self.assertEqual(self.garden.coins, 120 + WIND_REWARD_GOLD)
+        self.assertEqual(len(self.garden.collection), 1)
         self.assertTrue(game.reward_pending)
         self.assertEqual(self.garden.wind_progress, WIND_BASE_SECONDS)
         game.start_button.click()
         self.assertFalse(game.reward_pending)
-        self.assertEqual(self.store.load(NOW).coins, 120 + 2 * WIND_REWARD_GOLD)
-        game.completed.emit(game.game_id, WIND_REWARD_GOLD)
-        self.assertEqual(self.garden.coins, 120 + 2 * WIND_REWARD_GOLD)
+        self.assertEqual(len(self.store.load(NOW).collection), 2)
+        game.completed.emit(game.game_id)
+        self.assertEqual(len(self.garden.collection), 2)
+
+    def test_ring_gold_saves_once_and_retries_failed_save(self):
+        self.garden.wind_ring_hits = 9
+        self.window.persist()
+        game = self.game()
+        game.state.hits = 9
+        game.state.gates = [dict(x=game.state.player_x + .02, y=game.state.y, collected=False)]
+        game.last_tick = 100
+        with patch('morning_bloom.wind_game.time.monotonic', return_value=100.1):
+            game.tick()
+        self.assertEqual((self.garden.coins, self.garden.wind_ring_hits), (121, 10))
+        self.assertEqual(self.store.load(NOW).wind_ring_hits, 10)
+        game.ring_collected.emit(game.game_id, 10)
+        self.assertEqual(self.garden.coins, 121)
+        self.garden.wind_ring_hits = 19
+        game.state.hits = 19
+        game.state.gates = [dict(x=game.state.player_x + .02, y=game.state.y, collected=False)]
+        game.last_tick = 200
+        with patch.object(self.store, 'save', side_effect=SaveError('full')):
+            with patch('morning_bloom.wind_game.time.monotonic', return_value=200.1):
+                game.tick()
+        self.assertTrue(game.ring_pending)
+        self.assertEqual((self.garden.coins, self.garden.wind_ring_hits), (121, 19))
+        game.start_button.click()
+        self.assertFalse(game.ring_pending)
+        self.assertEqual((self.store.load(NOW).coins, self.store.load(NOW).wind_ring_hits), (122, 20))
 
     def test_garden_switch_closes_game_and_icons_have_transparent_background(self):
         game = self.game()

@@ -104,6 +104,13 @@ PLANTS['ancient'] = PlantDefinition(
     petal_color='#70bfe9', center_color='#e2bd6e',
     leaf_color='#659b91', pot_color='#8a759b',
 )
+PLANTS['dandelion'] = PlantDefinition(
+    key='dandelion', name='민들레', growth_seconds=DAY,
+    seed_price=0, sale_price=1, care_profile='start_only',
+    shop_tag='홀씨 바람놀이 완료 보상', temperature_min=15, temperature_max=25,
+    petal_color='#f5cf4d', center_color='#dfa943',
+    leaf_color='#719d58', pot_color='#c98c67',
+)
 
 
 def roll_mystery_seed(draw):

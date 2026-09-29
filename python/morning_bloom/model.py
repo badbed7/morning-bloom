@@ -23,11 +23,12 @@ MIST_INTERVAL = 15 * 60
 FERTILIZER_SECONDS = 10 * 60
 FERTILIZER_CAP = 5
 REWARD_INTERVAL = 3 * 60
-WIND_BASE_SECONDS = 2 * HOUR
-WIND_REWARD_GOLD = 8
+WIND_BASE_SECONDS = HOUR
+WIND_RINGS_PER_GOLD = 10
 WIND_MAX_UPGRADE = 10
 V8_FIELDS = {'fertilizer_reserve', 'mystery_seeds', 'mystery_plants', 'desktop_flowers', 'desktop_opacity'}
 V12_FIELDS = {'wind_progress', 'wind_upgrade', 'last_wind_reward_id'}
+V13_FIELDS = {'wind_ring_hits'}
 TYCOON_POT_DEFAULTS = dict(water_wait=0.0, mist_wait=0.0, water_count=0,
                            mist_count=0, fertilizer_used=0, fertilizer_limit=0)
 LEGACY_SPECIES = ('daisy', 'tulip')
@@ -171,7 +172,7 @@ def _validate_legacy_collection(items):
 @dataclass
 class Garden:
     """Shared inventory with up to four independently simulated pots."""
-    CURRENT_SCHEMA: ClassVar[int] = 12
+    CURRENT_SCHEMA: ClassVar[int] = 13
 
     last_update: float
     schema: int = CURRENT_SCHEMA
@@ -200,6 +201,7 @@ class Garden:
     wind_progress: float = 0.0
     wind_upgrade: int = 0
     last_wind_reward_id: str | None = None
+    wind_ring_hits: int = 0
     vacation: bool = False
     settings: dict = field(default_factory=lambda: dict(opacity=1.0, topmost=True, x=-99999, y=-99999))
     pots: list = field(default_factory=list)
@@ -353,21 +355,34 @@ class Garden:
             return len(self.mystery_seeds)
         return self.seeds.get(species, 0)
 
-    @property
-    def wind_speed(self):
-        return 2 ** self.wind_upgrade
+    def reward_wind_ring(self, total_hits):
+        if type(total_hits) is not int or total_hits != self.wind_ring_hits + 1:
+            return False
+        self.wind_ring_hits = total_hits
+        if total_hits % WIND_RINGS_PER_GOLD == 0:
+            self.coins += 1
+        return True
 
-    def reward_wind(self, game_id, coins):
+    def complete_wind(self, game_id, now):
         if (
             not isinstance(game_id, str)
             or not 1 <= len(game_id) <= 128
             or game_id == self.last_wind_reward_id
-            or type(coins) is not int
-            or coins != WIND_REWARD_GOLD
             or self.wind_progress < WIND_BASE_SECONDS
+            or not _number(now) or now < 0
         ):
             return False
-        self.coins += coins
+        self.advance(now)
+        was_empty = not self.collection
+        self.collection.append({
+            'id': str(uuid4()), 'species': 'dandelion', 'harvested_at': self.last_update,
+            'base_sale_g': 1, 'misted': False, 'bonus_g': 0,
+        })
+        if was_empty:
+            self.sun_elapsed = 0.0
+        # Completion grants one sunlight directly; skip the first-harvest bonus token.
+        self.sun_intro_claimed = True
+        self.sunlight += 1
         self.wind_progress = 0.0
         self.last_wind_reward_id = game_id
         return True
@@ -710,6 +725,8 @@ class Garden:
             raise ValueError('홀씨 이동 진행도')
         if type(data['wind_upgrade']) is not int or not 0 <= data['wind_upgrade'] <= WIND_MAX_UPGRADE:
             raise ValueError('홀씨 강화 단계')
+        if type(data['wind_ring_hits']) is not int or data['wind_ring_hits'] < 0:
+            raise ValueError('홀씨 고리 횟수')
         if data['last_wind_reward_id'] is not None and (
             not isinstance(data['last_wind_reward_id'], str)
             or not 1 <= len(data['last_wind_reward_id']) <= 128

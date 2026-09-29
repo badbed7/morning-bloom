@@ -39,14 +39,18 @@ def paint_potted_flower(painter, definition, stage=4, phase=0, planted=True, dro
             painter.drawLine(QPointF(190, 106), QPointF(190 + sway, top))
         painter.setPen(Qt.NoPen)
         painter.setBrush(QColor(definition.leaf_color))
-        if stage and not (stage >= 3 and definition.key in ('lily_of_the_valley', 'clover', 'lavender', 'cosmos', 'freesia')):
+        if stage and not (stage >= 3 and definition.key in ('lily_of_the_valley', 'clover', 'lavender', 'cosmos', 'freesia', 'dandelion')):
             _leaf(painter, 190 + sway, 106, -45, 24 + stage * 6, 15)
             _leaf(painter, 190 + sway, 106, 45, 26 + stage * 6, 15)
+        if stage >= 3 and definition.key == 'dandelion':
+            _dandelion_leaves(painter, 190 + sway, 106)
         if stage >= 3:
             painter.save()
             painter.translate(190 + sway, top)
             if definition.key == 'ancient':
                 _ancient(painter, definition, stage == 4, phase)
+            elif definition.key == 'dandelion':
+                _dandelion(painter, definition, stage == 4)
             elif definition.key == 'tulip':
                 _tulip(painter, definition, stage == 4)
             elif definition.key == 'starflower':
@@ -87,6 +91,36 @@ def _daisy(painter, definition, opened):
         painter.restore()
     painter.setBrush(QColor(definition.center_color))
     painter.drawEllipse(QRectF(-10, -10, 20, 20))
+
+
+def _dandelion(painter, definition, opened):
+    for count, length, width, shade in ((16, 29, 7, '#ffe078'), (16, 24, 6, definition.petal_color)):
+        painter.setBrush(QColor(shade))
+        for index in range(count):
+            painter.save()
+            painter.rotate(index * 360 / count + (11 if length == 24 else 0))
+            petal = QPainterPath(QPointF(-width / 2, -5))
+            petal.quadTo(-width, -length * (.8 if opened else .5), 0, -length if opened else -length * .55)
+            petal.quadTo(width, -length * (.8 if opened else .5), width / 2, -5)
+            petal.closeSubpath()
+            painter.drawPath(petal)
+            painter.restore()
+    painter.setBrush(QColor(definition.center_color))
+    painter.drawEllipse(QRectF(-10, -10, 20, 20))
+    painter.setBrush(QColor('#f9d45b'))
+    for index in range(9):
+        angle = index * math.tau / 9
+        painter.drawEllipse(QPointF(math.cos(angle) * 6, math.sin(angle) * 6), 1.2, 1.2)
+
+
+def _dandelion_leaves(painter, x, y):
+    painter.setBrush(QColor('#719d58'))
+    for direction in (-1, 1):
+        leaf = QPainterPath(QPointF(x, y))
+        for distance, height in ((9, 6), (14, 16), (20, 10), (26, 20), (31, 14), (42, 23), (35, 30)):
+            leaf.lineTo(x + direction * distance, y - height)
+        leaf.quadTo(x + direction * 18, y - 23, x, y)
+        painter.drawPath(leaf)
 
 
 def _tulip(painter, definition, opened):

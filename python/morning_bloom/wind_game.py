@@ -1,5 +1,6 @@
-"""Persistent press-and-hold journey from a dandelion seed to an empty pot."""
+"""Persistent dandelion flight with active-time progress and ring rewards."""
 import math
+import random
 import time
 from uuid import uuid4
 
@@ -17,7 +18,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .model import WIND_BASE_SECONDS, WIND_REWARD_GOLD
+from .model import WIND_BASE_SECONDS, WIND_RINGS_PER_GOLD
+from .plant_catalog import PLANTS
+from .flower_art import paint_collection_flower
 
 
 def duration_text(seconds):
@@ -30,16 +33,24 @@ def duration_text(seconds):
 
 
 class WindState:
-    """UI-independent journey progress measured in base-speed work seconds."""
+    """UI-independent flight. Only active game ticks advance progress."""
 
-    def __init__(self, progress=0.0, upgrade=0):
+    player_x = .28
+
+    def __init__(self, progress=0.0, upgrade=0, hits=0, rng=None):
         self.progress = max(0.0, min(float(progress), float(WIND_BASE_SECONDS)))
         self.upgrade = max(0, int(upgrade))
+        self.hits = max(0, int(hits))
+        self.rng = rng or random.Random()
+        self.y = .5
+        self.velocity = 0.0
+        self.wind = 0.0
+        self.elapsed = 0.0
+        self.sparkle = 0.0
+        self.spawn_wait = 4.0
+        self.target_y = .5
+        self.gates = []
         self.ended = self.progress >= WIND_BASE_SECONDS
-
-    @property
-    def speed(self):
-        return 2 ** self.upgrade
 
     @property
     def ratio(self):
@@ -47,18 +58,50 @@ class WindState:
 
     @property
     def remaining_seconds(self):
-        return max(0.0, WIND_BASE_SECONDS - self.progress) / self.speed
+        return max(0.0, WIND_BASE_SECONDS - self.progress)
 
-    @property
-    def reward(self):
-        return WIND_REWARD_GOLD if self.ended else 0
+    def press(self):
+        self.velocity = max(-.7, min(self.velocity, -.18))
 
     def step(self, seconds, held):
-        if self.ended or not held or not math.isfinite(seconds) or seconds <= 0:
-            return False
-        self.progress = min(float(WIND_BASE_SECONDS), self.progress + seconds * self.speed)
+        if self.ended or not math.isfinite(seconds) or seconds <= 0:
+            return 0
+        remaining = min(seconds, .1, self.remaining_seconds)
+        new_hits = 0
+        while remaining > 1e-9:
+            dt = min(remaining, 1 / 120)
+            remaining -= dt
+            self.progress += dt
+            self.elapsed += dt
+            self.sparkle = max(0.0, self.sparkle - dt)
+            self.wind += (float(held) - self.wind) * (1 - math.exp(-dt / .18))
+            gust = math.sin(self.elapsed * 1.7) * min(.14, self.elapsed * .0015)
+            self.velocity += (.55 - 1.15 * self.wind + gust) * dt
+            self.velocity *= math.exp(-.65 * dt)
+            self.y += self.velocity * dt
+            if self.y <= .055:
+                self.y = .055
+                self.velocity = max(.06, abs(self.velocity) * .25)
+            elif self.y >= .945:
+                self.y = .945
+                self.velocity = min(-.06, -abs(self.velocity) * .25)
+            for gate in self.gates:
+                gate['x'] -= .13 * dt
+                if not gate['collected'] and abs(gate['x'] - self.player_x) <= .052 and abs(gate['y'] - self.y) <= .105:
+                    gate['collected'] = True
+                    self.hits += 1
+                    new_hits += 1
+                    self.sparkle = .4
+            self.gates = [gate for gate in self.gates if gate['x'] > -.15]
+            self.spawn_wait -= dt
+            if self.spawn_wait <= 0:
+                self.target_y = max(.22, min(.78, self.target_y + self.rng.uniform(-.22, .22)))
+                self.gates.append(dict(x=1.05, y=self.target_y, collected=False))
+                self.spawn_wait += 10.0
+        if WIND_BASE_SECONDS - self.progress < 1e-7:
+            self.progress = float(WIND_BASE_SECONDS)
         self.ended = self.progress >= WIND_BASE_SECONDS
-        return True
+        return new_hits
 
 
 class WindCanvas(QWidget):
@@ -67,9 +110,9 @@ class WindCanvas(QWidget):
     def __init__(self, game):
         super().__init__(game)
         self.game = game
-        self.setFixedHeight(170)
+        self.setFixedHeight(200)
         self.setMinimumWidth(0)
-        self.setAccessibleName('민들레 씨앗이 오른쪽 빈 화분으로 이동하는 장면')
+        self.setAccessibleName('홀씨 비행장 · 누르면 상승, 놓으면 하강')
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -93,28 +136,32 @@ class WindCanvas(QWidget):
         painter.setBrush(sky)
         painter.drawRoundedRect(QRectF(0, 0, width, height), 12, 12)
 
-        start_x = 28.0
-        pot_x = max(start_x + 100.0, width - 52.0)
-        seed_x = start_x + (pot_x - start_x) * state.ratio
-        seed_y = height * .48 + math.sin(state.ratio * math.tau * 3) * 7
-
-        painter.setPen(QPen(QColor('#c9d7c1'), 2, Qt.DashLine))
-        painter.drawLine(round(start_x), round(height * .62), round(pot_x), round(height * .62))
-
-        # The requested empty flowerpot is fixed at the far right.
-        pot_top = height * .55
-        painter.setPen(QPen(QColor('#83593f'), 2))
-        painter.setBrush(QColor('#c48763'))
-        painter.drawRoundedRect(QRectF(pot_x - 27, pot_top + 9, 54, 39), 9, 9)
-        painter.setBrush(QColor('#e2a17c'))
-        painter.drawRoundedRect(QRectF(pot_x - 32, pot_top, 64, 15), 8, 8)
-        painter.setBrush(QColor('#76503b'))
-        painter.drawEllipse(QRectF(pot_x - 24, pot_top + 3, 48, 7))
-
-        # Dandelion seed.
+        painter.setBrush(QColor('#d6dfc8'))
+        painter.drawRoundedRect(QRectF(0, height - 10, width, 22), 8, 8)
+        painter.setPen(QPen(QColor('#d9bba2'), 1, Qt.DashLine))
+        painter.drawLine(8, 10, width - 8, 10)
+        for gate in state.gates:
+            x, y = gate['x'] * width, gate['y'] * height
+            painter.setPen(QPen(QColor('#d6cfb8' if gate['collected'] else '#dbb34f'), 3))
+            painter.setBrush(Qt.NoBrush)
+            painter.drawEllipse(QPointF(x, y), 12, 17)
+        seed_x, seed_y = state.player_x * width, state.y * height
+        if state.sparkle:
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(QColor('#e9bc46'))
+            for index in range(8):
+                angle = index * math.tau / 8
+                radius = 18 + (1 - state.sparkle / .4) * 24
+                painter.drawEllipse(QPointF(seed_x + math.cos(angle) * radius, seed_y + math.sin(angle) * radius),
+                                    state.sparkle * 6, state.sparkle * 6)
+        painter.setPen(QPen(QColor('#abc5bd'), 1.5))
+        for index in range(5):
+            breeze_y = height - ((state.elapsed * 70 * (.2 + state.wind) + index * 39) % height)
+            breeze_x = seed_x + math.sin(index + state.elapsed) * 20
+            painter.drawLine(QPointF(breeze_x, breeze_y), QPointF(breeze_x + 2, breeze_y - 7 - state.wind * 14))
         painter.save()
         painter.translate(QPointF(seed_x, seed_y))
-        painter.rotate(10 + math.sin(state.ratio * math.tau * 2) * 12)
+        painter.rotate(state.velocity * 35 + math.sin(state.elapsed * 3) * 5)
         painter.setPen(QPen(QColor('#897254'), 1.5))
         painter.drawLine(QPointF(0, 0), QPointF(2, 17))
         painter.setPen(Qt.NoPen)
@@ -130,28 +177,56 @@ class WindCanvas(QWidget):
             painter.drawEllipse(point, 3, 2)
         painter.restore()
 
+        if self.game.finished_game:
+            paint_collection_flower(painter, QRectF(width - 104, height - 145, 100, 138), PLANTS['dandelion'])
+
         if not self.game.running or self.game.paused:
             painter.setPen(QColor('#596c56'))
-            text = '잠시 쉬는 중' if self.game.paused else '버튼을 누르면 씨앗이 날아가요'
+            text = '잠시 쉬는 중' if self.game.paused else '누르면 바람이 불어요'
             painter.drawText(QRectF(0, height - 34, width, 24), Qt.AlignCenter, text)
+        painter.end()
+
+
+class GoalPot(QWidget):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.setFixedSize(24, 28)
+        self.setAccessibleName('민들레 꽃 목표')
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor('#e2a17c'))
+        painter.drawRoundedRect(QRectF(2, 18, 20, 8), 3, 3)
+        painter.setBrush(QColor('#b98566'))
+        painter.drawRoundedRect(QRectF(4, 22, 16, 5), 2, 2)
+        painter.setBrush(QColor('#f5cf4d'))
+        for index in range(8):
+            angle = index * math.tau / 8
+            painter.drawEllipse(QPointF(12 + math.cos(angle) * 6, 10 + math.sin(angle) * 6), 3, 3)
+        painter.setBrush(QColor('#dfa943'))
+        painter.drawEllipse(QPointF(12, 10), 3, 3)
         painter.end()
 
 
 class WindGame(QDialog):
     progressed = Signal(float)
-    completed = Signal(str, int)
+    ring_collected = Signal(str, int)
+    completed = Signal(str)
 
-    def __init__(self, parent, progress=0.0, upgrade=0):
+    def __init__(self, parent, progress=0.0, upgrade=0, hits=0):
         super().__init__(parent)
-        self.state = WindState(progress, upgrade)
+        self.state = WindState(progress, upgrade, hits)
         self.game_id = str(uuid4())
         self.running = False
         self.paused = False
         self.finished_game = False
         self.reward_pending = False
+        self.ring_pending = False
         self.held_sources = set()
         self.last_tick = None
-        self.setWindowTitle('민들레 화분 여행')
+        self.setWindowTitle('홀씨 바람놀이')
         self.setWindowFlags(Qt.Dialog | Qt.FramelessWindowHint)
         self.setWindowFlag(Qt.WindowStaysOnTopHint, bool(parent.windowFlags() & Qt.WindowStaysOnTopHint))
         self.setWindowModality(Qt.WindowModal)
@@ -166,7 +241,7 @@ class WindGame(QDialog):
         layout.setContentsMargins(14, 12, 14, 12)
         layout.setSpacing(8)
         header = QHBoxLayout()
-        self.title = QLabel('민들레 화분 여행')
+        self.title = QLabel('홀씨 바람놀이')
         self.title.setStyleSheet('font-size:18px;font-weight:600;')
         self.title.mousePressEvent = self.drag
         header.addWidget(self.title, 1)
@@ -186,24 +261,27 @@ class WindGame(QDialog):
         # The progress gauge stays above the flight scene.
         self.bar = QProgressBar()
         self.bar.setRange(0, 10000)
-        self.bar.setAccessibleName('민들레 씨앗의 화분 도착 진행도')
-        layout.addWidget(self.bar)
+        self.bar.setAccessibleName('민들레까지 누적 플레이 진행도')
+        progress_row = QHBoxLayout()
+        progress_row.addWidget(self.bar, 1)
+        progress_row.addWidget(GoalPot(self))
+        layout.addLayout(progress_row)
         self.canvas = WindCanvas(self)
         self.canvas.heldChanged.connect(lambda held: self.set_held('canvas', held))
         layout.addWidget(self.canvas)
-        self.hint = QLabel('버튼·비행장·스페이스를 누르는 동안 오른쪽 화분으로 이동해요.\n강화 0단계 기준 누적 2시간에 도착합니다.')
+        self.hint = QLabel('누르면 상승 · 놓으면 하강 · 고리 10개마다 1G\n버튼·비행장·스페이스로 바람을 불어요.')
         self.hint.setWordWrap(True)
         self.hint.setStyleSheet('font-size:11px;color:#778575;')
         layout.addWidget(self.hint)
-        self.result = QLabel(f'도착 즉시 2시간 가치의 골드 {WIND_REWARD_GOLD}G · 진행도 자동 저장')
+        self.result = QLabel('누적 1시간 완료 시 민들레 1송이 · 햇빛 1개')
         self.result.setWordWrap(True)
         layout.addWidget(self.result)
 
-        self.hold_button = QPushButton('누르고 씨앗 날리기')
+        self.hold_button = QPushButton('꾹 눌러 바람 불기')
         self.hold_button.pressed.connect(lambda: self.set_held('button', True))
         self.hold_button.released.connect(lambda: self.set_held('button', False))
         layout.addWidget(self.hold_button)
-        self.start_button = QPushButton('여행 시작')
+        self.start_button = QPushButton('바람놀이 시작')
         self.start_button.clicked.connect(self.start)
         layout.addWidget(self.start_button)
         for button in (self.close_button, self.hold_button, self.start_button):
@@ -223,22 +301,34 @@ class WindGame(QDialog):
             self.windowHandle().startSystemMove()
 
     def set_held(self, source, held):
+        if held and not self.running and not self.paused and not self.finished_game and not self.reward_pending:
+            self.start()
         if held and self.running and not self.paused:
+            if not self.held_sources:
+                self.state.press()
             self.held_sources.add(source)
         else:
             self.held_sources.discard(source)
 
     def start(self):
         if self.reward_pending:
-            self.completed.emit(self.game_id, WIND_REWARD_GOLD)
+            self.completed.emit(self.game_id)
+            return
+        if self.ring_pending:
+            self.ring_collected.emit(self.game_id, self.state.hits)
+            if not self.ring_pending:
+                if self.state.ended:
+                    self.finish_play()
+                else:
+                    self.start()
             return
         if self.running and not self.paused:
             return
         if self.finished_game:
-            self.state = WindState(0.0, self.state.upgrade)
+            self.state = WindState(0.0, self.state.upgrade, self.state.hits)
             self.game_id = str(uuid4())
             self.finished_game = False
-            self.result.setText(f'도착 즉시 {WIND_REWARD_GOLD}G · 진행도 자동 저장')
+            self.result.setText('누적 1시간 완료 시 민들레 1송이 · 햇빛 1개')
         self.held_sources.clear()
         self.running = True
         self.paused = False
@@ -251,11 +341,16 @@ class WindGame(QDialog):
         if not self.running or self.paused:
             return
         now = time.monotonic()
-        changed = self.state.step(now - self.last_tick, bool(self.held_sources))
+        hits = self.state.step(now - self.last_tick, bool(self.held_sources))
         self.last_tick = now
-        if changed:
-            self.progressed.emit(self.state.progress)
-        if self.state.ended:
+        self.progressed.emit(self.state.progress)
+        for total_hits in range(self.state.hits - hits + 1, self.state.hits + 1):
+            self.ring_pending = True
+            self.ring_collected.emit(self.game_id, total_hits)
+            if self.ring_pending:
+                self.pause()
+                break
+        if self.state.ended and not self.ring_pending:
             self.finish_play()
         self.update_controls()
 
@@ -280,7 +375,12 @@ class WindGame(QDialog):
         self.progressed.emit(self.state.progress)
         self.reward_pending = True
         self.update_controls()
-        self.completed.emit(self.game_id, WIND_REWARD_GOLD)
+        self.completed.emit(self.game_id)
+
+    def ring_result(self, success, text):
+        self.ring_pending = not success
+        self.result.setText(text)
+        self.update_controls()
 
     def reward_result(self, success, text):
         self.reward_pending = not success
@@ -292,14 +392,14 @@ class WindGame(QDialog):
         self.bar.setValue(round(ratio * self.bar.maximum()))
         self.bar.setFormat(f'{ratio * 100:.2f}%')
         self.status.setText(
-            f'강화 {self.state.upgrade}단계 · 진행 {ratio * 100:.2f}% · '
-            f'남은 누르기 {duration_text(self.state.remaining_seconds)}'
+            f'민들레까지 {ratio * 100:.2f}% · 남은 플레이 {duration_text(self.state.remaining_seconds)}\n'
+            f'고리 {self.state.hits % WIND_RINGS_PER_GOLD}/{WIND_RINGS_PER_GOLD} · 10개마다 1G'
         )
-        self.hold_button.setEnabled(self.running and not self.paused)
+        self.hold_button.setEnabled(not self.paused and not self.finished_game and not self.reward_pending and not self.ring_pending)
         self.start_button.setVisible(not self.running or self.paused)
-        self.start_button.setText('보상 저장 다시 시도' if self.reward_pending else
+        self.start_button.setText('저장 다시 시도' if self.reward_pending or self.ring_pending else
                                  '계속 날리기' if self.paused else
-                                 '바로 다시 시작' if self.finished_game else '여행 시작')
+                                 '바로 다시 시작' if self.finished_game else '바람놀이 시작')
         self.canvas.update()
 
     def eventFilter(self, watched, event):
@@ -307,7 +407,8 @@ class WindGame(QDialog):
             self.pause()
         if (event.type() in (QEvent.KeyPress, QEvent.KeyRelease)
                 and isinstance(watched, QWidget) and (watched is self or self.isAncestorOf(watched))
-                and event.key() == Qt.Key_Space and self.running and not self.paused):
+                and event.key() == Qt.Key_Space and not self.paused and not self.finished_game
+                and not self.reward_pending and not self.ring_pending):
             if not event.isAutoRepeat():
                 self.set_held('keyboard', event.type() == QEvent.KeyPress)
             return True

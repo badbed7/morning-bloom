@@ -1,4 +1,4 @@
-"""Persistent dandelion flight with active-time progress and ring rewards."""
+"""Persistent dandelion flight with held-input progress and ring rewards."""
 import math
 import random
 import time
@@ -33,7 +33,7 @@ def duration_text(seconds):
 
 
 class WindState:
-    """UI-independent flight. Only active game ticks advance progress."""
+    """UI-independent flight. Only held input advances reward progress."""
 
     player_x = .28
 
@@ -44,6 +44,7 @@ class WindState:
         self.rng = rng or random.Random()
         self.y = .5
         self.velocity = 0.0
+        self.grounded = False
         self.wind = 0.0
         self.elapsed = 0.0
         self.sparkle = 0.0
@@ -66,39 +67,47 @@ class WindState:
     def step(self, seconds, held):
         if self.ended or not math.isfinite(seconds) or seconds <= 0:
             return 0
-        remaining = min(seconds, .1, self.remaining_seconds)
+        remaining = min(seconds, .1)
         new_hits = 0
         while remaining > 1e-9:
             dt = min(remaining, 1 / 120)
             remaining -= dt
-            self.progress += dt
+            if held:
+                self.progress = min(float(WIND_BASE_SECONDS), self.progress + dt)
             self.elapsed += dt
             self.sparkle = max(0.0, self.sparkle - dt)
             self.wind += (float(held) - self.wind) * (1 - math.exp(-dt / .18))
             gust = math.sin(self.elapsed * 1.7) * min(.14, self.elapsed * .0015)
-            self.velocity += (.55 - 1.15 * self.wind + gust) * dt
-            self.velocity *= math.exp(-.65 * dt)
-            self.y += self.velocity * dt
+            if not self.grounded or held or self.velocity < 0:
+                self.velocity += (.55 - 1.15 * self.wind + gust) * dt
+                self.velocity *= math.exp(-.65 * dt)
+                self.y += self.velocity * dt
             if self.y <= .055:
                 self.y = .055
                 self.velocity = max(.06, abs(self.velocity) * .25)
+                self.grounded = False
             elif self.y >= .945:
                 self.y = .945
-                self.velocity = min(-.06, -abs(self.velocity) * .25)
+                self.velocity = 0.0
+                self.grounded = True
+            else:
+                self.grounded = False
             for gate in self.gates:
-                gate['x'] -= .13 * dt
+                if not self.grounded:
+                    gate['x'] -= .13 * dt
                 if not gate['collected'] and abs(gate['x'] - self.player_x) <= .052 and abs(gate['y'] - self.y) <= .105:
                     gate['collected'] = True
                     self.hits += 1
                     new_hits += 1
                     self.sparkle = .4
             self.gates = [gate for gate in self.gates if gate['x'] > -.15]
-            self.spawn_wait -= dt
-            if self.spawn_wait <= 0:
+            if not self.grounded:
+                self.spawn_wait -= dt
+            if self.spawn_wait <= 0 and not self.grounded:
                 self.target_y = max(.22, min(.78, self.target_y + self.rng.uniform(-.22, .22)))
                 self.gates.append(dict(x=1.05, y=self.target_y, collected=False))
                 self.spawn_wait += 10.0
-        if WIND_BASE_SECONDS - self.progress < 1e-7:
+        if held and WIND_BASE_SECONDS - self.progress < 1e-7:
             self.progress = float(WIND_BASE_SECONDS)
         self.ended = self.progress >= WIND_BASE_SECONDS
         return new_hits
@@ -269,7 +278,7 @@ class WindGame(QDialog):
         self.canvas = WindCanvas(self)
         self.canvas.heldChanged.connect(lambda held: self.set_held('canvas', held))
         layout.addWidget(self.canvas)
-        self.hint = QLabel('누르면 상승 · 놓으면 하강 · 고리 10개마다 1G\n버튼·비행장·스페이스로 바람을 불어요.')
+        self.hint = QLabel('누를 때만 게이지 증가 · 놓으면 하강\n바닥에서 전진 정지 · 버튼·비행장·스페이스 조작')
         self.hint.setWordWrap(True)
         self.hint.setStyleSheet('font-size:11px;color:#778575;')
         layout.addWidget(self.hint)
@@ -303,6 +312,9 @@ class WindGame(QDialog):
     def set_held(self, source, held):
         if held and not self.running and not self.paused and not self.finished_game and not self.reward_pending:
             self.start()
+        elif self.running and not self.paused and not self.ring_pending:
+            # Account for the old input state up to this press/release event.
+            self.tick()
         if held and self.running and not self.paused:
             if not self.held_sources:
                 self.state.press()
@@ -392,7 +404,7 @@ class WindGame(QDialog):
         self.bar.setValue(round(ratio * self.bar.maximum()))
         self.bar.setFormat(f'{ratio * 100:.2f}%')
         self.status.setText(
-            f'민들레까지 {ratio * 100:.2f}% · 남은 플레이 {duration_text(self.state.remaining_seconds)}\n'
+            f'민들레까지 {ratio * 100:.2f}% · 남은 누르기 {duration_text(self.state.remaining_seconds)}\n'
             f'고리 {self.state.hits % WIND_RINGS_PER_GOLD}/{WIND_RINGS_PER_GOLD} · 10개마다 1G'
         )
         self.hold_button.setEnabled(not self.paused and not self.finished_game and not self.reward_pending and not self.ring_pending)

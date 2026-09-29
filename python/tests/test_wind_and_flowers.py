@@ -182,25 +182,38 @@ class NewFlowers(unittest.TestCase):
 
 
 class WindPhysics(unittest.TestCase):
-    def test_progress_counts_flight_without_holding_and_bounces_at_edges(self):
+    def test_progress_requires_holding_but_flight_bounces_at_edges(self):
         state = WindState()
         state.press()
         self.assertLess(state.velocity, 0)
         state.step(.1, False)
-        self.assertGreater(state.progress, 0)
+        self.assertEqual(state.progress, 0)
         self.assertLess(state.y, .5)
         state.y = .944
         state.velocity = 2
+        state.gates = [dict(x=.8, y=.5, collected=False)]
         state.step(.1, False)
         self.assertLessEqual(state.y, .945)
-        self.assertLess(state.velocity, 0)
+        self.assertEqual(state.velocity, 0)
+        self.assertTrue(state.grounded)
+        stopped_x = state.gates[0]['x']
+        state.step(.1, False)
+        self.assertEqual(state.gates[0]['x'], stopped_x)
+        state.press()
+        state.step(.1, False)
+        self.assertFalse(state.grounded)
+        self.assertLess(state.gates[0]['x'], stopped_x)
         state.y = .056
         state.velocity = -2
         state.step(.1, True)
+        self.assertGreater(state.progress, 0)
         self.assertGreaterEqual(state.y, .055)
         self.assertGreater(state.velocity, 0)
         state.progress = WIND_BASE_SECONDS - .05
         state.step(.1, False)
+        self.assertFalse(state.ended)
+        self.assertAlmostEqual(state.progress, WIND_BASE_SECONDS - .05)
+        state.step(.1, True)
         self.assertTrue(state.ended)
         self.assertEqual(state.progress, WIND_BASE_SECONDS)
 
@@ -307,6 +320,21 @@ class ContentUI(unittest.TestCase):
         self.assertEqual(self.garden.coins, 120)
         self.assertEqual(sum(self.garden.seeds.values()), 1)
 
+    def test_progress_bar_stops_when_input_is_released(self):
+        game = self.game()
+        game.last_tick = 100
+        with patch('morning_bloom.wind_game.time.monotonic', return_value=100.1):
+            game.set_held('canvas', True)
+        self.assertEqual(game.state.progress, 0)
+        with patch('morning_bloom.wind_game.time.monotonic', return_value=100.2):
+            game.set_held('canvas', False)
+        pressed_progress = game.state.progress
+        self.assertGreater(pressed_progress, 0)
+        with patch('morning_bloom.wind_game.time.monotonic', return_value=100.3):
+            game.tick()
+        self.assertEqual(game.state.progress, pressed_progress)
+        self.assertEqual(self.garden.wind_progress, pressed_progress)
+
     def test_mouse_keyboard_pause_and_opacity_follow_running_game(self):
         self.window.opacity.setValue(65)
         game = self.game()
@@ -341,6 +369,7 @@ class ContentUI(unittest.TestCase):
     def arrive(self, game):
         game.state.progress = WIND_BASE_SECONDS - .05
         self.garden.wind_progress = game.state.progress
+        game.held_sources.add('button')
         game.last_tick = 100
         with patch('morning_bloom.wind_game.time.monotonic', return_value=100.1):
             game.tick()

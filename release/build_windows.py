@@ -100,11 +100,11 @@ def main():
     zip_folder(bootstrap, output / f'MorningBloom-{release_version}-Windows-x64.zip')
     (output / 'release-notes.md').write_text(
         f'Morning Bloom {release_version}\n\n'
-        '## 홀씨 바람놀이 개편\n\n'
-        '- 누르면 홀씨가 상승하고 놓으면 내려옵니다. 천장·바닥에 닿아도 계속 날 수 있습니다.\n'
-        '- 시작 후 활성 비행 시간은 손을 놓아도 누적됩니다. 누적 1시간에 민들레 1송이와 햇빛 1개를 받습니다.\n'
-        '- 고리 10개마다 1G를 지급하고, 고리 적립 수와 진행도를 다음 실행까지 보존합니다.\n'
-        '- 저장 v13은 v12의 진행 비율을 보존해 이전하며, 중복 보상과 저장 실패를 처리합니다.\n\n'
+        '## 홀씨 바람놀이 수정\n\n'
+        '- 진행 게이지는 버튼·비행장·스페이스를 누르고 있는 실제 시간에만 찹니다. 손을 놓으면 멈춥니다.\n'
+        '- 바닥에 닿으면 고리의 좌측 이동과 등장 시간이 멈춥니다. 다시 누르면 홀씨가 떠오르고 전진합니다.\n'
+        '- 천장 반사, 고리 10개당 1G, 누적 1시간의 민들레·햇빛 보상은 유지합니다.\n'
+        '- 저장 v13의 기존 진행도와 보상은 보존하며, 업데이트 후부터 새 시간 판정을 적용합니다.\n\n'
         '## 다운로드\n\n'
         f'- Python 실행: `MorningBloom-{release_version}-Python-BAT.zip` 전체 압축 해제 후 `run-python.bat` 실행. Python 3.12 64비트가 필요합니다.\n'
         f'- EXE 실행: `MorningBloom-{release_version}-Windows-x64.zip` 전체 압축 해제 후 `MorningBloom.exe` 실행. Python 설치가 필요 없습니다.\n'

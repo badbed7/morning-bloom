@@ -29,6 +29,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix='MorningBloom-python-build-') as temp:
         stage = Path(temp) / 'game'
         paths = list((ROOT / 'python/morning_bloom').rglob('*.py'))
+        paths += [ROOT / 'assets/catalog' / name for name in ('plants.png', 'gardens.png', 'pots.png')]
         paths += [ROOT / name for name in ('python/requirements.txt', 'release/game_entry.py',
                   'assets/fonts/NotoSansKR-Subset.otf', 'assets/fonts/OFL.txt')]
         for source in paths:

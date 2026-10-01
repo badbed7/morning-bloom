@@ -44,7 +44,8 @@ def main():
             secret.write_text(google_secret, encoding='utf-8')
             google_args = ['--add-data', str(config) + ';.', '--add-data', str(secret) + ';.']
         run(*common, '--onedir', '--name', 'MorningBloomGame', '--paths', 'python',
-            '--add-data', str(ROOT / 'assets/fonts') + ';assets/fonts', *google_args,
+            '--add-data', str(ROOT / 'assets/fonts') + ';assets/fonts',
+            '--add-data', str(ROOT / 'assets/catalog') + ';assets/catalog', *google_args,
             'release/game_entry.py')
     run(*common, '--onefile', '--name', 'MorningBloom', '--paths', 'release',
         '--add-data', str(icon) + ';assets/icons', 'release/launcher.py')

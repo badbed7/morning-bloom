@@ -41,6 +41,7 @@ from .garden_view import CollectionGarden, sale_price
 from .google_cloud import CloudError, GoogleDriveSync
 from .model import FERTILIZER_CAP, FERTILIZER_SECONDS, POT_PRICES, TYCOON_RULE, WIND_BASE_SECONDS
 from .icon_picker import IconPicker
+from .locked_catalog import LockedCatalog
 from .navigation import SlideStack, chevron_icon
 from .plant_catalog import PLANTS, REGULAR_PLANTS, VACATION_PLANTS, WEEKEND_PLANTS, RANDOM_SEED_PRICE, plant_definition
 from .seed_picker import SeedPicker
@@ -1052,6 +1053,9 @@ class Window(QWidget):
         self.buy_skin_button = self.button(skin_row, '스킨 구매', self.buy_selected_skin)
         self.apply_skin_button = self.button(skin_row, '스킨 적용', self.apply_selected_skin)
         layout.addLayout(skin_row)
+        self.locked_catalog = LockedCatalog()
+        layout.addSpacing(8)
+        layout.addWidget(self.locked_catalog)
         layout.addStretch()
         self.pages.addWidget(page)
         self.shop_picker.selectionChanged.connect(self.refresh)

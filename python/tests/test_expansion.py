@@ -32,7 +32,7 @@ class EconomyAndPots(unittest.TestCase):
         self.assertEqual(garden.growth, 0)
         garden.care('water', 100 + 4 * HOUR)
         garden.select(0)
-        self.assertEqual(garden.growth, 4 * HOUR)
+        self.assertEqual(garden.growth, 4 * HOUR + 72)
         garden.advance(100 + 7 * HOUR)
         garden.select(1)
         self.assertTrue(garden.bloomed)
@@ -132,7 +132,7 @@ class SaveMigration(unittest.TestCase):
         data = Garden(100).to_dict()
         data['collection'] = [{
             'id': 'flower', 'species': 'starflower', 'harvested_at': 90,
-            'base_sale_g': 12, 'misted': True, 'bonus_g': 2,
+            'base_sale_g': 12, 'misted': True, 'bonus_g': 6,
         }]
         with self.assertRaises(ValueError):
             Garden.from_dict(data)

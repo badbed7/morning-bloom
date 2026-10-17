@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from PySide6.QtCore import QMimeData, QPoint, QPointF, Qt
+from PySide6.QtCore import QElapsedTimer, QMimeData, QPoint, QPointF, Qt
 from PySide6.QtGui import QDragEnterEvent, QDropEvent, QFont, QFontDatabase
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QComboBox, QListWidget, QScrollArea
@@ -101,7 +101,11 @@ class GardenInterface(unittest.TestCase):
         self.assertIsNotNone(self.window.pages._animation)
         for _ in range(8):
             self.window.next_page.click()
-        QTest.qWait(240)
+        # Windows CI may deliver the first animation frame late under load.
+        # Wait for natural completion, retaining a bound that catches a leak.
+        deadline=QElapsedTimer();deadline.start()
+        while self.window.pages._animation is not None and deadline.elapsed()<1000:
+            QTest.qWait(20)
         self.assertIsNone(self.window.pages._animation)
         self.assertEqual(self.window.pages._overlays, [])
         self.assertEqual(self.window.pages.currentIndex(), POT_PAGE)

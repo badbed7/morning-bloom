@@ -81,8 +81,9 @@ class LockedCatalog(QWidget):
     """Browse designs without acquiring items or modifying a garden save."""
     page_size = 4
 
-    def __init__(self):
+    def __init__(self, garden=None):
         super().__init__()
+        self.garden = garden
         self.category = '식물'
         self.page = 0
         self.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
@@ -96,10 +97,10 @@ class LockedCatalog(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(6)
-        title = QLabel('신규 수집 도감 · 잠김')
+        title = QLabel('신규 수집 도감')
         title.setObjectName('section')
         layout.addWidget(title)
-        note = QLabel('가챠 업데이트 예정 · 지금은 미리보기만 가능해요.')
+        note = QLabel('씨앗 정원 여행에서 획득·교환하고 실제 정원에 적용하세요.')
         note.setObjectName('small')
         note.setWordWrap(True)
         layout.addWidget(note)
@@ -118,6 +119,7 @@ class LockedCatalog(QWidget):
         grid = QGridLayout()
         grid.setSpacing(6)
         self.cards = []
+        self.statuses = []
         for index in range(self.page_size):
             card = QFrame()
             card.setObjectName('lockedCard')
@@ -137,6 +139,7 @@ class LockedCatalog(QWidget):
             name.setFixedHeight(34)
             name.setAlignment(Qt.AlignCenter)
             locked = QLabel('잠김')
+            self.statuses.append(locked)
             locked.setObjectName('small')
             locked.setAlignment(Qt.AlignCenter)
             for widget in (picture, name, locked):
@@ -183,7 +186,13 @@ class LockedCatalog(QWidget):
                 picture.setPixmap(QPixmap.fromImage(preview_image(item).scaled(
                     QSize(100, 78), Qt.KeepAspectRatio, Qt.SmoothTransformation)))
                 name.setText(item.name)
-                card.setToolTip(f'{item.name} · 잠김 · 가챠 획득 예정')
+                from .content import BY_ID
+                category={'식물':'plant','정원':'garden','화분':'pot'}[self.category]
+                definition=BY_ID[category,item.key]
+                owned = (self.garden.progression['unlocked'] if category=='plant' else self.garden.owned_themes if category=='garden' else self.garden.owned_skins) if self.garden else []
+                status='보유' if item.key in owned else '잠김'
+                self.statuses[index].setText(f"{definition['grade']} · {status}")
+                card.setToolTip(f"{item.name} · {definition['grade']} · {status}\n"+definition.get('description','씨앗 정원 여행에서 품종을 해금하세요.'))
                 card.setAccessibleName(card.toolTip())
         pages = (len(items) + self.page_size - 1) // self.page_size
         self.counter.setText(f'{self.page + 1} / {pages}')

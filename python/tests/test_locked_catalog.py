@@ -15,7 +15,7 @@ from morning_bloom.storage import Store
 
 
 class LockedCatalogTests(unittest.TestCase):
-    def test_reference_items_have_artwork_and_cannot_be_acquired_or_equipped(self):
+    def test_registered_items_have_artwork_and_require_unlock_before_purchase_or_equipment(self):
         self.assertEqual({key: len(items) for key, items in LOCKED_COLLECTIONS.items()},
                          {'식물': 8, '정원': 79, '화분': 41})
         garden = Garden(100, coins=10000, sunlight=10000)
@@ -24,7 +24,8 @@ class LockedCatalogTests(unittest.TestCase):
         for items in LOCKED_COLLECTIONS.values():
             for item in items:
                 with self.subTest(item=item.key):
-                    self.assertNotIn(item.key, seen | set(PLANTS) | set(THEMES) | set(POT_SKINS))
+                    self.assertNotIn(item.key, seen)
+                    self.assertIn(item.key, set(PLANTS) | set(THEMES) | set(POT_SKINS))
                     seen.add(item.key)
                     sheet = catalog_sheet(item.sheet)
                     self.assertFalse(sheet.isNull())

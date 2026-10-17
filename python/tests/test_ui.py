@@ -80,6 +80,7 @@ class UI(unittest.TestCase):
             window = Window(store, garden, True)
             window.species_picker.buttons['tulip'].click()
             window.plant_button.click()
+            garden.progression['crops'].clear()
             garden.pot.update(ruleset_id='v0.4', care_profile='tulip_midwater', fertilizer_limit=0)
             window.water_button.click()
             window.offset = 40 * HOUR
@@ -170,7 +171,10 @@ class UI(unittest.TestCase):
                     window.navigate(1)
                     window.pages.finish_transition()
                     self.app.processEvents()
-                    viewport = window.pages.widget(SHOP_PAGE).findChild(QScrollArea).viewport()
+                    scroll = window.pages.widget(SHOP_PAGE).findChild(QScrollArea)
+                    scroll.ensureWidgetVisible(window.buy_seed_button,0,0)
+                    self.app.processEvents()
+                    viewport = scroll.viewport()
                     for button in (*(button for button in window.shop_picker.buttons.values() if button.isVisible()), window.buy_seed_button):
                         self.assertTrue(button.isVisible())
                         detail = (side, button.text(), button.geometry(), viewport.rect())

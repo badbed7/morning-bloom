@@ -34,6 +34,26 @@ def smoke_test():
         assert not window.grab().isNull()
         for items in LOCKED_COLLECTIONS.values():
             assert not preview_image(items[0]).isNull(), 'Missing catalog artwork'
+        window.open_board()
+        board=window._board_window
+        app.processEvents()
+        assert board.items.count()==150, 'Missing live content catalog'
+        assert window.garden.progression['tickets']==5
+        board.roll_button.click()
+        while board.animating:board.animation_step()
+        if window.garden.progression['board']['special']:board.roll_button.click()
+        assert window.garden.progression['board']['completed']==1
+        assert window.garden.progression['tickets']==4
+        reward=window.garden.progression['board']['last_result']
+        if reward['category'] in ('garden','pot'):
+            picker=window.theme_picker if reward['category']=='garden' else window.skin_picker
+            assert reward['item_id'] in picker.buttons, 'Acquired cosmetic missing from shop'
+        assert not board.grab().isNull()
+        window.close_board()
+        assert '주사위 4개' in window.gacha_balance.text()
+        window.exchange_button.click()
+        assert window._board_window.tabs.currentIndex()==1
+        window.close_board()
         window.close()
     print('Startup check passed', flush=True)
     return 0

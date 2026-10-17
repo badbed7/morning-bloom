@@ -7,7 +7,7 @@ from PySide6.QtWidgets import QApplication, QFrame, QLabel, QMenu, QScrollArea, 
 
 from .flower_art import paint_collection_flower
 from .cosmetics import garden_theme
-from .model import SUN_PENDING_CAP
+from .effects import sun_cap
 from .plant_catalog import plant_definition
 
 FLOWER_MIME = 'application/x-morning-bloom-flower'
@@ -92,9 +92,14 @@ class Meadow(QWidget):
         return None
 
     def tooltip_for(self, item):
-        bonus = f' (분무 +{item["bonus_g"]}G)' if item['misted'] else ''
+        from .content import rarity
+        plant=plant_definition(item['species'])
+        mist=min(plant.mist_bonus,item['bonus_g']) if item['misted'] else 0
+        equipment=item['bonus_g']-mist
+        parts=([f'분무 +{mist}G'] if mist else [])+([f'장비 +{equipment}G'] if equipment else [])
+        bonus=' ('+' · '.join(parts)+')' if parts else ''
         desktop = '화면 맨 위에 표시 중 · 우클릭으로 복귀' if item['id'] in self.garden.desktop_flowers else '우클릭으로 화면 맨 위에 띄우기'
-        return f'{plant_definition(item["species"]).name} · 판매 {sale_price(item)}G{bonus}\n돈주머니로 드래그하면 판매 · {desktop}'
+        return f"{rarity('plant',item['species'])} · {plant.name} · 판매 {sale_price(item)}G{bonus}\n돈주머니로 드래그하면 판매 · {desktop}"
 
     def contextMenuEvent(self, event):
         item = self.item_at(event.pos())
@@ -150,6 +155,8 @@ class Meadow(QWidget):
         gradient.setColorAt(0, QColor(theme.top))
         gradient.setColorAt(1, QColor(theme.bottom))
         painter.fillRect(bounds, gradient)
+        from .catalog_art import paint_garden_pattern
+        paint_garden_pattern(painter,bounds,self.garden.equipped_theme)
         # Deterministic tufts only in the visible rows, even for large collections.
         painter.setPen(QPen(QColor(theme.tuft), 1.3, Qt.SolidLine, Qt.RoundCap))
         for row in range(max(0, bounds.top() // 30), bounds.bottom() // 30 + 1):
@@ -177,7 +184,7 @@ class Meadow(QWidget):
             painter.setBrush(QColor(64, 98, 49, 48))
             painter.drawEllipse(QRectF(rect.center().x() - 23, rect.bottom() - 5, 46, 8))
             paint_collection_flower(painter, rect.adjusted(8, -3 + bob, -8, -9 + bob),
-                                    plant_definition(item['species']), phase, skin=self.garden.equipped_skin)
+                                    plant_definition(item['species']), phase, skin=self.garden.skin_for(item['id']))
             painter.restore()
             if item['id'] in self.garden.desktop_flowers:
                 painter.setPen(QColor(theme.text))
@@ -277,7 +284,7 @@ class Meadow(QWidget):
         painter = QPainter(pixmap)
         painter.setRenderHint(QPainter.Antialiasing)
         paint_collection_flower(painter, QRectF(0, 0, 84, 108), plant_definition(item['species']),
-                                skin=self.garden.equipped_skin)
+                                skin=self.garden.skin_for(item['id']))
         painter.end()
         drag.setPixmap(pixmap)
         drag.setHotSpot(QPoint(42, 70))
@@ -410,9 +417,10 @@ class CollectionGarden(QWidget):
     def sync(self):
         self.meadow.sync()
         pending = len(self.meadow.garden.sun_tokens)
+        capacity=sun_cap(self.meadow.garden)
         if self.meadow.garden.vacation:
             next_text = '휴가 중 생산 정지'
-        elif pending >= SUN_PENDING_CAP:
+        elif pending >= capacity:
             next_text = '대기 공간 가득 참'
         elif not self.meadow.garden.collection:
             next_text = '꽃을 보관하면 생산 시작'
@@ -420,5 +428,5 @@ class CollectionGarden(QWidget):
             minutes = max(1, math.ceil(self.meadow.garden.seconds_to_sun / 60))
             next_text = f'다음 햇빛 약 {minutes}분'
         self.sun_status.setText(
-            f'햇빛 {self.meadow.garden.sunlight} · 대기 {pending}/{SUN_PENDING_CAP} · {next_text}'
+            f'햇빛 {self.meadow.garden.sunlight} · 대기 {pending}/{capacity} · {next_text}'
         )

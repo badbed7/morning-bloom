@@ -12,24 +12,31 @@ def paint_potted_flower(painter, definition, stage=4, phase=0, planted=True, dro
     painter.save()
     painter.setPen(Qt.NoPen)
     style = pot_skin(skin)
-    painter.setBrush(QColor(style.edge))
-    painter.drawRoundedRect(QRectF(144, 112, 92, 49), 14, 14)
-    painter.setBrush(QColor(style.body or definition.pot_color))
-    painter.drawRoundedRect(QRectF(148, 119, 84, 43), 12, 12)
-    painter.setBrush(QColor(style.rim))
-    if style.pattern == 'stripes':
-        for x in range(158, 225, 13):
-            painter.drawRoundedRect(QRectF(x, 127, 3, 23), 1.5, 1.5)
-    elif style.pattern == 'dots':
-        for y in (131, 145):
-            for x in (164, 181, 198, 215):
-                painter.drawEllipse(QRectF(x, y, 5, 5))
-    elif style.pattern == 'band':
-        painter.drawRect(QRectF(149, 132, 82, 9))
-    painter.drawRoundedRect(QRectF(136, 104, 108, 18), 6, 6)
-    painter.setBrush(QColor('#654638'))
-    painter.drawEllipse(QRectF(143, 101, 94, 12))
-    if planted:
+    if style.key.startswith('catalog_pot_'):
+        from .catalog_art import paint_catalog_pot
+        paint_catalog_pot(painter,style)
+    else:
+        painter.setBrush(QColor(style.edge))
+        painter.drawRoundedRect(QRectF(144, 112, 92, 49), 14, 14)
+        painter.setBrush(QColor(style.body or definition.pot_color))
+        painter.drawRoundedRect(QRectF(148, 119, 84, 43), 12, 12)
+        painter.setBrush(QColor(style.rim))
+        if style.pattern == 'stripes':
+            for x in range(158, 225, 13):
+                painter.drawRoundedRect(QRectF(x, 127, 3, 23), 1.5, 1.5)
+        elif style.pattern == 'dots':
+            for y in (131, 145):
+                for x in (164, 181, 198, 215):
+                    painter.drawEllipse(QRectF(x, y, 5, 5))
+        elif style.pattern == 'band':
+            painter.drawRect(QRectF(149, 132, 82, 9))
+        painter.drawRoundedRect(QRectF(136, 104, 108, 18), 6, 6)
+        painter.setBrush(QColor('#654638'))
+        painter.drawEllipse(QRectF(143, 101, 94, 12))
+    if planted and definition.key.startswith('catalog_plant_'):
+        from .catalog_art import paint_foliage
+        paint_foliage(painter,definition.key,stage,phase)
+    elif planted:
         top = 98 - stage * 18
         if definition.key == 'ancient' and stage >= 3:
             top += 20
@@ -74,7 +81,7 @@ def paint_potted_flower(painter, definition, stage=4, phase=0, planted=True, dro
 
 def paint_collection_flower(painter, rect, definition, phase=0, skin='terracotta', stage=4):
     """Fit the flower itself, without the empty sides of the growing scene."""
-    scale = min(rect.width() / 138, rect.height() / 190)
+    scale = min(rect.width() / (164 if definition.key.startswith('catalog_plant_') else 138), rect.height() / 190)
     painter.save()
     painter.translate(rect.center().x() - 190 * scale, rect.top() + 16 * scale)
     painter.scale(scale, scale)

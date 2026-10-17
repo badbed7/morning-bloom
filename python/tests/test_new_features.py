@@ -73,7 +73,7 @@ class RulesAndMigration(unittest.TestCase):
     def test_v7_preserves_all_inventory_and_raw_backup(self):
         garden = growing()
         data = garden.to_dict()
-        for key in V8_FIELDS | V12_FIELDS | V13_FIELDS:
+        for key in V8_FIELDS | V12_FIELDS | V13_FIELDS | {'progression'}:
             data.pop(key)
         data.update(schema=7, fertilizer=10, reward_wait=1750, last_reward_id='old')
         data['seeds'] = {key: data['seeds'][key] for key in LEGACY_REGULAR_PLANTS}
@@ -117,7 +117,7 @@ class RulesAndMigration(unittest.TestCase):
 
     def test_bad_legacy_inventory_is_not_silently_clamped(self):
         data = Garden(NOW).to_dict()
-        for key in V8_FIELDS | V12_FIELDS | V13_FIELDS:
+        for key in V8_FIELDS | V12_FIELDS | V13_FIELDS | {'progression'}:
             data.pop(key)
         data.update(schema=7, fertilizer=11)
         data['seeds'] = {key: data['seeds'][key] for key in LEGACY_REGULAR_PLANTS}
@@ -142,7 +142,7 @@ class RulesAndMigration(unittest.TestCase):
         garden = collected()
         garden.place_desktop(garden.collection[0]['id'], -240, 100)
         data = {**garden.to_dict(), 'schema': 8}
-        for key in V12_FIELDS | V13_FIELDS:
+        for key in V12_FIELDS | V13_FIELDS | {'progression'}:
             data.pop(key)
         data['seeds'] = {key: data['seeds'][key] for key in LEGACY_REGULAR_PLANTS}
         raw = json.dumps(data)
@@ -150,7 +150,9 @@ class RulesAndMigration(unittest.TestCase):
             store = Store(Path(tmp) / 'garden.json')
             store.path.write_text(raw, encoding='utf-8')
             upgraded = store.load(NOW)
-            self.assertEqual(upgraded.to_dict(), {**garden.to_dict(), 'schema': Garden.CURRENT_SCHEMA})
+            self.assertEqual({k:v for k,v in upgraded.to_dict().items() if k!='progression'},
+                             {k:v for k,v in garden.to_dict().items() if k!='progression'})
+            self.assertEqual(upgraded.progression['crops'], {})
             store.save(upgraded)
             self.assertEqual(store.migration_backup.name, 'garden.json.v8-migration.bak')
             self.assertEqual(store.migration_backup.read_text(encoding='utf-8'), raw)
@@ -173,7 +175,7 @@ class RulesAndMigration(unittest.TestCase):
 
     def test_legacy_wait_without_reward_id_is_rejected_before_shortening(self):
         data = Garden(NOW).to_dict()
-        for key in V8_FIELDS | V12_FIELDS | V13_FIELDS:
+        for key in V8_FIELDS | V12_FIELDS | V13_FIELDS | {'progression'}:
             data.pop(key)
         data.update(schema=7, reward_wait=100, last_reward_id='')
         data['seeds'] = {key: data['seeds'][key] for key in LEGACY_REGULAR_PLANTS}
@@ -447,7 +449,8 @@ class InteractionTests(unittest.TestCase):
         self.assertTrue(self.window.set_desktop_flower(item_id, True))
         self.assertIs(self.window.desktop.windows[item_id], widget)
 
-        self.garden.pots.append(empty_pot())
+        self.garden.coins += 100
+        self.assertTrue(self.garden.buy_pot())
         self.garden.selected = 1
         for ratio, stage in ((0, 0), (.1, 1), (.35, 2), (.7, 3), (1, 4)):
             self.garden.pots[0]['growth'] = self.garden.pots[0]['duration'] * ratio

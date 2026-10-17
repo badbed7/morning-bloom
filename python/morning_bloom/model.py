@@ -7,7 +7,10 @@ import math
 import secrets
 
 from .cosmetics import POT_SKINS, THEMES, garden_theme, pot_skin
-from .plant_catalog import DAY, HOUR, PLANTS, REGULAR_PLANTS, VACATION_PLANTS, RANDOM_SEED_PRICE, plant_definition, roll_mystery_seed
+from .plant_catalog import DAY, HOUR, PLANTS, REGULAR_PLANTS, CULTIVABLE_PLANTS, VACATION_PLANTS, RANDOM_SEED_PRICE, plant_definition, roll_mystery_seed
+from . import board_model as board
+from . import effects as fx
+from .content import BY_ID
 
 OFFLINE_CAP = 3 * DAY
 MID_WATER_EARLY = 22 * HOUR
@@ -172,7 +175,7 @@ def _validate_legacy_collection(items):
 @dataclass
 class Garden:
     """Shared inventory with up to four independently simulated pots."""
-    CURRENT_SCHEMA: ClassVar[int] = 13
+    CURRENT_SCHEMA: ClassVar[int] = 14
 
     last_update: float
     schema: int = CURRENT_SCHEMA
@@ -206,11 +209,14 @@ class Garden:
     settings: dict = field(default_factory=lambda: dict(opacity=1.0, topmost=True, x=-99999, y=-99999))
     pots: list = field(default_factory=list)
     selected: int = 0
+    progression: dict = field(default_factory=dict)
 
     def __post_init__(self):
         if not self.pots:
             self.pots = [empty_pot()]
         self.seeds = {**dict.fromkeys(REGULAR_PLANTS, 0), **self.seeds}
+        if not self.progression:
+            self.progression = board.new_state(self.equipped_skin,len(self.pots))
 
     @property
     def pot(self):
@@ -326,12 +332,18 @@ class Garden:
         return (self.tutorial_reward_claimed and not self.vacation and self.fertilizer > 0
                 and self.planted and not self.bloomed and self.pot['initial_watered']
                 and self.pot['ruleset_id'] == TYCOON_RULE and not self.pot['is_tutorial']
-                and self.pot['fertilizer_used'] < self.pot['fertilizer_limit'])
+                and (fx.crop(self,self.pot)['fertilizer'] < fx.fertilizer_limit(self,self.pot)-1e-6
+                     if fx.crop(self,self.pot) else self.pot['fertilizer_used'] < self.pot['fertilizer_limit']))
 
     def use_fertilizer(self, now):
         self.advance(now)
         if not self.can_use_fertilizer:
             return False
+        if fx.crop(self,self.pot):
+            old_stage=self.stage
+            result=fx.use_fertilizer(self,self.pot)
+            fx.stage_events(self,self.pot,old_stage,'online')
+            return result
         self.fertilizer -= 1
         if self.fertilizer_reserve:
             self.fertilizer_reserve -= 1
@@ -361,6 +373,9 @@ class Garden:
         self.wind_ring_hits = total_hits
         if total_hits % WIND_RINGS_PER_GOLD == 0:
             self.coins += 1
+            if fx.garden_id(self)=='G-B09':
+                self.progression['counters']['rings']+=1
+                if self.progression['counters']['rings']%5==0:self.coins+=1
         return True
 
     def complete_wind(self, game_id, now):
@@ -388,8 +403,9 @@ class Garden:
         return True
 
     def can_plant(self, species):
-        if species not in (*REGULAR_PLANTS, 'random') or self.planted or self.vacation:
+        if species not in (*CULTIVABLE_PLANTS, 'random') or self.planted or self.vacation:
             return False
+        if species!='random' and species not in self.progression['unlocked']:return False
         if not self.tutorial_used and species != 'daisy':
             return False
         return self.seed_count(species) > 0
@@ -398,6 +414,7 @@ class Garden:
         if type(index) is not int or not 0 <= index < len(self.pots):
             return False
         self.selected = index
+        self.equipped_skin=self.progression['slots'][index]['skin']
         return True
 
     @staticmethod
@@ -418,44 +435,17 @@ class Garden:
         pot['care_elapsed'] = new_age
         pot['growth'] = min(pot['duration'], pot['growth'] + gained)
 
-    def advance(self, now):
-        if not _number(now) or now <= self.last_update:
-            return
-        offline = now - self.last_update
-        elapsed = min(offline, OFFLINE_CAP)
-        self.last_update = now
-        if self.vacation:
-            return
-        self.reward_wait = max(0.0, self.reward_wait - elapsed)
-        for pot in self.pots:
-            growth_elapsed = min(offline, pot['duration']) if pot['species'] in VACATION_PLANTS else elapsed
-            self._advance_pot(pot, growth_elapsed)
-        self._advance_sunlight(elapsed, now)
-
-    def _advance_sunlight(self, elapsed, now):
-        if not self.collection:
-            self.sun_elapsed = 0.0
-            return
-        total = self.sun_elapsed + elapsed
-        rounds = int(total // SUN_INTERVAL)
-        self.sun_elapsed = total % SUN_INTERVAL
-        if rounds <= 0 or len(self.sun_tokens) >= SUN_PENDING_CAP:
-            return
-        available = SUN_PENDING_CAP - len(self.sun_tokens)
-        count = min(available, rounds * len(self.collection))
-        for offset in range(count):
-            source = self.collection[(self.sun_cursor + offset) % len(self.collection)]
-            self.sun_tokens.append({
-                'id': str(uuid4()),
-                'source_flower_id': source['id'],
-                'created_at': float(now),
-            })
-        self.sun_cursor = (self.sun_cursor + count) % len(self.collection)
+    def advance(self, now, context='online'):
+        if not _number(now) or now<=self.last_update:return
+        from .growth_simulation import advance
+        advance(self,now,context)
 
     @property
     def seconds_to_sun(self):
-        if self.vacation or not self.collection or len(self.sun_tokens) >= SUN_PENDING_CAP:
+        if self.vacation or not self.collection or len(self.sun_tokens) >= fx.sun_cap(self):
             return None
+        if self.progression['sun_cycles']:
+            return min(c['period']-c['elapsed'] for c in self.progression['sun_cycles'].values())
         return SUN_INTERVAL - self.sun_elapsed
 
     def plant(self, now, species='daisy'):
@@ -484,6 +474,10 @@ class Garden:
         }
         if mystery:
             self.mystery_plants.append(self.pot['plant_id'])
+        effect_state=fx.new_crop()
+        effect_state['slot']=self.selected
+        if mystery:effect_state['flags'].append('mystery')
+        self.progression['crops'][self.pot['plant_id']]=effect_state
         self.tutorial_used = True
         return True
 
@@ -498,12 +492,21 @@ class Garden:
                 pot['care_elapsed'] = 0.0
                 pot['water_count'] = 1
                 pot['water_wait'] = 0.0 if pot['is_tutorial'] else float(WATER_INTERVAL)
+                fx.start(self,pot)
+                if fx.crop(self,pot) and not pot['is_tutorial']:
+                    pot['fertilizer_limit']=math.ceil(fx.fertilizer_limit(self,pot)/600)
                 return True
+            old_stage=self.stage
             pot[kind + '_count'] += 1
             pot[kind + '_wait'] = float(WATER_INTERVAL if kind == 'water' else MIST_INTERVAL)
             self.growth = min(self.duration, self.growth + (180 if kind == 'water' else 60))
             if kind == 'mist':
                 pot['misted'] = True
+            state=fx.crop(self,pot)
+            if state:
+                state['care_saved']+=180 if kind=='water' else 60
+                fx.after_care(self,pot,kind)
+                fx.stage_events(self,pot,old_stage,'online')
             return True
         if kind == 'mist':
             if not pot['initial_watered'] or pot['misted']:
@@ -546,6 +549,8 @@ class Garden:
             return False
         was_empty = not self.collection
         self.collection.append(item)
+        self.progression['flower_skins'][item['id']]=self.skin_for(pot['plant_id'])
+        fx.after_harvest(self,pot,item)
         if item['id'] in self.mystery_plants:
             self.mystery_plants.remove(item['id'])
         if was_empty:
@@ -564,8 +569,9 @@ class Garden:
         return True
 
     def buy_seed(self, species='daisy'):
-        if species not in (*REGULAR_PLANTS, 'random'):
+        if species not in (*CULTIVABLE_PLANTS, 'random'):
             return False
+        if species!='random' and species not in self.progression['unlocked']:return False
         price = RANDOM_SEED_PRICE if species == 'random' else plant_definition(species).seed_price
         if self.coins < price:
             return False
@@ -573,7 +579,7 @@ class Garden:
         if species == 'random':
             self.mystery_seeds.append(roll_mystery_seed(secrets.randbelow))
         else:
-            self.seeds[species] += 1
+            self.seeds[species] = self.seeds.get(species,0)+1
         return True
 
     def desktop_source(self, item_id):
@@ -603,6 +609,7 @@ class Garden:
             return False
         self.coins -= price
         self.pots.append(empty_pot())
+        self.progression['slots'].append(dict(skin=self.equipped_skin,previous=None,sequence=[]))
         return True
 
     def sell(self, item_id=None, now=None):
@@ -614,6 +621,10 @@ class Garden:
             if item['id'] == item_id:
                 self.coins += item['base_sale_g'] + item['bonus_g']
                 self.collection.pop(index)
+                state=self.progression['crops'].pop(item_id,None)
+                if state:fx.money(self,state['sale_units'])
+                self.progression['flower_skins'].pop(item_id,None)
+                self.progression['sun_cycles'].pop(item_id,None)
                 self.desktop_flowers.pop(item_id, None)
                 if not self.collection:
                     self.sun_elapsed = 0.0
@@ -627,11 +638,14 @@ class Garden:
             if token['id'] == token_id:
                 self.sun_tokens.pop(index)
                 self.sunlight += 1
+                if fx.garden_id(self)=='G-A06':
+                    self.progression['counters']['suns']+=1
+                    if self.progression['counters']['suns']%10==0:self.sunlight+=1
                 return True
         return False
 
     def buy_theme(self, theme_id):
-        if theme_id not in THEMES or theme_id in self.owned_themes:
+        if theme_id not in THEMES or theme_id in self.owned_themes or theme_id.startswith('catalog_'):
             return False
         price = garden_theme(theme_id).price
         if self.sunlight < price:
@@ -647,7 +661,7 @@ class Garden:
         return True
 
     def buy_skin(self, skin_id):
-        if type(skin_id) is not str or skin_id not in POT_SKINS or skin_id in self.owned_skins:
+        if type(skin_id) is not str or skin_id not in POT_SKINS or skin_id in self.owned_skins or skin_id.startswith('catalog_'):
             return False
         price = pot_skin(skin_id).price
         if self.sunlight < price:
@@ -660,7 +674,19 @@ class Garden:
         if type(skin_id) is not str or skin_id not in self.owned_skins or skin_id not in POT_SKINS:
             return False
         self.equipped_skin = skin_id
+        self.progression['slots'][self.selected]['skin']=skin_id
         return True
+
+    def skin_for(self,item_id=None):
+        for index,pot in enumerate(self.pots):
+            if pot['plant_id']==item_id and item_id is not None:return self.progression['slots'][index]['skin']
+        return self.progression['flower_skins'].get(item_id,self.progression['slots'][self.selected]['skin'])
+
+    def exchange_item(self,category,key):
+        return board.exchange(self,category,key)
+
+    def claim_weekly(self,now):
+        return board.claim_weekly(self,now)
 
     def set_vacation(self, enabled, now):
         if type(enabled) is not bool:
@@ -678,6 +704,19 @@ class Garden:
         self.__dict__.update(restored.__dict__)
 
     @classmethod
+    def upgrade_v13(cls,data):
+        from .save_v13_model import Garden as V13Garden
+        V13Garden.from_dict(data)
+        result=deepcopy(data)
+        state=board.new_state(data['equipped_skin'],len(data['pots']))
+        state['flower_skins']={x['id']:data['equipped_skin'] for x in data['collection']}
+        state['first_harvest']=list(dict.fromkeys(x['species'] for x in data['collection']))
+        state['sun_cycles']={x['id']:dict(elapsed=data['sun_elapsed'],period=1200.0,first=False,theme=data['equipped_theme']) for x in data['collection']}
+        result.update(schema=14,progression=state)
+        cls.from_dict(result)
+        return result
+
+    @classmethod
     def from_dict(cls, data):
         if not isinstance(data, dict) or set(data) != set(cls(0).to_dict()):
             raise ValueError('저장 항목 오류')
@@ -692,7 +731,10 @@ class Garden:
                 raise ValueError(key)
         if data['tutorial_reward_claimed'] and not data['tutorial_used']:
             raise ValueError('첫 재배 보상')
-        if not isinstance(data['seeds'], dict) or set(data['seeds']) != set(REGULAR_PLANTS):
+        progression=data.get('progression')
+        if not isinstance(progression,dict) or set(progression)!=set(board.new_state()) or not board._ids(progression['unlocked']):
+            raise ValueError('수집 저장 항목')
+        if not isinstance(data['seeds'], dict) or set(data['seeds']) != set(progression['unlocked']):
             raise ValueError('씨앗')
         if any(type(value) is not int or value < 0 for value in data['seeds'].values()):
             raise ValueError('씨앗')
@@ -778,7 +820,10 @@ class Garden:
             if (not isinstance(position, dict) or set(position) != {'x', 'y'}
                     or any(not _number(v) or abs(v) > 100000 for v in position.values())):
                 raise ValueError('바탕화면 꽃 위치')
-        return cls(**deepcopy(data))
+        result=cls(**deepcopy(data))
+        board.validate(result.progression,result)
+        fx.validate(result)
+        return result
 
     @staticmethod
     def _validate_pot(pot):
@@ -801,7 +846,7 @@ class Garden:
         for key in ('water_count', 'mist_count', 'fertilizer_used', 'fertilizer_limit'):
             if type(pot[key]) is not int or pot[key] < 0:
                 raise ValueError('돌봄 사용 횟수')
-        if pot['fertilizer_used'] > pot['fertilizer_limit'] or pot['fertilizer_limit'] * 600 > pot['duration'] * .25:
+        if pot['fertilizer_used'] > pot['fertilizer_limit'] or pot['fertilizer_limit'] * 600 > pot['duration'] * .26+600:
             raise ValueError('비료 사용 상한')
         if not pot['planted']:
             if pot != empty_pot():
@@ -846,8 +891,7 @@ class Garden:
                 or type(item['base_sale_g']) is not int or item['base_sale_g'] < 0
                 or type(item['misted']) is not bool
                 or type(item['bonus_g']) is not int or item['bonus_g'] < 0
-                or item['bonus_g'] > item['base_sale_g'] // 10
-                or (not item['misted'] and item['bonus_g'] != 0)
+                or item['bonus_g'] > math.floor(item['base_sale_g']*.35)+1
             ):
                 raise ValueError('보관 식물')
             ids.add(item['id'])
@@ -855,7 +899,7 @@ class Garden:
 
     @staticmethod
     def _validate_sun_tokens(tokens):
-        if not isinstance(tokens, list) or len(tokens) > SUN_PENDING_CAP:
+        if not isinstance(tokens, list) or len(tokens) > 14:
             raise ValueError('대기 햇빛')
         ids = set()
         expected = {'id', 'source_flower_id', 'created_at'}

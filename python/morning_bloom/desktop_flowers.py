@@ -89,7 +89,7 @@ class DesktopFlower(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
         paint_collection_flower(painter, QRectF(68, 32, 120, 182), plant_definition(self.item['species']),
-                                self.phase, self.owner.garden.equipped_skin,
+                                self.phase, self.owner.garden.skin_for(self.item_id),
                                 stage=growth_stage(self.item) if self.growing else 4)
         for point in self.suns.values():
             painter.setPen(QPen(QColor('#e4b448'), 2))

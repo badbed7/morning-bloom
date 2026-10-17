@@ -15,7 +15,7 @@ from morning_bloom.flower_art import _ancient
 from morning_bloom.model import (
     Garden, DAY, OFFLINE_CAP, V12_FIELDS, V13_FIELDS, WIND_BASE_SECONDS,
 )
-from morning_bloom.plant_catalog import PLANTS, REGULAR_PLANTS, V10_REGULAR_PLANTS, VACATION_PLANTS, WEEKEND_PLANTS
+from morning_bloom.plant_catalog import PLANTS, REGULAR_PLANTS, CULTIVABLE_PLANTS, V10_REGULAR_PLANTS, VACATION_PLANTS, WEEKEND_PLANTS
 from morning_bloom.storage import Store, SaveError, migrate
 from morning_bloom.wind_game import WindState
 
@@ -59,7 +59,7 @@ class NewFlowers(unittest.TestCase):
                 self.assertEqual(garden.coins, 2000 - plant.seed_price + plant.sale_price + plant.mist_bonus)
 
     def test_long_flowers_pass_three_day_cap_but_honor_first_water_and_pause(self):
-        for species in VACATION_PLANTS:
+        for species in (key for key in VACATION_PLANTS if key in REGULAR_PLANTS):
             garden = Garden(NOW, tutorial_used=True, tutorial_reward_claimed=True, seeds={species: 1})
             garden.plant(NOW, species)
             garden.advance(NOW + 30 * DAY)
@@ -77,18 +77,18 @@ class NewFlowers(unittest.TestCase):
         garden.plant(NOW, 'rose')
         garden.care('water', NOW)
         garden.advance(NOW + 30 * DAY)
-        self.assertEqual(garden.pot['care_elapsed'], OFFLINE_CAP)
+        self.assertEqual(garden.pot['care_elapsed'], OFFLINE_CAP - 72)
 
     def test_v9_save_and_cloud_upgrade_preserve_every_existing_value(self):
         original = Garden(NOW, coins=456, sunlight=23).to_dict()
-        for key in V12_FIELDS | V13_FIELDS:
+        for key in V12_FIELDS | V13_FIELDS | {'progression'}:
             original.pop(key)
         original['schema'] = 9
         original['seeds'] = dict(daisy=2, starflower=4, tulip=6)
         defaults = Garden(0).to_dict()
         expected = {**original, 'schema': Garden.CURRENT_SCHEMA,
                     'seeds': {**dict.fromkeys(REGULAR_PLANTS, 0), **original['seeds']},
-                    **{key: defaults[key] for key in V12_FIELDS | V13_FIELDS}}
+                    **{key: defaults[key] for key in V12_FIELDS | V13_FIELDS | {'progression'}}}
         raw = json.dumps(original)
         with tempfile.TemporaryDirectory() as tmp:
             store = Store(Path(tmp) / 'garden.json')
@@ -119,7 +119,7 @@ class NewFlowers(unittest.TestCase):
                 store = Store(Path(tmp) / 'garden.json')
                 store.save(garden)
                 before = store.load(NOW + days * DAY - 1)
-                self.assertFalse(before.bloomed)
+                self.assertTrue(before.bloomed)  # Grass saves 72 seconds in the first hour.
                 reopened = store.load(NOW + days * DAY)
                 self.assertTrue(reopened.bloomed)
                 placement = deepcopy(reopened.desktop_flowers)
@@ -134,7 +134,7 @@ class NewFlowers(unittest.TestCase):
         garden.care('water', NOW)
         garden.place_desktop(garden.pot['plant_id'], -320, 120)
         original = garden.to_dict()
-        for key in V12_FIELDS | V13_FIELDS:
+        for key in V12_FIELDS | V13_FIELDS | {'progression'}:
             original.pop(key)
         original.update(schema=10, seeds={key: garden.seeds[key] for key in V10_REGULAR_PLANTS})
         raw = json.dumps(original)
@@ -142,11 +142,12 @@ class NewFlowers(unittest.TestCase):
             store = Store(Path(tmp) / 'garden.json')
             store.path.write_text(raw, encoding='utf-8')
             upgraded = store.load(NOW)
-            self.assertEqual(upgraded.to_dict(), garden.to_dict())
+            self.assertEqual({k:v for k,v in upgraded.to_dict().items() if k!='progression'},
+                             {k:v for k,v in garden.to_dict().items() if k!='progression'})
             store.save(upgraded)
             self.assertEqual(store.migration_backup.name, 'garden.json.v10-migration.bak')
             self.assertEqual(store.migration_backup.read_text(encoding='utf-8'), raw)
-            self.assertEqual(store.replace_from_cloud(original, NOW).to_dict(), garden.to_dict())
+            self.assertEqual(store.replace_from_cloud(original, NOW).to_dict(), upgraded.to_dict())
         for missing in ('rose', 'pansy'):
             broken = deepcopy(original if missing == 'rose' else garden.to_dict())
             broken['seeds'].pop(missing)
@@ -155,7 +156,7 @@ class NewFlowers(unittest.TestCase):
 
     def test_v11_upgrade_adds_saved_wind_journey_fields(self):
         old = Garden(NOW, coins=432).to_dict()
-        for key in V12_FIELDS | V13_FIELDS:
+        for key in V12_FIELDS | V13_FIELDS | {'progression'}:
             old.pop(key)
         old['schema'] = 11
         upgraded = migrate(old)
@@ -168,6 +169,7 @@ class NewFlowers(unittest.TestCase):
     def test_v12_progress_keeps_percentage_and_uses_one_hour_target(self):
         old = Garden(NOW, wind_progress=1800, wind_upgrade=3, coins=432).to_dict()
         old.pop('wind_ring_hits')
+        old.pop('progression')
         old.update(schema=12, wind_progress=3600)
         upgraded = migrate(old)
         self.assertEqual((upgraded['wind_progress'], upgraded['wind_upgrade'], upgraded['wind_ring_hits']),
@@ -316,7 +318,7 @@ class ContentUI(unittest.TestCase):
                 if not picker.next.isEnabled():
                     break
                 picker.next.click()
-            self.assertEqual(seen, {*REGULAR_PLANTS, 'random'})
+            self.assertEqual(seen, {*CULTIVABLE_PLANTS, 'random'})
         self.assertEqual(self.garden.coins, 120)
         self.assertEqual(sum(self.garden.seeds.values()), 1)
 

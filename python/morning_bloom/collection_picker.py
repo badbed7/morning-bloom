@@ -81,7 +81,7 @@ class CollectionPicker(QDialog):
             painter,
             QRectF(0, 0, 72, 82),
             plant_definition(item['species']),
-            skin=self.garden.equipped_skin,
+            skin=self.garden.skin_for(item['id']),
         )
         painter.end()
         return QIcon(pixmap)
@@ -90,10 +90,9 @@ class CollectionPicker(QDialog):
         requested = set(self.garden.desktop_flowers)
         floating = set(self.live_ids_callback())
         signature = (
-            tuple((item['id'], item['species']) for item in self.garden.collection),
+            tuple((item['id'], item['species'], self.garden.skin_for(item['id'])) for item in self.garden.collection),
             tuple(sorted(requested)),
             tuple(sorted(floating)),
-            self.garden.equipped_skin,
         )
         if not force and signature == self._signature:
             return
@@ -108,7 +107,8 @@ class CollectionPicker(QDialog):
             state = ('바탕화면 표시 중' if item['id'] in floating else
                      '표시 복원 대기' if item['id'] in requested else '정원 보관 중')
             price = item['base_sale_g'] + item['bonus_g']
-            list_item.setToolTip(f'{definition.name} · 판매 {price}G · {state}\n우클릭해 표시 위치를 바꿉니다.')
+            from .content import rarity
+            list_item.setToolTip(f"{rarity('plant',item['species'])} · {definition.name} · 판매 {price}G · {state}\n우클릭해 표시 위치를 바꿉니다.")
             list_item.setData(Qt.AccessibleTextRole, f'{definition.name} · {state}')
             self.list.addItem(list_item)
             if item['id'] == selected_id:

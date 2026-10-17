@@ -42,6 +42,8 @@ from .google_cloud import CloudError, GoogleDriveSync
 from .model import FERTILIZER_CAP, FERTILIZER_SECONDS, POT_PRICES, TYCOON_RULE, WIND_BASE_SECONDS
 from .icon_picker import IconPicker
 from .locked_catalog import LockedCatalog
+from .board_window import BoardWindow
+from .effects import minigame_parameters
 from .navigation import SlideStack, chevron_icon
 from .plant_catalog import PLANTS, REGULAR_PLANTS, VACATION_PLANTS, WEEKEND_PLANTS, RANDOM_SEED_PRICE, plant_definition
 from .seed_picker import SeedPicker
@@ -134,7 +136,7 @@ class Flower(QWidget):
             painter, self.garden.definition, stage=self.garden.stage,
             phase=0 if self.garden.vacation else self.phase,
             planted=self.garden.planted, drops=self.drops,
-            skin=self.garden.equipped_skin,
+            skin=self.garden.skin_for(self.garden.pot['plant_id']),
         )
         painter.end()
 
@@ -152,6 +154,7 @@ class Window(QWidget):
         self._mist_game = None
         self._wind_game = None
         self._collection_picker = None
+        self._board_window = None
         self._normal_position = QPointF(garden.settings['x'], garden.settings['y']).toPoint()
         self._minimized = False
         self._closing = False
@@ -968,6 +971,7 @@ class Window(QWidget):
 
     def _apply_cloud_save(self, envelope):
         try:
+            self.close_board()
             restored = self.store.replace_from_cloud(envelope['save'], self.now())
             self.close_collection_picker()
             self.desktop.close()
@@ -1008,9 +1012,16 @@ class Window(QWidget):
             wallet.addSpacing(8)
         wallet.addStretch()
         layout.addLayout(wallet)
+        self.board_button = QPushButton('씨앗 정원 여행')
+        self.board_button.setFixedHeight(22)
+        self.board_button.setStyleSheet('padding:1px 6px;font-size:12px;')
+        self.board_button.setToolTip('주간 주사위 5개 · 뽑기 / 도감 / 장착 / 꽃잎 교환')
+        self.board_button.clicked.connect(self.open_board)
         seed_title = QLabel('재배 상점 · 골드')
         seed_title.setObjectName('section')
-        layout.addWidget(seed_title)
+        seed_header=QHBoxLayout()
+        seed_header.addWidget(seed_title);seed_header.addStretch();seed_header.addWidget(self.board_button)
+        layout.addLayout(seed_header)
         self.shop_picker = SeedPicker(shop=True)
         layout.addWidget(self.shop_picker)
         self.shop_info = QLabel()
@@ -1024,8 +1035,8 @@ class Window(QWidget):
         theme_title = QLabel('정원 배경 · 햇빛')
         theme_title.setObjectName('section')
         layout.addWidget(theme_title)
-        self.theme_picker = IconPicker((theme.key, theme.label, theme_icon(theme)) for theme in THEMES.values())
-        self.theme_picker.buttons[self.garden.equipped_theme].setChecked(True)
+        self.theme_picker = IconPicker((theme.key, theme.label, theme_icon(theme)) for theme in THEMES.values() if not theme.key.startswith('catalog_'))
+        self.theme_picker.buttons.get(self.garden.equipped_theme,self.theme_picker.buttons['grass']).setChecked(True)
         layout.addWidget(self.theme_picker)
         self.theme_info = QLabel()
         self.theme_info.setObjectName('small')
@@ -1038,12 +1049,12 @@ class Window(QWidget):
         skin_title = QLabel('화분 스킨 · 햇빛')
         skin_title.setObjectName('section')
         layout.addWidget(skin_title)
-        skin_scope = QLabel('한 번 구매하면 재배·정원의 모든 화분에 계속 사용할 수 있어요.')
+        skin_scope = QLabel('스킨은 화분별로 장착해요. 보관 꽃의 외형은 수확할 때 유지돼요.')
         skin_scope.setObjectName('small')
         skin_scope.setWordWrap(True)
         layout.addWidget(skin_scope)
-        self.skin_picker = IconPicker((skin.key, skin.label, skin_icon(skin)) for skin in POT_SKINS.values())
-        self.skin_picker.buttons[self.garden.equipped_skin].setChecked(True)
+        self.skin_picker = IconPicker((skin.key, skin.label, skin_icon(skin)) for skin in POT_SKINS.values() if not skin.key.startswith('catalog_'))
+        self.skin_picker.buttons.get(self.garden.equipped_skin,self.skin_picker.buttons['terracotta']).setChecked(True)
         layout.addWidget(self.skin_picker)
         self.skin_info = QLabel()
         self.skin_info.setObjectName('small')
@@ -1053,7 +1064,7 @@ class Window(QWidget):
         self.buy_skin_button = self.button(skin_row, '스킨 구매', self.buy_selected_skin)
         self.apply_skin_button = self.button(skin_row, '스킨 적용', self.apply_selected_skin)
         layout.addLayout(skin_row)
-        self.locked_catalog = LockedCatalog()
+        self.locked_catalog = LockedCatalog(self.garden)
         layout.addSpacing(8)
         layout.addWidget(self.locked_catalog)
         layout.addStretch()
@@ -1144,6 +1155,17 @@ class Window(QWidget):
         self.message.setToolTip(text)
         self.footer_status.setCurrentWidget(self.message if text else self.inventory)
 
+    def open_board(self):
+        if self._startup_cloud_syncing or self._closing or self._close_requested or self._cloud_busy:return
+        self._cancel_mist_game();self._cancel_fertilizer_game();self._cancel_wind_game()
+        if self._board_window is None:
+            self._board_window=BoardWindow(self)
+            self._board_window.finished.connect(lambda _:setattr(self,'_board_window',None))
+        self._board_window.show();self._board_window.raise_();self._board_window.activateWindow()
+
+    def close_board(self):
+        if self._board_window is not None:self._board_window.close()
+
     def open_collection_picker(self):
         if self.pages.currentIndex() != POT_PAGE:
             return
@@ -1192,7 +1214,7 @@ class Window(QWidget):
         return self.set_desktop_flower(item_id, item_id not in self.garden.desktop_flowers)
 
     def act(self, callback):
-        if self._action_busy:
+        if self._action_busy or self.garden.progression['board']['prepared'] is not None:
             return False
         self._action_busy = True
         before = self.garden.to_dict()
@@ -1307,6 +1329,7 @@ class Window(QWidget):
         else:
             hint = '성공 보상 뒤 3분 후에 다시 비료를 받을 수 있어요.'
         game = FertilizerGame(self, self.garden.can_reward_fertilizer, hint)
+        game.first_width_factor=minigame_parameters(self.garden)['fertilizer_width']
         self._fertilizer_game = game
         store, demo = self.store, self.demo
 
@@ -1430,6 +1453,7 @@ class Window(QWidget):
                 self.notify('Google Drive 작업이 끝난 뒤 전환하세요.', important=True)
             self._sync_developer_controls()
             return enabled == self.demo
+        self.close_board()
         self._cancel_fertilizer_game()
         self._cancel_mist_game()
         self.close_collection_picker()
@@ -1501,6 +1525,7 @@ class Window(QWidget):
             self.showMinimized() if minimized else self.show()
 
     def toggle_topmost(self, checked):
+        self.close_board()
         self.garden.settings['topmost'] = checked
         position = self.pos()
         self.setWindowFlag(Qt.WindowStaysOnTopHint, checked)
@@ -1511,6 +1536,7 @@ class Window(QWidget):
     def set_opacity(self, value):
         self.garden.settings['opacity'] = value / 100
         self.setWindowOpacity(value / 100)
+        if self._board_window is not None:self._board_window.setWindowOpacity(value/100)
         if self._fertilizer_game is not None:
             self._fertilizer_game.setWindowOpacity(self.windowOpacity())
         if self._mist_game is not None:
@@ -1574,8 +1600,8 @@ class Window(QWidget):
         self.fertilizer_button.setVisible(caring and garden.pot['initial_watered'] and garden.tutorial_reward_claimed)
         self.harvest_button.setVisible(garden.bloomed)
         visible_seeds = {**garden.seeds, 'random': len(garden.mystery_seeds)}
-        self.species_picker.update_counts(visible_seeds)
-        self.shop_picker.update_counts(visible_seeds)
+        self.species_picker.update_counts(visible_seeds, garden.progression['unlocked'])
+        self.shop_picker.update_counts(visible_seeds, garden.progression['unlocked'])
         self.vacation.blockSignals(True)
         self.vacation.setChecked(garden.vacation)
         self.vacation.blockSignals(False)
@@ -1647,7 +1673,7 @@ class Window(QWidget):
         self.inventory.setText(
             f'{garden.coins}G · 햇빛 {garden.sunlight} · 씨앗 {seed_total} · 꽃 {len(garden.collection)}'
         )
-        seeds = ' / '.join(f'{PLANTS[key].name} {garden.seed_count(key)}' for key in REGULAR_PLANTS)
+        seeds = ' / '.join(f'{PLANTS[key].name} {garden.seed_count(key)}' for key in garden.progression['unlocked'])
         seeds += f' / 랜덤 {len(garden.mystery_seeds)}'
         self.inventory.setToolTip(f'씨앗 {seeds} · 보관 꽃 {len(garden.collection)}')
         if self._collection_picker is not None and self._collection_picker.isVisible():
@@ -1681,7 +1707,9 @@ class Window(QWidget):
             purpose = '주말용' if species in WEEKEND_PLANTS else '휴가용'
             self.shop_info.setText(self.shop_info.text() + f'\n{purpose} · 접속 없이 개화까지 성장 · 휴가 모드는 꺼 두세요')
         self.buy_seed_button.setText(f'{item.name} 씨앗 구매 · {item.seed_price}G')
-        self.buy_seed_button.setEnabled(garden.coins >= item.seed_price)
+        self.buy_seed_button.setEnabled(garden.coins >= item.seed_price and species in garden.progression['unlocked'])
+        if species!='random' and species not in garden.progression['unlocked']:
+            self.buy_seed_button.setText('씨앗 정원 여행에서 품종 해금')
         if species == 'random':
             self.shop_info.setText('외관으로 정체를 추측해 보세요 · 개화 후 이름 공개\n고대 0.1% · 일반 3종 각 33.3% · 고대 꽃 기본 500G')
             self.shop_info.setToolTip('구매할 때 결과가 결정·저장됩니다. 고대 꽃 분무 시 550G')
@@ -1720,7 +1748,7 @@ class Window(QWidget):
         self.buy_skin_button.setText('보유한 스킨' if owned else f'구매 · 햇빛 {skin.price}')
         self.buy_skin_button.setEnabled(not owned and garden.sunlight >= skin.price)
         self.buy_skin_button.setToolTip(f'보유 햇빛 {garden.sunlight} · 부족 {max(0, skin.price - garden.sunlight)}')
-        self.apply_skin_button.setText('사용 중' if equipped else '모든 화분에 적용')
+        self.apply_skin_button.setText('사용 중' if equipped else '선택 화분에 적용')
         self.apply_skin_button.setEnabled(owned and not equipped)
         self.desktop_opacity.blockSignals(True)
         self.desktop_opacity.setValue(round(garden.desktop_opacity * 100))
@@ -1728,6 +1756,7 @@ class Window(QWidget):
         self.desktop.sync()
         self.collection_garden.meadow.desktop_ids = set(self.desktop.windows)
         self.collection_garden.sync()
+        self.locked_catalog.show_page()
         self.flower.update()
 
     def _care_text(self):
@@ -1737,8 +1766,9 @@ class Window(QWidget):
         if not garden.pot['initial_watered']:
             return '첫 물주기 전 · 성장 정지'
         if garden.pot['ruleset_id'] == TYCOON_RULE:
+            from .effects import cooldown
             return ('첫 꽃 안내 · 첫 물주기만 필요' if garden.pot['is_tutorial'] else
-                    '물 30분 · 분무 15분 · 늦게 돌봐도 정상 성장')
+                    f"물 {cooldown(garden,garden.pot,'water')/60:g}분 · 분무 {cooldown(garden,garden.pot,'mist')/60:g}분 · 늦게 돌봐도 정상 성장")
         status = garden.water_status
         if status == 'waiting':
             return f'중간 물주기까지 {format_duration(22 * 3600 - garden.pot["care_elapsed"])}'
@@ -1798,6 +1828,7 @@ class Window(QWidget):
     def _prepare_minimize(self):
         self.pages.finish_transition()
         self.pot_slides.finish_transition()
+        self.close_board()
         self.close_collection_picker()
         self._cancel_fertilizer_game()
         self._cancel_mist_game()
@@ -1830,6 +1861,7 @@ class Window(QWidget):
         if self._closing:
             event.accept()
         else:
+            self.close_board()
             self.close_collection_picker()
             self._cancel_fertilizer_game()
             self._cancel_mist_game()

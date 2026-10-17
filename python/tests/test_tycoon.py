@@ -31,7 +31,7 @@ def growing(species='starflower', now=NOW):
 def v5_data(garden):
     data = garden.to_dict()
     data['seeds'] = {key: data['seeds'][key] for key in LEGACY_REGULAR_PLANTS}
-    for key in V8_FIELDS | V12_FIELDS | V13_FIELDS:
+    for key in V8_FIELDS | V12_FIELDS | V13_FIELDS | {'progression'}:
         data.pop(key)
     for key in ('fertilizer', 'reward_wait', 'last_reward_id', 'owned_skins', 'equipped_skin'):
         data.pop(key)
@@ -65,9 +65,9 @@ class TycoonRules(unittest.TestCase):
         self.assertEqual(garden.growth, 60)
         self.assertFalse(garden.care('mist', NOW + MIST_INTERVAL - 1))
         self.assertTrue(garden.care('mist', NOW + MIST_INTERVAL))
-        self.assertFalse(garden.care('water', NOW + WATER_INTERVAL - 1))
+        self.assertFalse(garden.care('water', NOW + WATER_INTERVAL * .95 - 1))
         self.assertTrue(garden.care('water', NOW + WATER_INTERVAL))
-        self.assertEqual(garden.growth, WATER_INTERVAL + 120 + 180)
+        self.assertEqual(garden.growth, WATER_INTERVAL * 1.02 + 120 + 180)
         self.assertEqual((garden.pot['mist_count'], garden.pot['water_count']), (2, 2))
         garden.advance(NOW + 3 * HOUR)
         self.assertTrue(garden.harvest(NOW + 3 * HOUR))
@@ -90,7 +90,7 @@ class TycoonRules(unittest.TestCase):
         self.assertTrue(garden.care('water', NOW + 3600))
         self.assertFalse(garden.care('water', NOW + 3600))
         self.assertEqual(garden.pots[0]['water_wait'], 0)
-        self.assertEqual(garden.pots[1]['water_wait'], WATER_INTERVAL)
+        self.assertEqual(garden.pots[1]['water_wait'], WATER_INTERVAL * .95)
 
     def test_tulip_has_no_neglect_penalty_under_new_rules(self):
         garden = growing('tulip')
@@ -128,15 +128,15 @@ class TycoonRules(unittest.TestCase):
             self.assertEqual(after['pots'][0][key], before['pots'][0][key], key)
 
     def test_fertilizer_caps_and_short_remaining_bloom(self):
-        for species, limit in (('starflower', 4), ('daisy', 36), ('tulip', 72)):
+        for species, limit in (('starflower', 5), ('daisy', 36), ('tulip', 72)):
             garden = growing(species)
             self.assertEqual(garden.pot['fertilizer_limit'], limit)
         garden = growing()
         garden.fertilizer = 5
-        for _ in range(4):
+        for _ in range(5):
             self.assertTrue(garden.use_fertilizer(NOW))
         self.assertFalse(garden.use_fertilizer(NOW))
-        self.assertEqual(garden.fertilizer, 1)
+        self.assertEqual(garden.fertilizer, 0)
         garden = growing()
         garden.fertilizer = 1
         garden.growth = garden.duration - 7 * 60
@@ -165,7 +165,7 @@ class TycoonRules(unittest.TestCase):
         garden.set_vacation(True, NOW)
         garden.advance(NOW + 20 * HOUR)
         self.assertEqual((garden.growth, garden.pot['water_wait'], garden.pot['mist_wait'], garden.reward_wait),
-                         (60, WATER_INTERVAL, MIST_INTERVAL, REWARD_INTERVAL))
+                         (60, WATER_INTERVAL * .95, MIST_INTERVAL, REWARD_INTERVAL))
         self.assertFalse(garden.use_fertilizer(NOW + 20 * HOUR))
         self.assertFalse(garden.reward_fertilizer('two', NOW + 20 * HOUR))
         garden.set_vacation(False, NOW + 20 * HOUR)
@@ -176,7 +176,7 @@ class TycoonRules(unittest.TestCase):
         self.assertEqual(garden.reward_wait, max(0, REWARD_INTERVAL - 300))
 
     def test_planned_starflower_timing_matches_design(self):
-        for fertilizers, bloom_seconds in ((0, 9240), (1, 8880), (4, 7200)):
+        for fertilizers, bloom_seconds in ((0, 9180), (1, 8820), (4, 7200)):
             garden = growing()
             garden.care('mist', NOW)
             garden.fertilizer = fertilizers

@@ -19,7 +19,7 @@ def flower(index=0, species='daisy'):
 def v4_data(garden):
     data = garden.to_dict()
     data['seeds'] = {key: data['seeds'][key] for key in LEGACY_REGULAR_PLANTS}
-    for key in V8_FIELDS | V12_FIELDS | V13_FIELDS:
+    for key in V8_FIELDS | V12_FIELDS | V13_FIELDS | {'progression'}:
         data.pop(key)
     for key in (
         'sunlight', 'sun_tokens', 'sun_elapsed', 'sun_cursor',
@@ -129,7 +129,7 @@ class CosmeticsAndMigration(unittest.TestCase):
         self.assertEqual(Garden.from_dict(garden.to_dict()).equipped_skin, 'rose')
         self.assertTrue(garden.equip_skin('terracotta'))
         after = garden.to_dict()
-        for key in before.keys() - {'sunlight', 'owned_skins', 'equipped_skin'}:
+        for key in before.keys() - {'sunlight', 'owned_skins', 'equipped_skin', 'progression'}:
             self.assertEqual(after[key], before[key], key)
         for invalid in ('missing', [], {}, None, True):
             self.assertFalse(garden.buy_skin(invalid))
@@ -151,6 +151,7 @@ class CosmeticsAndMigration(unittest.TestCase):
         data = Garden(100, coins=432, sunlight=30, fertilizer=2, collection=[flower()],
                       owned_themes=['grass', 'sky'], equipped_theme='sky').to_dict()
         additions = {key: data.pop(key) for key in V8_FIELDS | V12_FIELDS | V13_FIELDS}
+        data.pop('progression')
         data.pop('owned_skins')
         data.pop('equipped_skin')
         data['schema'] = 6
@@ -162,7 +163,10 @@ class CosmeticsAndMigration(unittest.TestCase):
             garden = store.load(100)
             self.assertEqual(garden.to_dict(), {**data, **additions, 'schema': Garden.CURRENT_SCHEMA,
                                               'seeds': {**dict.fromkeys(REGULAR_PLANTS, 0), **data['seeds']},
-                                              'owned_skins': ['terracotta'], 'equipped_skin': 'terracotta'})
+                                              'owned_skins': ['terracotta'], 'equipped_skin': 'terracotta',
+                                              'progression': garden.progression})
+            self.assertEqual(garden.progression['crops'], {})
+            self.assertEqual(garden.progression['flower_skins'], {'flower-0':'terracotta'})
             store.save(garden)
             self.assertEqual(store.migration_backup.name, 'garden.json.v6-migration.bak')
             self.assertEqual(store.migration_backup.read_text(encoding='utf-8'), raw)

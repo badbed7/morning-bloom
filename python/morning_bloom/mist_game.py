@@ -32,16 +32,19 @@ class SprayCanvas(QWidget):
 
     def __init__(self, garden, parent):
         super().__init__(parent)
-        self.definition, self.stage, self.skin = garden.definition, garden.stage, garden.equipped_skin
+        self.definition, self.stage, self.skin = garden.definition, garden.stage, garden.skin_for(garden.pot['plant_id'])
+        from .effects import minigame_parameters
+        parameters=minigame_parameters(garden)
+        self.required=parameters['mist_clicks'];self.animation_frames=parameters['mist_frames']
         self.hits = 0
         self.frame = 0
         self.spraying = False
         self.done = False
         self.setFixedHeight(205)
         self.setCursor(spray_cursor())
-        self.setAccessibleName('분무기 · 식물을 세 번 클릭하세요')
+        self.setAccessibleName(f'분무기 · 식물을 {self.required}번 클릭하세요')
         self.timer = QTimer(self)
-        self.timer.setInterval(25)
+        self.timer.setInterval(parameters['mist_interval'])
         self.timer.timeout.connect(self.animate)
 
     def plant_rect(self):
@@ -64,10 +67,10 @@ class SprayCanvas(QWidget):
 
     def animate(self):
         self.frame += 1
-        if self.frame >= 12:
+        if self.frame >= self.animation_frames:
             self.timer.stop()
             self.spraying = False
-            if self.hits == 3 and not self.done:
+            if self.hits == self.required and not self.done:
                 self.done = True
                 self.unsetCursor()
                 self.completed.emit()
@@ -105,11 +108,13 @@ class MistGame(QDialog):
         self.setWindowOpacity(parent.windowOpacity())
         self.setFixedWidth(320)
         layout = QVBoxLayout(self)
-        self.status = QLabel('식물을 클릭해 분무하세요 · 0 / 3')
+        from .effects import minigame_parameters
+        self.required=minigame_parameters(garden)['mist_clicks']
+        self.status = QLabel(f'식물을 클릭해 분무하세요 · 0 / {self.required}')
         layout.addWidget(self.status)
         self.canvas = SprayCanvas(garden, self)
         layout.addWidget(self.canvas)
-        hint = QLabel('물방울이 사라지면 다시 클릭하세요.\n3회 완료할 때만 분무 효과가 적용됩니다.')
+        hint = QLabel(f'물방울이 사라지면 다시 클릭하세요.\n{self.required}회 완료할 때만 분무 효과가 적용됩니다.')
         layout.addWidget(hint)
         self.result = QLabel('')
         self.result.setWordWrap(True)
@@ -117,7 +122,7 @@ class MistGame(QDialog):
         self.close_button = QPushButton('취소 · Esc')
         self.close_button.clicked.connect(self.reject)
         layout.addWidget(self.close_button)
-        self.canvas.progress.connect(lambda n: self.status.setText(f'분무 중 · {n} / 3'))
+        self.canvas.progress.connect(lambda n: self.status.setText(f'분무 중 · {n} / {self.required}'))
         self.canvas.completed.connect(self.finish_spraying)
         self.finished.connect(lambda _: self.canvas.timer.stop())
 
@@ -125,6 +130,6 @@ class MistGame(QDialog):
         if self.finished_spraying:
             return
         self.finished_spraying = True
-        self.status.setText('분무 3회 완료')
+        self.status.setText(f'분무 {self.required}회 완료')
         self.close_button.setText('돌아가기')
         self.completed.emit()

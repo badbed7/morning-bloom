@@ -1,5 +1,5 @@
 """Small previews drawn from the same theme and pot skin definitions as the game."""
-from PySide6.QtCore import QRectF, Qt
+from PySide6.QtCore import QRect, QRectF, Qt
 from PySide6.QtGui import QColor, QIcon, QLinearGradient, QPainter, QPen, QPixmap
 
 from .flower_art import paint_potted_flower
@@ -21,6 +21,10 @@ def theme_icon(theme):
     for x, y in ((10, 15), (22, 24), (34, 15)):
         painter.drawLine(x, y, x - 2, y - 3)
         painter.drawLine(x, y, x + 2, y - 4)
+    if theme.key.startswith('catalog_'):
+        from .catalog_art import paint_garden_pattern
+        painter.translate(2,3);painter.scale(1/7,1/7)
+        paint_garden_pattern(painter,QRect(0,0,280,210),theme.key)
     painter.end()
     return QIcon(pixmap)
 

@@ -113,6 +113,20 @@ PLANTS['dandelion'] = PlantDefinition(
 )
 
 
+from .content import BY_ID, NEW_PLANTS
+
+# Historical regular species remain purchasable; new species require an unlock.
+for _key in NEW_PLANTS:
+    _item = BY_ID['plant', _key]
+    _stats = _item['cultivation']
+    PLANTS[_key] = PlantDefinition(_key, _item['name'], _stats['growth_seconds'],
+        _stats['seed_price'], _stats['sale_price'], 'start_only',
+        '씨앗 정원 여행에서 해금 · 첫 물 이후 성장', 16, 26,
+        '#e7a9ba', '#edcd8c', '#688561', '#c98c67')
+CULTIVABLE_PLANTS = REGULAR_PLANTS + NEW_PLANTS
+VACATION_PLANTS = VACATION_PLANTS + tuple(key for key in NEW_PLANTS if PLANTS[key].growth_seconds >= 3 * DAY)
+
+
 def roll_mystery_seed(draw):
     """Exactly one of 1,000 equally likely tickets is ancient."""
     ticket = draw(1000)

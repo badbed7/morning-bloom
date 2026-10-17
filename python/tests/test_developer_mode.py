@@ -118,7 +118,7 @@ class DeveloperMode(unittest.TestCase):
         self.assertTrue(self.window.set_developer_mode(True))
         self.window.fast_forward_button.click()
         self.assertEqual(self.window.offset, 6 * HOUR)
-        self.assertEqual(self.window.garden.pots[0]['growth'], 6 * HOUR)
+        self.assertEqual(self.window.garden.pots[0]['growth'], 6 * HOUR + 72)
         self.assertEqual(self.window.garden.pots[1]['growth'], 3 * HOUR)
         self.assertEqual(self.window.garden.last_update, NOW + 6 * HOUR)
         self.assertEqual(self.demo_store.load(NOW).last_update, NOW + 6 * HOUR)
@@ -146,7 +146,7 @@ class DeveloperMode(unittest.TestCase):
         self.assertEqual(self.window.garden.pot['care_elapsed'], 0)
         self.window.water_button.click()
         self.window.fast_forward_button.click()
-        self.assertEqual(self.window.garden.growth, 6 * HOUR)
+        self.assertEqual(self.window.garden.growth, 6 * HOUR + 72)
 
     def test_skip_respects_vacation_and_resumes_without_catchup(self):
         self.prepare_demo()
@@ -159,10 +159,11 @@ class DeveloperMode(unittest.TestCase):
         self.assertIn('휴가', self.window.message.text())
         self.window.vacation.setChecked(False)
         self.window.fast_forward_button.click()
-        self.assertEqual(self.window.garden.growth, 6 * HOUR)
+        self.assertEqual(self.window.garden.growth, 6 * HOUR + 72)
 
     def test_repeated_skip_uses_tulip_watering_and_slow_growth_rules(self):
         garden = self.prepare_demo('tulip', watered=False)
+        garden.progression['crops'].clear()
         garden.pot.update(ruleset_id='v0.4', care_profile='tulip_midwater', fertilizer_limit=0)
         garden.care('water', NOW)
         self.demo_store.save(garden)
@@ -181,7 +182,7 @@ class DeveloperMode(unittest.TestCase):
         self.window.fast_forward_button.click()
         self.wall_clock.return_value = NOW + 1800
         self.assertTrue(self.window.set_developer_mode(False))
-        self.assertEqual(self.window.garden.growth, 1800)
+        self.assertEqual(self.window.garden.growth, 1836)
         self.assertEqual(self.window.garden.last_update, NOW + 1800)
         self.assertEqual(self.window.offset, 0)
 
@@ -194,7 +195,7 @@ class DeveloperMode(unittest.TestCase):
         self.assertEqual(self.window.offset, 6 * HOUR)
         self.wall_clock.return_value += 30
         self.window.refresh()
-        self.assertEqual(self.window.garden.growth, 6 * HOUR + 30)
+        self.assertEqual(self.window.garden.growth, 6 * HOUR + 30 + 72)
 
     def test_direct_demo_launch_restores_clock_before_first_refresh(self):
         self.window.close()
@@ -209,9 +210,9 @@ class DeveloperMode(unittest.TestCase):
         self.assertEqual(self.window.offset, 12 * HOUR)
         self.wall_clock.return_value += 60
         self.window.refresh()
-        self.assertEqual(self.window.garden.growth, 12 * HOUR + 60)
+        self.assertEqual(self.window.garden.growth, 12 * HOUR + 60 + 72)
         self.assertTrue(self.window.set_developer_mode(False))
-        self.assertEqual(self.window.garden.growth, 60)
+        self.assertAlmostEqual(self.window.garden.growth, 61.2)
 
     def test_failed_skip_rolls_back_clock_growth_and_disk(self):
         self.prepare_demo()

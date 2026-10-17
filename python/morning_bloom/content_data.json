@@ -1,0 +1,1440 @@
+[
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_038",
+    "name": "밤하늘풀",
+    "grade": "S",
+    "design_id": "G-S01",
+    "board_eligible": true,
+    "description": "오프라인 성장 +12%. 오프라인 중 개화한 꽃은 판매 +8%."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_047",
+    "name": "눈 오는 잔디",
+    "grade": "S",
+    "design_id": "G-S02",
+    "board_eligible": true,
+    "description": "기본 성장 72시간 이상인 꽃의 추가 물주기 단축량 +20%, 비료 단축량 +20%."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_073",
+    "name": "장미 정원",
+    "grade": "S",
+    "design_id": "G-S03",
+    "board_eligible": true,
+    "description": "장미 성장 +15%, 장미 판매 +15%."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_074",
+    "name": "수국 정원",
+    "grade": "S",
+    "design_id": "G-S04",
+    "board_eligible": true,
+    "description": "서로 다른 품종 4종을 동시에 재배하는 동안 해당 꽃 성장 +10%. 네 품종 동시 재배를 각 꽃 성장의 절반 이상 유지하면 판매 +10%."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_077",
+    "name": "야외 테라스",
+    "grade": "S",
+    "design_id": "G-S05",
+    "board_eligible": true,
+    "description": "정원에 서로 다른 꽃 3종·화분 외형 3종을 전시하면 햇빛 생산 주기 -8%. 이 구성을 성장의 절반 이상 유지한 새 꽃은 판매 +12%."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_078",
+    "name": "분수대 주변",
+    "grade": "S",
+    "design_id": "G-S06",
+    "board_eligible": true,
+    "description": "추가 물주기와 분무를 한 쌍 완료할 때 충전 1회. 3회 충전하면 비료 1개를 지급하며 실제 시간 기준 하루 1개까지. 이 정원에서 시작한 재배의 비료 단축량 +10%."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_079",
+    "name": "온실 주변",
+    "grade": "S",
+    "design_id": "G-S07",
+    "board_eligible": true,
+    "description": "모든 꽃 성장 +8%, 기본 성장 72시간 이상인 꽃에는 대신 +12%. 미수집 햇빛 대기 상한 +5개."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_015",
+    "name": "벚꽃",
+    "grade": "A",
+    "design_id": "G-A01",
+    "board_eligible": true,
+    "description": "계정에서 처음 수확하는 품종은 판매 +12%. 최초 수확 여부를 품종별로 저장한다."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_016",
+    "name": "벚꽃잎",
+    "grade": "A",
+    "design_id": "G-A02",
+    "board_eligible": true,
+    "description": "서로 다른 4품종을 동시에 재배한 상태에서 첫 분무를 완료한 꽃은 첫 분무 판매 보너스 +8%p."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_018",
+    "name": "단풍",
+    "grade": "A",
+    "design_id": "G-A03",
+    "board_eligible": true,
+    "description": "기본 성장 72시간 이상인 꽃은 성장 +10%, 판매 +3%."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_039",
+    "name": "은방울꽃",
+    "grade": "A",
+    "design_id": "G-A04",
+    "board_eligible": true,
+    "description": "은방울꽃 성장 +12%."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_036",
+    "name": "하트풀",
+    "grade": "A",
+    "design_id": "G-A05",
+    "board_eligible": true,
+    "description": "추가 물주기 3회와 분무 3회를 모두 마친 꽃은 이후 성장 +10%."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_044",
+    "name": "햇빛 비추는 잔디",
+    "grade": "A",
+    "design_id": "G-A06",
+    "board_eligible": true,
+    "description": "햇빛을 실제로 10개 수집할 때마다 햇빛 1개 추가. 추가분은 수집 횟수에 포함하지 않는다."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_045",
+    "name": "비 온 뒤",
+    "grade": "A",
+    "design_id": "G-A07",
+    "board_eligible": true,
+    "description": "추가 물주기 직후 30분 동안 해당 꽃 성장 +12%. 재발동은 지속 시간만 갱신한다."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_046",
+    "name": "서리 낀 잔디",
+    "grade": "A",
+    "design_id": "G-A08",
+    "board_eligible": true,
+    "description": "오프라인 중 마지막 성장 6시간 구간에 들어간 꽃은 그 구간 성장 +12%."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_053",
+    "name": "징검다리",
+    "grade": "A",
+    "design_id": "G-A09",
+    "board_eligible": true,
+    "description": "성장 단계가 올라갈 때마다 추가 성장 3분을 적립한다. 개체당 기본 성장의 1%까지."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_060",
+    "name": "연못가 잔디",
+    "grade": "A",
+    "design_id": "G-A10",
+    "board_eligible": true,
+    "description": "분무 2회마다 해당 꽃의 물주기 남은 대기를 3분 줄인다. 같은 물주기 대기 구간에는 1회만 적용."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_061",
+    "name": "물가 잔디",
+    "grade": "A",
+    "design_id": "G-A11",
+    "board_eligible": true,
+    "description": "추가 물주기 2회마다 해당 꽃의 분무 남은 대기를 1분 줄인다. 같은 분무 대기 구간에는 1회만 적용."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_062",
+    "name": "시냇물 옆",
+    "grade": "A",
+    "design_id": "G-A12",
+    "board_eligible": true,
+    "description": "돌봄·비료로 단축한 시간이 누적 30분 이상인 꽃은 판매 +10%."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_063",
+    "name": "호수 옆",
+    "grade": "A",
+    "design_id": "G-A13",
+    "board_eligible": true,
+    "description": "미수집 햇빛이 5개 이상인 상태로 시작한 생산 주기는 소요 시간 -10%."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_065",
+    "name": "나무 그늘 아래",
+    "grade": "A",
+    "design_id": "G-A14",
+    "board_eligible": true,
+    "description": "한 번에 6시간 이상 오프라인으로 지낸 뒤 복귀하면 성장 중인 꽃마다 추가 성장 20분. 개체당 1회, 기본 성장의 3%까지."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_067",
+    "name": "큰 나무 아래",
+    "grade": "A",
+    "design_id": "G-A15",
+    "board_eligible": true,
+    "description": "정원에 전시한 꽃이 10송이 이상이면 생산 주기마다 가장 오래 전시한 꽃 1송이의 햇빛 보상 +1개."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_075",
+    "name": "허브 정원",
+    "grade": "A",
+    "design_id": "G-A16",
+    "board_eligible": true,
+    "description": "첫 분무를 완료한 꽃은 이후 물주기·분무 대기 각각 -8%."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_076",
+    "name": "라벤더 정원",
+    "grade": "A",
+    "design_id": "G-A17",
+    "board_eligible": true,
+    "description": "기본 성장 7일 이상인 꽃의 첫 분무 판매 보너스 +5%p."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_069",
+    "name": "돌담 옆",
+    "grade": "A",
+    "design_id": "G-A18",
+    "board_eligible": true,
+    "description": "같은 품종의 꽃 6송이 이상을 정원에 전시하는 동안 그 품종의 재배 성장 +8%."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_003",
+    "name": "작은 꽃",
+    "grade": "B",
+    "design_id": "G-B01",
+    "board_eligible": true,
+    "description": "별꽃 성장 +6%."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_004",
+    "name": "들꽃",
+    "grade": "B",
+    "design_id": "G-B02",
+    "board_eligible": true,
+    "description": "랜덤 씨앗에서 나온 일반 꽃 성장 +5%. 고대 꽃은 적용 대상에서 제외한다."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_005",
+    "name": "네잎클로버",
+    "grade": "B",
+    "design_id": "G-B03",
+    "board_eligible": true,
+    "description": "네 번째 추가 물주기 완료 시 추가 성장 3분. 개체당 1회."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_007",
+    "name": "화이트 플라워",
+    "grade": "B",
+    "design_id": "G-B04",
+    "board_eligible": true,
+    "description": "흰색 계열 꽃 판매 +6%."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_008",
+    "name": "블루 플라워",
+    "grade": "B",
+    "design_id": "G-B05",
+    "board_eligible": true,
+    "description": "물망초 성장 +6%."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_009",
+    "name": "핑크 플라워",
+    "grade": "B",
+    "design_id": "G-B06",
+    "board_eligible": true,
+    "description": "튤립의 첫 분무 판매 보너스 +3%p."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_010",
+    "name": "라벤더",
+    "grade": "B",
+    "design_id": "G-B07",
+    "board_eligible": true,
+    "description": "라벤더 성장 +6%."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_011",
+    "name": "데이지",
+    "grade": "B",
+    "design_id": "G-B08",
+    "board_eligible": true,
+    "description": "정원에 전시한 데이지의 햇빛 생산 주기 -6%."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_012",
+    "name": "민들레",
+    "grade": "B",
+    "design_id": "G-B09",
+    "board_eligible": true,
+    "description": "홀씨놀이에서 고리 보상 1G를 5회 받을 때마다 추가 1G. 별도 보상 횟수를 저장한다."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_013",
+    "name": "튤립",
+    "grade": "B",
+    "design_id": "G-B10",
+    "board_eligible": true,
+    "description": "튤립 판매 +7%."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_014",
+    "name": "코스모스",
+    "grade": "B",
+    "design_id": "G-B11",
+    "board_eligible": true,
+    "description": "코스모스 성장 +6%."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_017",
+    "name": "가을 잎",
+    "grade": "B",
+    "design_id": "G-B12",
+    "board_eligible": true,
+    "description": "기본 성장 48시간 이상인 꽃을 비료 없이 개화시키면 판매 +7%."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_019",
+    "name": "낙엽",
+    "grade": "B",
+    "design_id": "G-B13",
+    "board_eligible": true,
+    "description": "추가 물주기 없이 개화한 꽃 판매 +4%. 첫 물주기는 조건에서 제외한다."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_024",
+    "name": "잔디+흰 꽃잎",
+    "grade": "B",
+    "design_id": "G-B14",
+    "board_eligible": true,
+    "description": "첫 분무 완료 시 추가 성장 2분."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_025",
+    "name": "잔디+핑크 꽃잎",
+    "grade": "B",
+    "design_id": "G-B15",
+    "board_eligible": true,
+    "description": "모든 꽃의 첫 분무 판매 보너스 +4%p."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_026",
+    "name": "잔디+노란 꽃잎",
+    "grade": "B",
+    "design_id": "G-B16",
+    "board_eligible": true,
+    "description": "해바라기 성장 +6%."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_027",
+    "name": "잔디+보라 꽃잎",
+    "grade": "B",
+    "design_id": "G-B17",
+    "board_eligible": true,
+    "description": "보라 계열 꽃 성장 +5%."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_028",
+    "name": "잔디+낙엽",
+    "grade": "B",
+    "design_id": "G-B18",
+    "board_eligible": true,
+    "description": "오프라인 중 개화한 꽃 판매 +6%."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_029",
+    "name": "잔디+열매",
+    "grade": "B",
+    "design_id": "G-B19",
+    "board_eligible": true,
+    "description": "정원 전시 꽃 10송이 이상을 성장의 절반 이상 유지한 꽃 판매 +5%."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_032",
+    "name": "야생화",
+    "grade": "B",
+    "design_id": "G-B20",
+    "board_eligible": true,
+    "description": "같은 재배 화분의 직전 수확 품종과 다른 품종을 심으면 성장 +5%."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_035",
+    "name": "패랭꽃",
+    "grade": "B",
+    "design_id": "G-B21",
+    "board_eligible": true,
+    "description": "팬지·코스모스·프리지아의 첫 5회 추가 물주기는 매회 추가 성장 1분."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_040",
+    "name": "파스텔 잔디",
+    "grade": "B",
+    "design_id": "G-B22",
+    "board_eligible": true,
+    "description": "서로 다른 품종 3종 이상을 동시에 재배하는 동안 해당 꽃 성장 +5%."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_048",
+    "name": "가을빛 잔디",
+    "grade": "B",
+    "design_id": "G-B23",
+    "board_eligible": true,
+    "description": "기본 성장 48시간 이상·7일 미만인 꽃 판매 +6%."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_049",
+    "name": "핑크빛 잔디",
+    "grade": "B",
+    "design_id": "G-B24",
+    "board_eligible": true,
+    "description": "분홍 계열 꽃은 첫 분무 완료 후 다음 분무 대기 -10%."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_054",
+    "name": "나무 판자길",
+    "grade": "B",
+    "design_id": "G-B25",
+    "board_eligible": true,
+    "description": "추가 물주기 3회 완료 후 사용하는 다음 비료 1개의 단축량 +1분. 개체당 1회."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_055",
+    "name": "벽돌길",
+    "grade": "B",
+    "design_id": "G-B26",
+    "board_eligible": true,
+    "description": "재배 화분 4개가 모두 성장 중인 상태를 성장의 절반 이상 유지한 꽃 판매 +5%."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_068",
+    "name": "꽃밭 가장자리",
+    "grade": "B",
+    "design_id": "G-B27",
+    "board_eligible": true,
+    "description": "정원에 서로 다른 꽃 3종 이상을 전시하면 햇빛 생산 주기 -5%."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_070",
+    "name": "정원 테두리",
+    "grade": "B",
+    "design_id": "G-B28",
+    "board_eligible": true,
+    "description": "전시 꽃이 1~5송이이면 햇빛 생산 주기 -7%."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_071",
+    "name": "정원 울타리",
+    "grade": "B",
+    "design_id": "G-B29",
+    "board_eligible": true,
+    "description": "미수집 햇빛 대기 상한 +3개."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_072",
+    "name": "화단 주변",
+    "grade": "B",
+    "design_id": "G-B30",
+    "board_eligible": true,
+    "description": "재배 화분 4개가 모두 성장 중이면 각 꽃의 분무 기본 단축량 +20%."
+  },
+  {
+    "category": "garden",
+    "item_id": "grass",
+    "name": "기본 잔디",
+    "grade": "C",
+    "design_id": "G-C00",
+    "board_eligible": false,
+    "description": "첫 물주기 후 첫 1시간 동안 성장 +2%. 기존 기본 지급 품목."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_001",
+    "name": "연한 잔디",
+    "grade": "C",
+    "design_id": "G-C01",
+    "board_eligible": true,
+    "description": "첫 물주기 후 첫 30분 동안 성장 +3%."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_002",
+    "name": "진한 잔디",
+    "grade": "C",
+    "design_id": "G-C02",
+    "board_eligible": true,
+    "description": "개화까지 기본 성장량 30분 이하가 남으면 성장 +3%."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_006",
+    "name": "클로버",
+    "grade": "C",
+    "design_id": "G-C03",
+    "board_eligible": true,
+    "description": "토끼풀 성장 +4%."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_020",
+    "name": "새싹",
+    "grade": "C",
+    "design_id": "G-C04",
+    "board_eligible": true,
+    "description": "첫 성장 20% 구간에서 성장 +3%."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_021",
+    "name": "허브",
+    "grade": "C",
+    "design_id": "G-C05",
+    "board_eligible": true,
+    "description": "첫 분무의 성장 단축량 +30초."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_022",
+    "name": "잎사귀",
+    "grade": "C",
+    "design_id": "G-C06",
+    "board_eligible": true,
+    "description": "첫 3회 추가 물주기의 성장 단축량 각각 +30초."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_023",
+    "name": "풀밭",
+    "grade": "C",
+    "design_id": "G-C07",
+    "board_eligible": true,
+    "description": "오프라인 성장 +1%."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_030",
+    "name": "이끼 느낌",
+    "grade": "C",
+    "design_id": "G-C08",
+    "board_eligible": true,
+    "description": "첫 분무 완료 후 다음 분무 대기 -5%."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_031",
+    "name": "자연스러운 잡초",
+    "grade": "C",
+    "design_id": "G-C09",
+    "board_eligible": true,
+    "description": "아직 분무하지 않은 꽃 성장 +2%."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_033",
+    "name": "삼잎클로버",
+    "grade": "C",
+    "design_id": "G-C10",
+    "board_eligible": true,
+    "description": "토끼풀 판매 +4%."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_034",
+    "name": "토끼풀",
+    "grade": "C",
+    "design_id": "G-C11",
+    "board_eligible": true,
+    "description": "이 정원에서 수확한 꽃은 정원 전시 후 첫 햇빛 생산 주기 -10%. 개체당 1회."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_037",
+    "name": "작은 열매",
+    "grade": "C",
+    "design_id": "G-C12",
+    "board_eligible": true,
+    "description": "첫 분무를 완료한 꽃 수확 시 골드 +1G. 개체당 1회."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_041",
+    "name": "물든 잔디",
+    "grade": "C",
+    "design_id": "G-C13",
+    "board_eligible": true,
+    "description": "성장 80% 이후 추가 물주기를 한 번 이상 완료하면 판매 +2%."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_042",
+    "name": "언덕 느낌",
+    "grade": "C",
+    "design_id": "G-C14",
+    "board_eligible": true,
+    "description": "기본 성장 24시간인 꽃 성장 +2%."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_043",
+    "name": "그늘진 잔디",
+    "grade": "C",
+    "design_id": "G-C15",
+    "board_eligible": true,
+    "description": "개체별 오프라인 누적 시간 중 첫 1시간 구간의 성장 +3%. 재접속으로 초기화하지 않는다."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_050",
+    "name": "흙바닥+잔디",
+    "grade": "C",
+    "design_id": "G-C16",
+    "board_eligible": true,
+    "description": "첫 물주기 시 추가 성장 30초. 기본 성장의 0.5%까지."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_051",
+    "name": "자갈길",
+    "grade": "C",
+    "design_id": "G-C17",
+    "board_eligible": true,
+    "description": "물주기 기본 대기 -3%."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_052",
+    "name": "돌길",
+    "grade": "C",
+    "design_id": "G-C18",
+    "board_eligible": true,
+    "description": "분무 기본 대기 -3%."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_056",
+    "name": "모래길",
+    "grade": "C",
+    "design_id": "G-C19",
+    "board_eligible": true,
+    "description": "기본 성장 6시간 이하인 꽃 성장 +2%."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_057",
+    "name": "흙길",
+    "grade": "C",
+    "design_id": "G-C20",
+    "board_eligible": true,
+    "description": "모든 꽃 성장 +1%."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_058",
+    "name": "잔디+돌",
+    "grade": "C",
+    "design_id": "G-C21",
+    "board_eligible": true,
+    "description": "분무하지 않고 개화한 꽃 판매 +3%."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_059",
+    "name": "잔디+나무뿌리",
+    "grade": "C",
+    "design_id": "G-C22",
+    "board_eligible": true,
+    "description": "기본 성장 72시간 초과인 꽃 성장 +2%."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_066",
+    "name": "나무 주변",
+    "grade": "C",
+    "design_id": "G-C23",
+    "board_eligible": true,
+    "description": "미수집 햇빛 대기 상한 +1개."
+  },
+  {
+    "category": "garden",
+    "item_id": "catalog_garden_064",
+    "name": "울타리 옆",
+    "grade": "C",
+    "design_id": "G-C24",
+    "board_eligible": true,
+    "description": "장미 성장 +4%."
+  },
+  {
+    "category": "garden",
+    "item_id": "cream",
+    "name": "따뜻한 크림 정원",
+    "grade": "C",
+    "design_id": "G-C25",
+    "board_eligible": false,
+    "description": "첫 분무를 완료한 꽃은 마지막 성장 20% 구간에서 성장 +2%. 기존 cream ID와 햇빛 구매 경로 유지."
+  },
+  {
+    "category": "garden",
+    "item_id": "sky",
+    "name": "맑은 하늘 정원",
+    "grade": "C",
+    "design_id": "G-C26",
+    "board_eligible": false,
+    "description": "별꽃·물망초의 첫 추가 물주기 단축량 +20초. 기존 sky ID와 햇빛 구매 경로 유지."
+  },
+  {
+    "category": "garden",
+    "item_id": "lavender",
+    "name": "저녁 라벤더 정원",
+    "grade": "C",
+    "design_id": "G-C27",
+    "board_eligible": false,
+    "description": "라벤더·팬지는 첫 분무를 완료할 때 현재 물주기 남은 대기 -1분. 기존 lavender ID와 햇빛 구매 경로 유지."
+  },
+  {
+    "category": "pot",
+    "item_id": "catalog_pot_024",
+    "name": "튤립 패턴",
+    "grade": "S",
+    "design_id": "P-S01",
+    "board_eligible": true,
+    "description": "튤립 성장 +12%, 튤립 첫 분무 판매 보너스 +15%p."
+  },
+  {
+    "category": "pot",
+    "item_id": "catalog_pot_038",
+    "name": "스카이 플라워",
+    "grade": "S",
+    "design_id": "P-S02",
+    "board_eligible": true,
+    "description": "별꽃·물망초 성장 +12%, 해당 꽃 판매 +12%."
+  },
+  {
+    "category": "pot",
+    "item_id": "catalog_pot_040",
+    "name": "핸들 스톤",
+    "grade": "S",
+    "design_id": "P-S03",
+    "board_eligible": true,
+    "description": "개체당 첫 비료 사용은 재고를 소모하지 않는다. 재고가 1개 이상 있어야 하며 이후 비료 단축량 +10%. 무료 사용도 비료 단축 상한에 포함한다."
+  },
+  {
+    "category": "pot",
+    "item_id": "catalog_pot_030",
+    "name": "테라조",
+    "grade": "S",
+    "design_id": "P-S04",
+    "board_eligible": true,
+    "description": "같은 재배 화분에서 서로 다른 품종을 연속 수확하면 판매 보너스 +5%→+10%→+15%. 같은 품종을 다시 수확하면 +5%부터 시작한다. 서로 다른 3품종 묶음을 완성할 때 햇빛 1개를 지급하고 묶음 기록을 새로 시작한다."
+  },
+  {
+    "category": "pot",
+    "item_id": "catalog_pot_008",
+    "name": "플라워 패턴",
+    "grade": "A",
+    "design_id": "P-A01",
+    "board_eligible": true,
+    "description": "서로 다른 품종 3종 이상을 동시에 재배할 때 사용하는 이 꽃의 첫 비료 단축량 +30%."
+  },
+  {
+    "category": "pot",
+    "item_id": "catalog_pot_015",
+    "name": "핑크 플라워",
+    "grade": "A",
+    "design_id": "P-A02",
+    "board_eligible": true,
+    "description": "분홍 계열 꽃 판매 +8%, 해당 꽃 첫 분무 판매 보너스 +6%p."
+  },
+  {
+    "category": "pot",
+    "item_id": "catalog_pot_017",
+    "name": "리프 패턴",
+    "grade": "A",
+    "design_id": "P-A03",
+    "board_eligible": true,
+    "description": "물주기 직후 5분 안에 분무를 완료하면 다음 추가 물주기의 단축량 +2분. 같은 물주기·분무 한 쌍으로 1회만 충전하며 충전은 1개까지."
+  },
+  {
+    "category": "pot",
+    "item_id": "catalog_pot_029",
+    "name": "하트 패턴",
+    "grade": "A",
+    "design_id": "P-A04",
+    "board_eligible": true,
+    "description": "추가 물주기와 분무 한 쌍을 마칠 때 하트 1개 적립. 하트 3개를 채우면 해당 꽃 판매 +10%."
+  },
+  {
+    "category": "pot",
+    "item_id": "catalog_pot_033",
+    "name": "데이지",
+    "grade": "A",
+    "design_id": "P-A05",
+    "board_eligible": true,
+    "description": "데이지 성장 +10%. 데이지 수확 시 햇빛 1개를 추가 지급."
+  },
+  {
+    "category": "pot",
+    "item_id": "catalog_pot_043",
+    "name": "라벤더",
+    "grade": "A",
+    "design_id": "P-A06",
+    "board_eligible": true,
+    "description": "라벤더 오프라인 성장 +8%, 라벤더의 첫 비료 단축량 +50%."
+  },
+  {
+    "category": "pot",
+    "item_id": "catalog_pot_027",
+    "name": "웨이브",
+    "grade": "A",
+    "design_id": "P-A07",
+    "board_eligible": true,
+    "description": "성장 단계가 올라가면 물주기·분무의 남은 대기를 0으로 만든다. 개체당 단계 경계별 1회, 물·분무를 자동 실행하지 않는다."
+  },
+  {
+    "category": "pot",
+    "item_id": "catalog_pot_028",
+    "name": "양손잡이",
+    "grade": "A",
+    "design_id": "P-A08",
+    "board_eligible": true,
+    "description": "개체당 두 번째·네 번째 비료 사용 시 단축량 +30%."
+  },
+  {
+    "category": "pot",
+    "item_id": "catalog_pot_005",
+    "name": "플라워",
+    "grade": "B",
+    "design_id": "P-B01",
+    "board_eligible": true,
+    "description": "아직 수확한 적 없는 품종을 재배하면 성장 +6%. 첫 수확까지 적용."
+  },
+  {
+    "category": "pot",
+    "item_id": "catalog_pot_007",
+    "name": "리브드",
+    "grade": "B",
+    "design_id": "P-B02",
+    "board_eligible": true,
+    "description": "추가 물주기를 하면 다음 비료 1회에 단축량 +20%를 충전한다. 충전은 중첩하지 않고 사용 후 사라진다."
+  },
+  {
+    "category": "pot",
+    "item_id": "catalog_pot_009",
+    "name": "핑크 스톤",
+    "grade": "B",
+    "design_id": "P-B03",
+    "board_eligible": true,
+    "description": "분홍 계열 꽃 판매 +7%."
+  },
+  {
+    "category": "pot",
+    "item_id": "catalog_pot_011",
+    "name": "크림 스톤",
+    "grade": "B",
+    "design_id": "P-B04",
+    "board_eligible": true,
+    "description": "흰색 계열 꽃 성장 +7%."
+  },
+  {
+    "category": "pot",
+    "item_id": "catalog_pot_012",
+    "name": "플루트",
+    "grade": "B",
+    "design_id": "P-B05",
+    "board_eligible": true,
+    "description": "성장 2단계·4단계 구간에서 성장 +6%."
+  },
+  {
+    "category": "pot",
+    "item_id": "catalog_pot_013",
+    "name": "핸들",
+    "grade": "B",
+    "design_id": "P-B06",
+    "board_eligible": true,
+    "description": "수확 시 해당 품종의 일반 씨앗 구매가 5%를 골드로 환급한다. 최대 2G. 랜덤 씨앗은 실제 구매가 20G를 기준으로 한다."
+  },
+  {
+    "category": "pot",
+    "item_id": "catalog_pot_014",
+    "name": "우드",
+    "grade": "B",
+    "design_id": "P-B07",
+    "board_eligible": true,
+    "description": "한 번에 3시간 이상 오프라인으로 지낸 뒤 첫 추가 물주기를 하면 추가 성장 3분. 개체당 1회."
+  },
+  {
+    "category": "pot",
+    "item_id": "catalog_pot_019",
+    "name": "그린 체크",
+    "grade": "B",
+    "design_id": "P-B08",
+    "board_eligible": true,
+    "description": "토끼풀 성장 +5%, 토끼풀 판매 +3%."
+  },
+  {
+    "category": "pot",
+    "item_id": "catalog_pot_022",
+    "name": "블루 체크",
+    "grade": "B",
+    "design_id": "P-B09",
+    "board_eligible": true,
+    "description": "물망초 분무 대기 -12%."
+  },
+  {
+    "category": "pot",
+    "item_id": "catalog_pot_023",
+    "name": "세로 리브드",
+    "grade": "B",
+    "design_id": "P-B10",
+    "board_eligible": true,
+    "description": "추가 물주기 3회마다 추가 성장 2분. 개체당 최대 3회."
+  },
+  {
+    "category": "pot",
+    "item_id": "catalog_pot_032",
+    "name": "주름",
+    "grade": "B",
+    "design_id": "P-B11",
+    "board_eligible": true,
+    "description": "마지막 성장 단계에서 사용하는 비료 단축량 +20%."
+  },
+  {
+    "category": "pot",
+    "item_id": "catalog_pot_036",
+    "name": "화이트 체크",
+    "grade": "B",
+    "design_id": "P-B12",
+    "board_eligible": true,
+    "description": "흰색 계열 꽃 첫 분무 판매 보너스 +6%p."
+  },
+  {
+    "category": "pot",
+    "item_id": "catalog_pot_042",
+    "name": "그린 스트라이프",
+    "grade": "B",
+    "design_id": "P-B13",
+    "board_eligible": true,
+    "description": "분무 사이에 추가 물주기를 2회 완료하면 다음 분무의 성장 단축량 +1분. 개체당 최대 3회."
+  },
+  {
+    "category": "pot",
+    "item_id": "terracotta",
+    "name": "토분",
+    "grade": "C",
+    "design_id": "P-C00",
+    "board_eligible": false,
+    "description": "첫 분무 전까지 물주기 대기 -5%. 기존 기본 지급 품목."
+  },
+  {
+    "category": "pot",
+    "item_id": "ivory",
+    "name": "아이보리",
+    "grade": "C",
+    "design_id": "P-C01",
+    "board_eligible": false,
+    "description": "은방울꽃 첫 분무 판매 보너스 +3%p. 기존 햇빛 구매 경로 유지."
+  },
+  {
+    "category": "pot",
+    "item_id": "sage",
+    "name": "세이지",
+    "grade": "C",
+    "design_id": "P-C02",
+    "board_eligible": false,
+    "description": "추가 물주기 후 분무를 완료하면 현재 물주기 남은 대기 -30초. 같은 물주기 구간에 1회. 기존 햇빛 구매 경로 유지."
+  },
+  {
+    "category": "pot",
+    "item_id": "rose",
+    "name": "로즈",
+    "grade": "C",
+    "design_id": "P-C03",
+    "board_eligible": false,
+    "description": "장미·튤립·코스모스의 첫 비료 단축량 +5%. 기존 햇빛 구매 경로 유지."
+  },
+  {
+    "category": "pot",
+    "item_id": "catalog_pot_004",
+    "name": "스톤",
+    "grade": "C",
+    "design_id": "P-C04",
+    "board_eligible": true,
+    "description": "첫 비료 단축량 +1분."
+  },
+  {
+    "category": "pot",
+    "item_id": "catalog_pot_010",
+    "name": "딥그린",
+    "grade": "C",
+    "design_id": "P-C05",
+    "board_eligible": true,
+    "description": "성장 진행률 50% 이후 성장 +2%."
+  },
+  {
+    "category": "pot",
+    "item_id": "catalog_pot_016",
+    "name": "블루 라인",
+    "grade": "C",
+    "design_id": "P-C06",
+    "board_eligible": true,
+    "description": "분무 미니게임의 필요한 클릭 수를 3회에서 2회로 줄인다. 보상은 동일하고 완료 전에는 효과를 주지 않는다."
+  },
+  {
+    "category": "pot",
+    "item_id": "catalog_pot_018",
+    "name": "투톤",
+    "grade": "C",
+    "design_id": "P-C07",
+    "board_eligible": true,
+    "description": "성장 1단계·3단계 구간에서 성장 +2%."
+  },
+  {
+    "category": "pot",
+    "item_id": "catalog_pot_020",
+    "name": "라운드",
+    "grade": "C",
+    "design_id": "P-C08",
+    "board_eligible": true,
+    "description": "첫 추가 물주기 대기를 30분에서 25분으로 줄인다. 이후 대기는 기본 규칙 적용."
+  },
+  {
+    "category": "pot",
+    "item_id": "catalog_pot_021",
+    "name": "머스터드",
+    "grade": "C",
+    "design_id": "P-C09",
+    "board_eligible": true,
+    "description": "해바라기의 첫 분무 판매 보너스 +2%p."
+  },
+  {
+    "category": "pot",
+    "item_id": "catalog_pot_025",
+    "name": "시멘트",
+    "grade": "C",
+    "design_id": "P-C10",
+    "board_eligible": true,
+    "description": "이 꽃의 비료 누적 단축 상한을 기본 성장의 25%에서 26%로 늘린다. 이 품목에만 허용하는 명시적 상한 예외."
+  },
+  {
+    "category": "pot",
+    "item_id": "catalog_pot_026",
+    "name": "버건디",
+    "grade": "C",
+    "design_id": "P-C11",
+    "board_eligible": true,
+    "description": "장미·코스모스 성장 +3%."
+  },
+  {
+    "category": "pot",
+    "item_id": "catalog_pot_031",
+    "name": "와이드",
+    "grade": "C",
+    "design_id": "P-C12",
+    "board_eligible": true,
+    "description": "분무 물방울 애니메이션과 다음 클릭까지의 간격 -20%. 클릭 횟수와 효과량은 동일."
+  },
+  {
+    "category": "pot",
+    "item_id": "catalog_pot_034",
+    "name": "스트라이프",
+    "grade": "C",
+    "design_id": "P-C13",
+    "board_eligible": true,
+    "description": "추가 물주기→분무→추가 물주기를 순서대로 완료하면 추가 성장 1분. 개체당 1회."
+  },
+  {
+    "category": "pot",
+    "item_id": "catalog_pot_035",
+    "name": "블랙",
+    "grade": "C",
+    "design_id": "P-C14",
+    "board_eligible": true,
+    "description": "랜덤 씨앗에서 나온 고대 꽃 성장 +2%. 개화 전 품종이나 상세 시간은 공개하지 않는다."
+  },
+  {
+    "category": "pot",
+    "item_id": "catalog_pot_037",
+    "name": "샬로우",
+    "grade": "C",
+    "design_id": "P-C15",
+    "board_eligible": true,
+    "description": "기본 성장 6시간 이하 꽃의 첫 성장 10% 구간에서 성장 +5%."
+  },
+  {
+    "category": "pot",
+    "item_id": "catalog_pot_039",
+    "name": "샌드",
+    "grade": "C",
+    "design_id": "P-C16",
+    "board_eligible": true,
+    "description": "비료 미니게임 첫 라운드의 목표 구간 폭 +5%. 선택한 재배 화분의 효과만 적용."
+  },
+  {
+    "category": "pot",
+    "item_id": "catalog_pot_041",
+    "name": "미니",
+    "grade": "C",
+    "design_id": "P-C17",
+    "board_eligible": true,
+    "description": "기본 성장 12시간 이하 꽃 판매 +3%."
+  },
+  {
+    "category": "pot",
+    "item_id": "catalog_pot_044",
+    "name": "도트",
+    "grade": "C",
+    "design_id": "P-C18",
+    "board_eligible": true,
+    "description": "마지막 분무 후 추가 분무 없이 기본 성장량 3시간 이상을 채우고 개화하면 판매 +3%."
+  },
+  {
+    "category": "pot",
+    "item_id": "catalog_pot_006",
+    "name": "체크",
+    "grade": "C",
+    "design_id": "P-C19",
+    "board_eligible": true,
+    "description": "추가 물주기·분무 횟수가 각각 2회 이상이고 같은 횟수로 개화하면 판매 +3%."
+  },
+  {
+    "category": "plant",
+    "item_id": "lily_of_the_valley",
+    "name": "은방울꽃",
+    "grade": "S",
+    "design_id": "F-S01",
+    "board_eligible": true,
+    "cultivation": {
+      "growth_seconds": 1209600,
+      "seed_price": 160,
+      "sale_price": 560
+    }
+  },
+  {
+    "category": "plant",
+    "item_id": "ancient",
+    "name": "고대 꽃",
+    "grade": "S",
+    "design_id": "F-S02",
+    "board_eligible": false,
+    "cultivation": {
+      "growth_seconds": 172800,
+      "seed_price": 0,
+      "sale_price": 500
+    }
+  },
+  {
+    "category": "plant",
+    "item_id": "catalog_plant_000",
+    "name": "몬스테라 알보",
+    "grade": "S",
+    "design_id": "F-S03",
+    "board_eligible": true,
+    "cultivation": {
+      "growth_seconds": 864000,
+      "seed_price": 145,
+      "sale_price": 455
+    }
+  },
+  {
+    "category": "plant",
+    "item_id": "catalog_plant_003",
+    "name": "필로덴드론 핑크 프린세스",
+    "grade": "S",
+    "design_id": "F-S04",
+    "board_eligible": true,
+    "cultivation": {
+      "growth_seconds": 604800,
+      "seed_price": 110,
+      "sale_price": 350
+    }
+  },
+  {
+    "category": "plant",
+    "item_id": "rose",
+    "name": "장미",
+    "grade": "A",
+    "design_id": "F-A01",
+    "board_eligible": true,
+    "cultivation": {
+      "growth_seconds": 259200,
+      "seed_price": 50,
+      "sale_price": 150
+    }
+  },
+  {
+    "category": "plant",
+    "item_id": "sunflower",
+    "name": "해바라기",
+    "grade": "A",
+    "design_id": "F-A02",
+    "board_eligible": true,
+    "cultivation": {
+      "growth_seconds": 432000,
+      "seed_price": 75,
+      "sale_price": 240
+    }
+  },
+  {
+    "category": "plant",
+    "item_id": "lavender",
+    "name": "라벤더",
+    "grade": "A",
+    "design_id": "F-A03",
+    "board_eligible": true,
+    "cultivation": {
+      "growth_seconds": 604800,
+      "seed_price": 100,
+      "sale_price": 330
+    }
+  },
+  {
+    "category": "plant",
+    "item_id": "dandelion",
+    "name": "민들레",
+    "grade": "A",
+    "design_id": "F-A04",
+    "board_eligible": false,
+    "cultivation": {
+      "growth_seconds": 86400,
+      "seed_price": 0,
+      "sale_price": 1
+    }
+  },
+  {
+    "category": "plant",
+    "item_id": "catalog_plant_002",
+    "name": "스투키 바리에가타",
+    "grade": "A",
+    "design_id": "F-A05",
+    "board_eligible": true,
+    "cultivation": {
+      "growth_seconds": 432000,
+      "seed_price": 80,
+      "sale_price": 245
+    }
+  },
+  {
+    "category": "plant",
+    "item_id": "catalog_plant_004",
+    "name": "칼라디움 화이트 핑크",
+    "grade": "A",
+    "design_id": "F-A06",
+    "board_eligible": true,
+    "cultivation": {
+      "growth_seconds": 259200,
+      "seed_price": 55,
+      "sale_price": 160
+    }
+  },
+  {
+    "category": "plant",
+    "item_id": "catalog_plant_005",
+    "name": "알로카시아 블랙 벨벳",
+    "grade": "A",
+    "design_id": "F-A07",
+    "board_eligible": true,
+    "cultivation": {
+      "growth_seconds": 345600,
+      "seed_price": 70,
+      "sale_price": 205
+    }
+  },
+  {
+    "category": "plant",
+    "item_id": "catalog_plant_007",
+    "name": "부르고뉴 고사리",
+    "grade": "A",
+    "design_id": "F-A08",
+    "board_eligible": true,
+    "cultivation": {
+      "growth_seconds": 518400,
+      "seed_price": 90,
+      "sale_price": 285
+    }
+  },
+  {
+    "category": "plant",
+    "item_id": "tulip",
+    "name": "튤립",
+    "grade": "B",
+    "design_id": "F-B01",
+    "board_eligible": true,
+    "cultivation": {
+      "growth_seconds": 172800,
+      "seed_price": 35,
+      "sale_price": 100
+    }
+  },
+  {
+    "category": "plant",
+    "item_id": "pansy",
+    "name": "팬지",
+    "grade": "B",
+    "design_id": "F-B02",
+    "board_eligible": true,
+    "cultivation": {
+      "growth_seconds": 172800,
+      "seed_price": 35,
+      "sale_price": 100
+    }
+  },
+  {
+    "category": "plant",
+    "item_id": "cosmos",
+    "name": "코스모스",
+    "grade": "B",
+    "design_id": "F-B03",
+    "board_eligible": true,
+    "cultivation": {
+      "growth_seconds": 259200,
+      "seed_price": 50,
+      "sale_price": 150
+    }
+  },
+  {
+    "category": "plant",
+    "item_id": "freesia",
+    "name": "프리지아",
+    "grade": "B",
+    "design_id": "F-B04",
+    "board_eligible": true,
+    "cultivation": {
+      "growth_seconds": 345600,
+      "seed_price": 65,
+      "sale_price": 195
+    }
+  },
+  {
+    "category": "plant",
+    "item_id": "catalog_plant_001",
+    "name": "호야 크림슨 퀸",
+    "grade": "B",
+    "design_id": "F-B05",
+    "board_eligible": true,
+    "cultivation": {
+      "growth_seconds": 172800,
+      "seed_price": 38,
+      "sale_price": 108
+    }
+  },
+  {
+    "category": "plant",
+    "item_id": "catalog_plant_006",
+    "name": "리톱스",
+    "grade": "B",
+    "design_id": "F-B06",
+    "board_eligible": true,
+    "cultivation": {
+      "growth_seconds": 64800,
+      "seed_price": 18,
+      "sale_price": 42
+    }
+  },
+  {
+    "category": "plant",
+    "item_id": "starflower",
+    "name": "별꽃",
+    "grade": "C",
+    "design_id": "F-C01",
+    "board_eligible": true,
+    "cultivation": {
+      "growth_seconds": 10800,
+      "seed_price": 8,
+      "sale_price": 12
+    }
+  },
+  {
+    "category": "plant",
+    "item_id": "clover",
+    "name": "토끼풀",
+    "grade": "C",
+    "design_id": "F-C02",
+    "board_eligible": true,
+    "cultivation": {
+      "growth_seconds": 21600,
+      "seed_price": 10,
+      "sale_price": 20
+    }
+  },
+  {
+    "category": "plant",
+    "item_id": "forget_me_not",
+    "name": "물망초",
+    "grade": "C",
+    "design_id": "F-C03",
+    "board_eligible": true,
+    "cultivation": {
+      "growth_seconds": 43200,
+      "seed_price": 15,
+      "sale_price": 32
+    }
+  },
+  {
+    "category": "plant",
+    "item_id": "daisy",
+    "name": "데이지",
+    "grade": "C",
+    "design_id": "F-C04",
+    "board_eligible": true,
+    "cultivation": {
+      "growth_seconds": 86400,
+      "seed_price": 20,
+      "sale_price": 50
+    }
+  }
+]

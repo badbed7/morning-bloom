@@ -10,7 +10,7 @@ from PySide6.QtWidgets import QApplication, QComboBox
 
 from morning_bloom.app import POT_PAGE, SHOP_PAGE, Window
 from morning_bloom.model import Garden
-from morning_bloom.plant_catalog import REGULAR_PLANTS
+from morning_bloom.plant_catalog import CULTIVABLE_PLANTS as REGULAR_PLANTS
 from morning_bloom.storage import SaveError, Store
 
 
@@ -98,7 +98,9 @@ class PotNavigation(unittest.TestCase):
             self.assertEqual(slides._overlays, [])
 
     def test_single_pot_disables_arrows_until_second_pot_is_purchased(self):
-        self.garden.pots.pop()
+        removed=self.garden.pots.pop()
+        self.garden.progression['slots'].pop()
+        self.garden.progression['crops'].pop(removed['plant_id'],None)
         self.garden.coins = 200
         self.window.refresh()
         self.assertEqual(self.window.pot_name.text(), '화분 1 / 1 · 데이지')
@@ -158,7 +160,7 @@ class PotNavigation(unittest.TestCase):
         self.assertTrue(self.window.mist_button.isEnabled())
         self.wall_clock.return_value = NOW + 600
         self.window.refresh()
-        self.assertEqual([pot['growth'] for pot in self.garden.pots], [600, 660])
+        self.assertEqual([pot['growth'] for pot in self.garden.pots], [612, 672])
 
     def test_rapid_clicks_resize_and_leaving_page_clear_overlays(self):
         for _ in range(9):

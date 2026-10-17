@@ -6,7 +6,7 @@ from PySide6.QtWidgets import QPushButton
 from .flower_art import paint_collection_flower
 from .icon_picker import IconPicker
 from .navigation import chevron_icon
-from .plant_catalog import HOUR, PLANTS, REGULAR_PLANTS, RANDOM_SEED_PRICE, VACATION_PLANTS
+from .plant_catalog import HOUR, PLANTS, CULTIVABLE_PLANTS as REGULAR_PLANTS, RANDOM_SEED_PRICE, VACATION_PLANTS
 
 
 def seed_packet_icon(definition=None):
@@ -39,6 +39,7 @@ class SeedPicker(IconPicker):
         super().__init__([(key, PLANTS[key].name, seed_packet_icon(PLANTS[key]))
                           for key in REGULAR_PLANTS] + [('random', '랜덤', seed_packet_icon())])
         self.shop = shop
+        self.layout().setSpacing(4)
         if shop:
             self.setFixedHeight(88)
         self.page = 0
@@ -79,7 +80,7 @@ class SeedPicker(IconPicker):
         self.page = list(self.buttons).index(self.selected) // self.page_size
         self.show_page()
 
-    def update_counts(self, seeds):
+    def update_counts(self, seeds, unlocked=None):
         for key, button in self.buttons.items():
             if key == 'random':
                 count = seeds.get(key, 0)
@@ -91,7 +92,10 @@ class SeedPicker(IconPicker):
             definition = PLANTS[key]
             count = seeds.get(key, 0)
             detail = f'{definition.seed_price}G' if self.shop else f'{count}개'
-            button.setText(f'{definition.name}\n{detail}')
+            if unlocked is not None and key not in unlocked:detail='잠김'
+            from .content import rarity
+            label=button.fontMetrics().elidedText(f"{rarity('plant',key)} · {definition.name}",Qt.ElideRight,42)
+            button.setText(f'{label}\n{detail}')
             button.setAccessibleName(f'{definition.name} 씨앗 · {detail} · 보유 {count}개')
             button.setToolTip(
                 f'{definition.name} 씨앗 · 보유 {count}개\n'

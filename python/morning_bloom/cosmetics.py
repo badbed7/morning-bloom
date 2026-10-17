@@ -56,6 +56,31 @@ POT_SKINS = {
 }
 
 
+from .content import ITEMS
+
+_POT_COLORS = (
+    '#e8dfc9','#f0e6cf','#e4ba70','#879571','#9db4c9','#e6bcb3','#667251','#eee4d0',
+    '#d4b78c','#e6e0d0','#ad805b','#e6bdb1','#b7cae0','#ece6d0','#e9dfc9','#92a277',
+    '#d7a99b','#e2b853','#c5d8e1','#a0b18c','#efe8db','#b8b7ad','#823d40','#e9dcc2',
+    '#8b9872','#d5a7a6','#d9cbb2','#7897a4','#e1c19f','#7e8962','#e8e0ce','#42413e',
+    '#eae0c9','#bb7c4b','#a5bed9','#d8c49e','#d9cfb5','#dfb7a3','#e6e2ce','#ad9aba','#e9e1cf')
+for _item in ITEMS:
+    _key = _item['item_id']
+    if not _item['board_eligible']:continue
+    if _item['category']=='garden':
+        _i=int(_key[-3:]);_name=_item['name']
+        _top,_bottom,_tuft='#d6dfb7','#adc38c','#789967'
+        if any(x in _name for x in ('핑크','벚꽃')):_top,_bottom,_tuft='#f1d3d0','#e3bbb8','#b67f8b'
+        elif any(x in _name for x in ('낙엽','단풍','가을')):_top,_bottom,_tuft='#ebd6aa','#d8b985','#b17e58'
+        elif any(x in _name for x in ('물가','연못','시냇물','호수','비 온')):_top,_bottom,_tuft='#c9e0dc','#a2c8bf','#648e85'
+        elif '밤하늘' in _name:_top,_bottom,_tuft='#3d565a','#273e47','#92aaa0'
+        elif any(x in _name for x in ('눈','서리')):_top,_bottom,_tuft='#eef0e7','#c9d7d2','#95b5aa'
+        THEMES[_key]=GardenTheme(_key,_name,10**9,_item['description'],_top,_bottom,_tuft,'#344638' if '밤하늘' not in _name else '#f3efdb',_name)
+    elif _item['category']=='pot':
+        _i=int(_key[-3:]);_color=_POT_COLORS[_i-4]
+        POT_SKINS[_key]=PotSkin(_key,_item['name'],_item['name'],10**9,_item['description'],_color,'#e8d5b6','#b89e80',_item['name'])
+
+
 def pot_skin(key):
     try:
         return POT_SKINS[key]

@@ -46,6 +46,7 @@ def main():
         run(*common, '--onedir', '--name', 'MorningBloomGame', '--paths', 'python',
             '--add-data', str(ROOT / 'assets/fonts') + ';assets/fonts',
             '--add-data', str(ROOT / 'assets/catalog') + ';assets/catalog', *google_args,
+            '--add-data', str(ROOT / 'python/morning_bloom/content_data.json') + ';morning_bloom',
             'release/game_entry.py')
     run(*common, '--onefile', '--name', 'MorningBloom', '--paths', 'release',
         '--add-data', str(icon) + ';assets/icons', 'release/launcher.py')
@@ -101,15 +102,15 @@ def main():
     zip_folder(bootstrap, output / f'MorningBloom-{release_version}-Windows-x64.zip')
     (output / 'release-notes.md').write_text(
         f'Morning Bloom {release_version}\n\n'
-        '## 홀씨 바람놀이 수정\n\n'
-        '- 진행 게이지는 버튼·비행장·스페이스를 누르고 있는 실제 시간에만 찹니다. 손을 놓으면 멈춥니다.\n'
-        '- 바닥에 닿으면 고리의 좌측 이동과 등장 시간이 멈춥니다. 다시 누르면 홀씨가 떠오르고 전진합니다.\n'
-        '- 천장 반사, 고리 10개당 1G, 누적 1시간의 민들레·햇빛 보상은 유지합니다.\n'
-        '- 저장 v13의 기존 진행도와 보상은 보존하며, 업데이트 후부터 새 시간 판정을 적용합니다.\n\n'
+        '## 씨앗 정원 여행\n\n'
+        '- 주간 5개 주사위, 20칸 보드, 양쪽 입구의 무료 A/S 스페셜 추첨을 추가했습니다.\n'
+        '- 식물 22종·정원 83종·화분 45종의 등급과 128종 장비 효과를 연결했습니다.\n'
+        '- 신규 식물 8종 재배, 슬롯별 화분 장착, 꽃잎 선택 교환을 지원합니다.\n'
+        '- 저장 v14로 이전하며 기존 재배와 재화를 보존합니다. 추첨 결과는 지급 전에 저장합니다.\n\n'
         '## 다운로드\n\n'
         f'- Python 실행: `MorningBloom-{release_version}-Python-BAT.zip` 전체 압축 해제 후 `run-python.bat` 실행. Python 3.12 64비트가 필요합니다.\n'
         f'- EXE 실행: `MorningBloom-{release_version}-Windows-x64.zip` 전체 압축 해제 후 `MorningBloom.exe` 실행. Python 설치가 필요 없습니다.\n'
         '- 기존 BAT·런처는 다음 실행 때 게임을 자동 업데이트합니다.\n\n'
-        'Windows CI에서 게임·업데이터 테스트와 EXE·Python 묶음의 격리된 실행 검사를 통과했습니다.\n', encoding='utf-8')
+        '배포 전 게임·업데이터 테스트와 EXE·Python 묶음의 격리된 실행 검사를 실행하세요.\n', encoding='utf-8')
 
 if __name__ == '__main__': main()

@@ -13,6 +13,7 @@ class TimingBar(QWidget):
         super().__init__(parent)
         self.position = 0.0
         self.target = .35
+        self.target_width = .3
         self.setFixedHeight(68)
         self.setAccessibleName('초록색 목표 구간 안에서 표시를 멈추세요')
 
@@ -25,7 +26,7 @@ class TimingBar(QWidget):
         painter.drawRoundedRect(QRectF(6, 20, width, 28), 8, 8)
         painter.setBrush(QColor('#8faa79'))
         painter.setPen(QPen(QColor('#334e41'), 2))
-        painter.drawRoundedRect(QRectF(6 + self.target * width, 20, .3 * width, 28), 6, 6)
+        painter.drawRoundedRect(QRectF(6 + self.target * width, 20, self.target_width * width, 28), 6, 6)
         x = 6 + self.position * width
         painter.setPen(QPen(QColor('#334e41'), 3))
         painter.drawLine(round(x), 14, round(x), 54)
@@ -41,6 +42,7 @@ class FertilizerGame(QDialog):
         super().__init__(parent)
         self.game_id = str(uuid4())
         self.rewarded = rewarded
+        self.first_width_factor = 1.0
         self.running = False
         self.finished_game = False
         self.round = 0
@@ -150,6 +152,7 @@ class FertilizerGame(QDialog):
         self.round += 1
         self.round_start = time.monotonic() if started_at is None else started_at
         self.bar.target = random.uniform(.2, .5)
+        self.bar.target_width=.3*(self.first_width_factor if self.round==1 else 1)
         self.bar.position = 0.0
         self.round_markers[self.round - 1].setText(f'{self.round} 진행')
         self.status.setText(f'{self.round}/3 라운드 · 초록 구간에서 멈추기')
@@ -179,7 +182,7 @@ class FertilizerGame(QDialog):
             return
         cycle = elapsed % 2
         position = cycle if cycle <= 1 else 2 - cycle
-        self.end_round(elapsed < 4 and self.bar.target <= position <= self.bar.target + .3)
+        self.end_round(elapsed < 4 and self.bar.target <= position <= self.bar.target + self.bar.target_width)
 
     def end_round(self, hit, next_start=None):
         if not self.running:

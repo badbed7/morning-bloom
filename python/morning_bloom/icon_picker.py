@@ -18,21 +18,22 @@ class IconPicker(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(6)
         for key, label, icon in choices:
-            button = QToolButton()
-            button.setObjectName('iconChoice')
-            button.setProperty('choice', key)
-            button.setCheckable(True)
-            button.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
-            button.setText(label)
-            button.setIcon(icon)
-            button.setIconSize(QSize(36, 40))
-            button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-            button.setMinimumWidth(0)
-            self.group.addButton(button)
-            self.buttons[key] = button
-            layout.addWidget(button, 1)
+            self.add_choice(key,label,icon)
         next(iter(self.buttons.values())).setChecked(True)
         self.group.buttonClicked.connect(lambda _: self.selectionChanged.emit())
+
+    def add_choice(self,key,label,icon,index=-1):
+        button=QToolButton()
+        button.setObjectName('iconChoice')
+        button.setProperty('choice',key)
+        button.setCheckable(True)
+        button.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
+        button.setText(label);button.setIcon(icon);button.setIconSize(QSize(36,40))
+        button.setSizePolicy(QSizePolicy.Expanding,QSizePolicy.Expanding)
+        button.setMinimumWidth(0)
+        self.group.addButton(button);self.buttons[key]=button
+        self.layout().insertWidget(index,button,1)
+        return button
 
     @property
     def selected(self):

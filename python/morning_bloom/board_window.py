@@ -52,6 +52,8 @@ class BoardWindow(QDialog):
         self.result=QLabel('도착 칸에서 보상을 받아요. 좌우 입구는 무료 스페셜 보드로 이어져요.');self.result.setWordWrap(True);self.result.setMinimumHeight(44);journey_layout.addWidget(self.result)
         self.timer=QTimer(self);self.timer.setInterval(90);self.timer.timeout.connect(self.animation_step)
         collection=QWidget();collection_layout=QVBoxLayout(collection);self.tabs.addTab(collection,'도감 · 장착 · 교환')
+        exchange_help=QLabel('교환할 미해금 아이템을 선택한 뒤 아래 꽃잎 해금 버튼을 누르세요.\n획득한 화분·정원은 상점의 스킨·배경 목록에도 추가돼요.')
+        exchange_help.setWordWrap(True);collection_layout.addWidget(exchange_help)
         filters=QHBoxLayout();self.category=QComboBox();self.grade=QComboBox();self.slot=QComboBox()
         for text,key in (('전체',None),('식물','plant'),('정원','garden'),('화분','pot')):self.category.addItem(text,key)
         for value in ('전체','S','A','B','C'):self.grade.addItem(value)
@@ -124,6 +126,8 @@ class BoardWindow(QDialog):
     def show_result(self,result):
         item=BY_ID[result['category'],result['item_id']]
         self.result.setText(f"{result['grade']} · {item['name']} · {'중복 보상' if result['duplicate'] else '새로 획득!'} · 꽃잎 +{result['petals']}")
+        if result['category'] in ('garden','pot'):
+            self.result.setText(self.result.text()+'\n상점의 정원 배경·화분 스킨 목록에서 선택해 적용할 수 있어요.')
 
     def open_category(self,category):
         self.category.setCurrentIndex({'plant':1,'garden':2,'pot':3}[category]);self.tabs.setCurrentIndex(1)

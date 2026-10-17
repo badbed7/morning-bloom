@@ -171,7 +171,10 @@ class UI(unittest.TestCase):
                     window.navigate(1)
                     window.pages.finish_transition()
                     self.app.processEvents()
-                    viewport = window.pages.widget(SHOP_PAGE).findChild(QScrollArea).viewport()
+                    scroll = window.pages.widget(SHOP_PAGE).findChild(QScrollArea)
+                    scroll.ensureWidgetVisible(window.buy_seed_button,0,0)
+                    self.app.processEvents()
+                    viewport = scroll.viewport()
                     for button in (*(button for button in window.shop_picker.buttons.values() if button.isVisible()), window.buy_seed_button):
                         self.assertTrue(button.isVisible())
                         detail = (side, button.text(), button.geometry(), viewport.rect())

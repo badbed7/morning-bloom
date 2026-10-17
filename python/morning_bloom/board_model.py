@@ -85,13 +85,20 @@ def _validate_reward(value):
     pool=POOLS[value['category'],value['grade']]
     if type(value.get('item_id')) is not str or value['item_id'] not in pool: raise ValueError('보상 풀')
 
-def claim_weekly(garden,now):
-    if not _number(now) or garden.progression['board']['prepared']: return False
+def available_week(garden,now):
+    """Return an unclaimed KST week without changing the player's save."""
+    if not _number(now) or garden.progression['board']['prepared']: return None
     state=garden.progression
     date=datetime.fromtimestamp(now,timezone(timedelta(hours=9))).date()
     week=(date-timedelta(days=date.weekday())).isoformat()
-    if state['week'] is not None and week<=state['week']: return False
-    if now<state['max_time']: return False
+    if state['week'] is not None and week<=state['week']: return None
+    if now<state['max_time']: return None
+    return week
+
+def claim_weekly(garden,now):
+    week=available_week(garden,now)
+    if week is None:return False
+    state=garden.progression
     state.update(week=week,max_time=max(float(now),state['max_time']),tickets=state['tickets']+5)
     return True
 

@@ -40,7 +40,9 @@ from .desktop_flowers import DesktopFlowers
 from .garden_view import CollectionGarden, sale_price
 from .google_cloud import CloudError, GoogleDriveSync
 from .model import FERTILIZER_CAP, FERTILIZER_SECONDS, POT_PRICES, TYCOON_RULE, WIND_BASE_SECONDS
-from .icon_picker import IconPicker
+from .cosmetic_picker import CosmeticPicker
+from .board_model import available_week
+from .content import rarity
 from .locked_catalog import LockedCatalog
 from .board_window import BoardWindow
 from .effects import minigame_parameters
@@ -996,6 +998,26 @@ class Window(QWidget):
         page, layout = self._scrollable_page()
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(6)
+        self.gacha_card=QFrame()
+        self.gacha_card.setObjectName('gachaCard')
+        self.gacha_card.setStyleSheet('QFrame#gachaCard{background:#f2e6c8;border:2px solid #b59b61;border-radius:10px;}')
+        card=QVBoxLayout(self.gacha_card);card.setContentsMargins(9,8,9,8);card.setSpacing(4)
+        title=QLabel('가챠 · 씨앗 정원 여행');title.setStyleSheet('font-size:16px;font-weight:600;color:#66502a;')
+        card.addWidget(title)
+        self.gacha_balance=QLabel();self.gacha_balance.setStyleSheet('font-size:14px;font-weight:600;color:#65502c;')
+        card.addWidget(self.gacha_balance)
+        row=QHBoxLayout()
+        self.board_button=QPushButton('주사위로 뽑기')
+        self.board_button.setStyleSheet('background:#749362;color:white;font-weight:600;padding:7px 3px;')
+        self.board_button.clicked.connect(self.open_board)
+        self.exchange_button=QPushButton('꽃잎 교환')
+        self.exchange_button.clicked.connect(self.open_board_exchange)
+        row.addWidget(self.board_button,1);row.addWidget(self.exchange_button,1);card.addLayout(row)
+        self.gacha_weekly=QLabel();self.gacha_weekly.setWordWrap(True);self.gacha_weekly.setObjectName('small')
+        card.addWidget(self.gacha_weekly)
+        self.gacha_help=QLabel('보상마다 꽃잎 1개 + 중복 추가 꽃잎\n교환: 미해금 아이템 선택 → 꽃잎으로 해금\n필요 꽃잎  C 3 · B 8 · A 20 · S 40')
+        self.gacha_help.setWordWrap(True);self.gacha_help.setObjectName('small');card.addWidget(self.gacha_help)
+        layout.addWidget(self.gacha_card)
         wallet = QHBoxLayout()
         wallet.setSpacing(5)
         for name, icon in (('gold', currency_icon()), ('sunlight', currency_icon(True)),
@@ -1012,15 +1034,10 @@ class Window(QWidget):
             wallet.addSpacing(8)
         wallet.addStretch()
         layout.addLayout(wallet)
-        self.board_button = QPushButton('씨앗 정원 여행')
-        self.board_button.setFixedHeight(22)
-        self.board_button.setStyleSheet('padding:1px 6px;font-size:12px;')
-        self.board_button.setToolTip('주간 주사위 5개 · 뽑기 / 도감 / 장착 / 꽃잎 교환')
-        self.board_button.clicked.connect(self.open_board)
         seed_title = QLabel('재배 상점 · 골드')
         seed_title.setObjectName('section')
         seed_header=QHBoxLayout()
-        seed_header.addWidget(seed_title);seed_header.addStretch();seed_header.addWidget(self.board_button)
+        seed_header.addWidget(seed_title)
         layout.addLayout(seed_header)
         self.shop_picker = SeedPicker(shop=True)
         layout.addWidget(self.shop_picker)
@@ -1032,11 +1049,13 @@ class Window(QWidget):
         self.buy_seed_button = self.button(layout, '씨앗 구매', lambda: self.garden.buy_seed(self.shop_picker.selected))
         layout.addWidget(QLabel('화분 확장 · 씨앗은 별도 구매'))
         self.buy_pot_button = self.button(layout, '두 번째 화분 구매 · 150G', self.garden.buy_pot)
-        theme_title = QLabel('정원 배경 · 햇빛')
+        theme_title = QLabel('정원 배경 · 획득한 배경 / 햇빛 구매')
+        theme_title.setWordWrap(True)
         theme_title.setObjectName('section')
         layout.addWidget(theme_title)
-        self.theme_picker = IconPicker((theme.key, theme.label, theme_icon(theme)) for theme in THEMES.values() if not theme.key.startswith('catalog_'))
+        self.theme_picker = CosmeticPicker((theme.key, theme.label, theme_icon(theme)) for theme in THEMES.values() if not theme.key.startswith('catalog_') or theme.key in self.garden.owned_themes)
         self.theme_picker.buttons.get(self.garden.equipped_theme,self.theme_picker.buttons['grass']).setChecked(True)
+        self.theme_picker.reveal_selected()
         layout.addWidget(self.theme_picker)
         self.theme_info = QLabel()
         self.theme_info.setObjectName('small')
@@ -1046,15 +1065,17 @@ class Window(QWidget):
         self.buy_theme_button = self.button(theme_row, '배경 구매', self.buy_selected_theme)
         self.apply_theme_button = self.button(theme_row, '배경 적용', self.apply_selected_theme)
         layout.addLayout(theme_row)
-        skin_title = QLabel('화분 스킨 · 햇빛')
+        skin_title = QLabel('화분 스킨 · 획득한 스킨 / 햇빛 구매')
+        skin_title.setWordWrap(True)
         skin_title.setObjectName('section')
         layout.addWidget(skin_title)
         skin_scope = QLabel('스킨은 화분별로 장착해요. 보관 꽃의 외형은 수확할 때 유지돼요.')
         skin_scope.setObjectName('small')
         skin_scope.setWordWrap(True)
         layout.addWidget(skin_scope)
-        self.skin_picker = IconPicker((skin.key, skin.label, skin_icon(skin)) for skin in POT_SKINS.values() if not skin.key.startswith('catalog_'))
+        self.skin_picker = CosmeticPicker((skin.key, skin.label, skin_icon(skin)) for skin in POT_SKINS.values() if not skin.key.startswith('catalog_') or skin.key in self.garden.owned_skins)
         self.skin_picker.buttons.get(self.garden.equipped_skin,self.skin_picker.buttons['terracotta']).setChecked(True)
+        self.skin_picker.reveal_selected()
         layout.addWidget(self.skin_picker)
         self.skin_info = QLabel()
         self.skin_info.setObjectName('small')
@@ -1120,7 +1141,7 @@ class Window(QWidget):
         skin = pot_skin(self.skin_picker.selected)
         if not self.garden.equip_skin(skin.key):
             return False
-        self.notify(f'{skin.name}을 모든 화분에 적용했어요.', important=True)
+        self.notify(f'{skin.name}을 {self.garden.selected+1}번 화분에 적용했어요.', important=True)
         return True
 
     def _place_window(self):
@@ -1160,8 +1181,17 @@ class Window(QWidget):
         self._cancel_mist_game();self._cancel_fertilizer_game();self._cancel_wind_game()
         if self._board_window is None:
             self._board_window=BoardWindow(self)
-            self._board_window.finished.connect(lambda _:setattr(self,'_board_window',None))
+            self._board_window.finished.connect(self._board_closed)
+        self.refresh()
         self._board_window.show();self._board_window.raise_();self._board_window.activateWindow()
+
+    def _board_closed(self,_result):
+        self._board_window=None
+        if not self._closing:self.refresh()
+
+    def open_board_exchange(self):
+        self.open_board()
+        if self._board_window is not None:self._board_window.tabs.setCurrentIndex(1)
 
     def close_board(self):
         if self._board_window is not None:self._board_window.close()
@@ -1546,6 +1576,11 @@ class Window(QWidget):
 
     def refresh(self):
         garden = self.garden
+        self.gacha_balance.setText(f"주사위 {garden.progression['tickets']}개 · 꽃잎 {garden.progression['petals']}개")
+        due=available_week(garden,self.now()) is not None
+        self.gacha_weekly.setText('이번 주 주사위 5개 받기 가능 · 보드를 열면 지급' if due else '매주 월요일 00:00 한국 시각 · 주사위 5개 지급')
+        self.board_button.setText('주사위 5개 받고 뽑기' if due else '무료 스페셜 받기' if garden.progression['board']['special'] else '주사위로 뽑기')
+        self.board_button.setToolTip('1~6칸 이동 · 양쪽 입구에 멈추면 무료 A/S 스페셜 보드')
         self.wind_button.setEnabled(not (self._startup_cloud_syncing or self._close_requested
                                          or self._closing or self.cloud_start.isActive()))
         self._sync_developer_controls()
@@ -1726,17 +1761,31 @@ class Window(QWidget):
             (self.theme_picker, THEMES, garden.owned_themes, garden.equipped_theme),
             (self.skin_picker, POT_SKINS, garden.owned_skins, garden.equipped_skin),
         ):
+            keys=tuple(key for key in catalog if not key.startswith('catalog_') or key in owned)
+            previous=tuple(picker.buttons)
+            added=[key for key in keys if key not in previous]
+            preferred=added[-1] if added else picker.selected if picker.selected in keys else equipped
+            if getattr(picker,'_equipped_state',None)!=equipped:
+                preferred=equipped
+            if keys!=previous:
+                icon=theme_icon if picker is self.theme_picker else skin_icon
+                picker.replace_choices(((key,catalog[key].label,icon(catalog[key])) for key in keys),preferred)
+            elif preferred!=picker.selected:
+                picker.buttons[preferred].setChecked(True);picker.reveal_selected()
+            picker._equipped_state=equipped
             for key, button in picker.buttons.items():
                 item = catalog[key]
                 state = '사용 중' if key == equipped else ('보유' if key in owned else f'햇빛 {item.price}')
-                button.setText(f'{item.label}\n{state}')
+                category='garden' if picker is self.theme_picker else 'pot'
+                label=button.fontMetrics().elidedText(item.label,Qt.ElideRight,48)
+                button.setText(f'{label}\n{state}')
                 button.setAccessibleName(f'{item.name} · {state}')
-                button.setToolTip(f'{item.name} · {state}\n{item.description}')
+                button.setToolTip(f'{rarity(category,key)} · {item.name} · {state}\n{item.description}')
         theme = garden_theme(self.theme_picker.selected)
         owned = theme.key in garden.owned_themes
         equipped = theme.key == garden.equipped_theme
         state = '사용 중' if equipped else ('소유 중' if owned else f'가격 햇빛 {theme.price}')
-        self.theme_info.setText(f'{theme.description} · {state}')
+        self.theme_info.setText(f"{rarity('garden',theme.key)} · {theme.name}\n{theme.description} · {state}")
         self.buy_theme_button.setText('보유한 배경' if owned else f'구매 · 햇빛 {theme.price}')
         self.buy_theme_button.setEnabled(not owned and garden.sunlight >= theme.price)
         self.apply_theme_button.setText('사용 중' if equipped else '정원에 적용')
@@ -1744,10 +1793,10 @@ class Window(QWidget):
         skin = pot_skin(self.skin_picker.selected)
         owned = skin.key in garden.owned_skins
         equipped = skin.key == garden.equipped_skin
-        self.skin_info.setText(skin.description)
+        self.skin_info.setText(f"{rarity('pot',skin.key)} · {skin.name}\n{skin.description}\n{garden.selected+1}번 화분에 적용")
         self.buy_skin_button.setText('보유한 스킨' if owned else f'구매 · 햇빛 {skin.price}')
         self.buy_skin_button.setEnabled(not owned and garden.sunlight >= skin.price)
-        self.buy_skin_button.setToolTip(f'보유 햇빛 {garden.sunlight} · 부족 {max(0, skin.price - garden.sunlight)}')
+        self.buy_skin_button.setToolTip('이미 획득한 스킨이에요. 선택 화분에 무료로 적용하세요.' if owned else f'보유 햇빛 {garden.sunlight} · 부족 {max(0, skin.price - garden.sunlight)}')
         self.apply_skin_button.setText('사용 중' if equipped else '선택 화분에 적용')
         self.apply_skin_button.setEnabled(owned and not equipped)
         self.desktop_opacity.blockSignals(True)

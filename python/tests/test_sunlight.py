@@ -18,6 +18,7 @@ def flower(index=0, species='daisy'):
 
 def v4_data(garden):
     data = garden.to_dict()
+    data.pop('gacha')
     data['seeds'] = {key: data['seeds'][key] for key in LEGACY_REGULAR_PLANTS}
     for key in V8_FIELDS | V12_FIELDS | V13_FIELDS:
         data.pop(key)
@@ -150,6 +151,7 @@ class CosmeticsAndMigration(unittest.TestCase):
     def test_v6_migration_preserves_inventory_and_creates_original_backup(self):
         data = Garden(100, coins=432, sunlight=30, fertilizer=2, collection=[flower()],
                       owned_themes=['grass', 'sky'], equipped_theme='sky').to_dict()
+        gacha = data.pop('gacha')
         additions = {key: data.pop(key) for key in V8_FIELDS | V12_FIELDS | V13_FIELDS}
         data.pop('owned_skins')
         data.pop('equipped_skin')
@@ -160,7 +162,7 @@ class CosmeticsAndMigration(unittest.TestCase):
             store = Store(Path(tmp) / 'garden.json')
             store.path.write_text(raw, encoding='utf-8')
             garden = store.load(100)
-            self.assertEqual(garden.to_dict(), {**data, **additions, 'schema': Garden.CURRENT_SCHEMA,
+            self.assertEqual(garden.to_dict(), {**data, **additions, 'gacha': gacha, 'schema': Garden.CURRENT_SCHEMA,
                                               'seeds': {**dict.fromkeys(REGULAR_PLANTS, 0), **data['seeds']},
                                               'owned_skins': ['terracotta'], 'equipped_skin': 'terracotta'})
             store.save(garden)

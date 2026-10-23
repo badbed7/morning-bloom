@@ -30,6 +30,7 @@ def growing(species='starflower', now=NOW):
 
 def v5_data(garden):
     data = garden.to_dict()
+    data.pop('gacha')
     data['seeds'] = {key: data['seeds'][key] for key in LEGACY_REGULAR_PLANTS}
     for key in V8_FIELDS | V12_FIELDS | V13_FIELDS:
         data.pop(key)

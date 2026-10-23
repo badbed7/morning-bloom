@@ -73,6 +73,7 @@ class RulesAndMigration(unittest.TestCase):
     def test_v7_preserves_all_inventory_and_raw_backup(self):
         garden = growing()
         data = garden.to_dict()
+        data.pop('gacha')
         for key in V8_FIELDS | V12_FIELDS | V13_FIELDS:
             data.pop(key)
         data.update(schema=7, fertilizer=10, reward_wait=1750, last_reward_id='old')
@@ -142,6 +143,7 @@ class RulesAndMigration(unittest.TestCase):
         garden = collected()
         garden.place_desktop(garden.collection[0]['id'], -240, 100)
         data = {**garden.to_dict(), 'schema': 8}
+        data.pop('gacha')
         for key in V12_FIELDS | V13_FIELDS:
             data.pop(key)
         data['seeds'] = {key: data['seeds'][key] for key in LEGACY_REGULAR_PLANTS}

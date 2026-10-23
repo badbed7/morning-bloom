@@ -81,12 +81,13 @@ class NewFlowers(unittest.TestCase):
 
     def test_v9_save_and_cloud_upgrade_preserve_every_existing_value(self):
         original = Garden(NOW, coins=456, sunlight=23).to_dict()
+        original.pop('gacha')
         for key in V12_FIELDS | V13_FIELDS:
             original.pop(key)
         original['schema'] = 9
         original['seeds'] = dict(daisy=2, starflower=4, tulip=6)
         defaults = Garden(0).to_dict()
-        expected = {**original, 'schema': Garden.CURRENT_SCHEMA,
+        expected = {**original, 'schema': Garden.CURRENT_SCHEMA, 'gacha': defaults['gacha'],
                     'seeds': {**dict.fromkeys(REGULAR_PLANTS, 0), **original['seeds']},
                     **{key: defaults[key] for key in V12_FIELDS | V13_FIELDS}}
         raw = json.dumps(original)
@@ -134,6 +135,7 @@ class NewFlowers(unittest.TestCase):
         garden.care('water', NOW)
         garden.place_desktop(garden.pot['plant_id'], -320, 120)
         original = garden.to_dict()
+        original.pop('gacha')
         for key in V12_FIELDS | V13_FIELDS:
             original.pop(key)
         original.update(schema=10, seeds={key: garden.seeds[key] for key in V10_REGULAR_PLANTS})
@@ -155,6 +157,7 @@ class NewFlowers(unittest.TestCase):
 
     def test_v11_upgrade_adds_saved_wind_journey_fields(self):
         old = Garden(NOW, coins=432).to_dict()
+        old.pop('gacha')
         for key in V12_FIELDS | V13_FIELDS:
             old.pop(key)
         old['schema'] = 11
@@ -167,6 +170,7 @@ class NewFlowers(unittest.TestCase):
 
     def test_v12_progress_keeps_percentage_and_uses_one_hour_target(self):
         old = Garden(NOW, wind_progress=1800, wind_upgrade=3, coins=432).to_dict()
+        old.pop('gacha')
         old.pop('wind_ring_hits')
         old.update(schema=12, wind_progress=3600)
         upgraded = migrate(old)

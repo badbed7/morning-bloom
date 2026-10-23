@@ -99,7 +99,7 @@ class LockedCatalog(QWidget):
         title = QLabel('신규 수집 도감 · 잠김')
         title.setObjectName('section')
         layout.addWidget(title)
-        note = QLabel('가챠 업데이트 예정 · 지금은 미리보기만 가능해요.')
+        note = QLabel('신규 도감 아이템은 후속 업데이트 예정 · 현재 보드 보상은 기존 꾸미기 아이템입니다.')
         note.setObjectName('small')
         note.setWordWrap(True)
         layout.addWidget(note)

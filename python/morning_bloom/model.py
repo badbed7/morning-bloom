@@ -7,6 +7,7 @@ import math
 import secrets
 
 from .cosmetics import POT_SKINS, THEMES, garden_theme, pot_skin
+from . import gacha_board
 from .plant_catalog import DAY, HOUR, PLANTS, REGULAR_PLANTS, VACATION_PLANTS, RANDOM_SEED_PRICE, plant_definition, roll_mystery_seed
 
 OFFLINE_CAP = 3 * DAY
@@ -172,7 +173,7 @@ def _validate_legacy_collection(items):
 @dataclass
 class Garden:
     """Shared inventory with up to four independently simulated pots."""
-    CURRENT_SCHEMA: ClassVar[int] = 13
+    CURRENT_SCHEMA: ClassVar[int] = 14
 
     last_update: float
     schema: int = CURRENT_SCHEMA
@@ -194,6 +195,7 @@ class Garden:
     equipped_theme: str = 'grass'
     owned_skins: list = field(default_factory=lambda: ['terracotta'])
     equipped_skin: str = 'terracotta'
+    gacha: dict = field(default_factory=gacha_board.initial_account)
     fertilizer: int = 0
     fertilizer_reserve: int = 0
     reward_wait: float = 0.0
@@ -662,6 +664,42 @@ class Garden:
         self.equipped_skin = skin_id
         return True
 
+    def draw_gacha(self, category, count=1, randbelow=None):
+        if category not in gacha_board.REWARDS:
+            return False
+        try:
+            outcome = gacha_board.simulate(
+                self.gacha['board'], count, self.sunlight,
+                self.gacha['tickets'], randbelow,
+            )
+        except ValueError:
+            return False
+        draw_random = randbelow or secrets.randbelow
+        owned = self.owned_skins if category == 'pot' else self.owned_themes
+        results = []
+        for step in outcome['results']:
+            pool = gacha_board.REWARDS[category][step['rarity']]
+            item = pool[draw_random(len(pool))]
+            duplicate = item in owned
+            if not duplicate:
+                owned.append(item)
+            leaves = 1 + ({'R': 1, 'SR': 3, 'SSR': 10}[step['rarity']] if duplicate else 0)
+            record = {
+                'position': step['position'], 'category': category,
+                'rarity': step['rarity'], 'item': item,
+                'duplicate': duplicate, 'leaves': leaves,
+            }
+            results.append({**record, 'side_gate': step['side_gate'], 'side_step': step['side_step']})
+            self.gacha['leaves'] += leaves
+        self.gacha['board'] = outcome['state']
+        self.gacha['tickets'] = outcome['free_tickets']
+        self.sunlight = outcome['sunlight']
+        self.gacha['history'] = (self.gacha['history'] + [
+            {key: result[key] for key in ('position', 'category', 'rarity', 'item', 'duplicate', 'leaves')}
+            for result in results
+        ])[-200:]
+        return results
+
     def set_vacation(self, enabled, now):
         if type(enabled) is not bool:
             return False
@@ -698,6 +736,7 @@ class Garden:
             raise ValueError('씨앗')
         if type(data['sunlight']) is not int or data['sunlight'] < 0:
             raise ValueError('햇빛')
+        gacha_board.validate_account(data['gacha'])
         if type(data['fertilizer']) is not int or not 0 <= data['fertilizer'] <= FERTILIZER_CAP:
             raise ValueError('비료 재고')
         if type(data['fertilizer_reserve']) is not int or not 0 <= data['fertilizer_reserve'] <= 5:

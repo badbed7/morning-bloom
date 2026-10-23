@@ -38,6 +38,7 @@ from .mist_game import MistGame
 from .wind_game import WindGame
 from .desktop_flowers import DesktopFlowers
 from .garden_view import CollectionGarden, sale_price
+from .gacha_board_window import GachaBoardWindow
 from .google_cloud import CloudError, GoogleDriveSync
 from .model import FERTILIZER_CAP, FERTILIZER_SECONDS, POT_PRICES, TYCOON_RULE, WIND_BASE_SECONDS
 from .icon_picker import IconPicker
@@ -152,6 +153,7 @@ class Window(QWidget):
         self._mist_game = None
         self._wind_game = None
         self._collection_picker = None
+        self._gacha_board_window = None
         self._normal_position = QPointF(garden.settings['x'], garden.settings['y']).toPoint()
         self._minimized = False
         self._closing = False
@@ -1021,6 +1023,10 @@ class Window(QWidget):
         self.buy_seed_button = self.button(layout, '씨앗 구매', lambda: self.garden.buy_seed(self.shop_picker.selected))
         layout.addWidget(QLabel('화분 확장 · 씨앗은 별도 구매'))
         self.buy_pot_button = self.button(layout, '두 번째 화분 구매 · 150G', self.garden.buy_pot)
+        gacha_title = QLabel('꽃길 뽑기 · 60칸')
+        gacha_title.setObjectName('section')
+        layout.addWidget(gacha_title)
+        self.button(layout, '보드 열기 · 1회 햇빛 10 / 10회 햇빛 100', self.open_gacha_board)
         theme_title = QLabel('정원 배경 · 햇빛')
         theme_title.setObjectName('section')
         layout.addWidget(theme_title)
@@ -1061,6 +1067,16 @@ class Window(QWidget):
         self.shop_picker.selectionChanged.connect(self.refresh)
         self.theme_picker.selectionChanged.connect(self.refresh)
         self.skin_picker.selectionChanged.connect(self.refresh)
+
+    def open_gacha_board(self):
+        if self._gacha_board_window is not None:
+            self._gacha_board_window.raise_()
+            self._gacha_board_window.activateWindow()
+            return
+        board_window = GachaBoardWindow(self)
+        self._gacha_board_window = board_window
+        board_window.finished.connect(lambda result: setattr(self, '_gacha_board_window', None))
+        board_window.show()
 
     def harvest_flower(self):
         result = self.garden.harvest(self.now())

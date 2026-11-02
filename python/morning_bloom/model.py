@@ -704,7 +704,8 @@ class Garden:
                 'rarity': step['rarity'], 'item': item,
                 'duplicate': duplicate, 'leaves': leaves,
             }
-            results.append({**record, 'side_gate': step['side_gate'], 'side_step': step['side_step']})
+            results.append({**record, 'side_gate': step['side_gate'], 'side_step': step['side_step'],
+                            **{key: step[key] for key in ('dice', 'start', 'distance', 'path')}})
             self.gacha['leaves'] += leaves
         self.gacha['board'] = outcome['state']
         self.gacha['tickets'] = outcome['free_tickets']

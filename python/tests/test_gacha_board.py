@@ -8,7 +8,7 @@ from PySide6.QtWidgets import QApplication
 
 from morning_bloom import gacha_board as board
 from morning_bloom.app import Window
-from morning_bloom.model import Garden
+from morning_bloom.model import FERTILIZER_CAP, FERTILIZER_LEAF_PRICE, Garden
 from morning_bloom.storage import Store, migrate
 
 
@@ -97,6 +97,55 @@ class FlowerBoardRules(unittest.TestCase):
             dialog.close()
             window.close()
 
+    def test_rose_is_draw_only_and_existing_ownership_survives(self):
+        garden = Garden(100, sunlight=1000)
+        before = garden.to_dict()
+        self.assertFalse(garden.buy_skin('rose'))
+        self.assertEqual(garden.to_dict(), before)
+        garden.gacha['tickets'] = 0
+        garden.gacha['board']['position'] = board.GOLD - 1
+        result = garden.draw_gacha('pot', randbelow=lambda n: n - 1)
+        self.assertEqual(result[0]['item'], 'rose')
+        self.assertTrue(garden.equip_skin('rose'))
+        restored = Garden.from_dict(garden.to_dict())
+        self.assertEqual(restored.equipped_skin, 'rose')
+        self.assertIn('rose', restored.owned_skins)
+        # Existing v14 owners have no draw history proving the purchase route.
+        old_owner = Garden(100, owned_skins=['terracotta', 'rose'], equipped_skin='rose')
+        self.assertEqual(Garden.from_dict(old_owner.to_dict()).equipped_skin, 'rose')
+
+    def test_leaf_fertilizer_purchase_preserves_other_balances_and_roundtrips(self):
+        garden = Garden(100, sunlight=45, fertilizer=4, reward_wait=120,
+                        last_reward_id='previous-minigame', vacation=True)
+        garden.gacha['leaves'] = FERTILIZER_LEAF_PRICE + 2
+        before = garden.to_dict()
+        self.assertTrue(garden.buy_fertilizer_with_leaves())
+        expected = {**before, 'fertilizer': 5,
+                    'gacha': {**before['gacha'], 'leaves': 2}}
+        self.assertEqual(garden.to_dict(), expected)
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Store(Path(tmp) / 'garden.json')
+            store.save(garden)
+            self.assertEqual(store.load(100).to_dict(), expected)
+
+    def test_leaf_purchase_rejects_insufficient_balance_and_full_stock(self):
+        garden = Garden(100)
+        garden.gacha['leaves'] = FERTILIZER_LEAF_PRICE - 1
+        before = garden.to_dict()
+        self.assertFalse(garden.buy_fertilizer_with_leaves())
+        self.assertEqual(garden.to_dict(), before)
+        garden.gacha['leaves'] = FERTILIZER_LEAF_PRICE * 10
+        garden.fertilizer = FERTILIZER_CAP - 1
+        self.assertTrue(garden.buy_fertilizer_with_leaves())
+        before = garden.to_dict()
+        self.assertFalse(garden.buy_fertilizer_with_leaves())
+        self.assertEqual(garden.to_dict(), before)
+        garden.fertilizer_reserve = 3
+        before = garden.to_dict()
+        self.assertFalse(garden.buy_fertilizer_with_leaves())
+        self.assertEqual(garden.to_dict(), before)
+
 
 if __name__ == '__main__':
     unittest.main()
+

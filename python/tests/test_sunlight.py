@@ -122,12 +122,12 @@ class CosmeticsAndMigration(unittest.TestCase):
         self.assertFalse(garden.equip_skin('ivory'))
         garden.sunlight = 60
         before = garden.to_dict()
-        for key in ('ivory', 'sage', 'rose'):
+        for key in ('ivory', 'sage'):
             self.assertTrue(garden.buy_skin(key))
             self.assertFalse(garden.buy_skin(key))
             self.assertTrue(garden.equip_skin(key))
-        self.assertEqual(garden.sunlight, 60 - sum(POT_SKINS[key].price for key in ('ivory', 'sage', 'rose')))
-        self.assertEqual(Garden.from_dict(garden.to_dict()).equipped_skin, 'rose')
+        self.assertEqual(garden.sunlight, 60 - sum(POT_SKINS[key].price for key in ('ivory', 'sage')))
+        self.assertEqual(Garden.from_dict(garden.to_dict()).equipped_skin, 'sage')
         self.assertTrue(garden.equip_skin('terracotta'))
         after = garden.to_dict()
         for key in before.keys() - {'sunlight', 'owned_skins', 'equipped_skin'}:
@@ -251,3 +251,4 @@ class CosmeticsAndMigration(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+

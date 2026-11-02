@@ -12,7 +12,7 @@ from PySide6.QtWidgets import QApplication, QComboBox, QListWidget, QScrollArea
 from morning_bloom.app import GARDEN_PAGE, POT_PAGE, SETTINGS_PAGE, SHOP_PAGE, Window
 from morning_bloom.garden_view import FLOWER_MIME
 from morning_bloom.flower_art import paint_collection_flower, paint_potted_flower
-from morning_bloom.model import Garden
+from morning_bloom.model import FERTILIZER_LEAF_PRICE, Garden
 from morning_bloom.storage import SaveError, Store
 
 
@@ -205,6 +205,48 @@ class GardenInterface(unittest.TestCase):
         self.assertEqual(self.garden.sunlight, 12)
         self.assertEqual(self.garden.owned_themes, ['grass'])
         self.assertIn('되돌렸습니다', self.window.message.text())
+
+    def test_rose_shop_shows_draw_only_even_with_enough_sunlight(self):
+        self.garden.sunlight = 1000
+        self.window.skin_picker.buttons['rose'].click()
+        self.window.refresh()
+        self.assertFalse(self.window.buy_skin_button.isEnabled())
+        self.assertIn('뽑기 전용', self.window.buy_skin_button.text())
+        self.assertIn('뽑기 전용', self.window.skin_picker.buttons['rose'].text())
+        self.window.buy_skin_button.click()
+        self.assertEqual(self.garden.sunlight, 1000)
+        self.assertNotIn('rose', self.garden.owned_skins)
+        self.garden.owned_skins.append('rose')
+        self.window.refresh()
+        self.assertTrue(self.window.apply_skin_button.isEnabled())
+        self.window.apply_skin_button.click()
+        self.assertEqual(self.store.load(self.garden.last_update).equipped_skin, 'rose')
+
+    def test_leaf_shop_purchase_rolls_back_on_save_failure_and_stops_at_cap(self):
+        self.garden.gacha['leaves'] = FERTILIZER_LEAF_PRICE * 2
+        self.garden.fertilizer = 4
+        self.window.refresh()
+        button = self.window.buy_fertilizer_with_leaves_button
+        self.assertTrue(button.isEnabled())
+        before = self.garden.to_dict()
+        with patch.object(self.window, 'now', return_value=self.garden.last_update), \
+                patch.object(self.store, 'save', side_effect=SaveError('disk full')):
+            button.click()
+        self.assertEqual(self.garden.to_dict(), before)
+        self.assertIn('되돌렸습니다', self.window.message.text())
+        self.assertTrue(button.isEnabled())
+        button.click()
+        self.assertEqual((self.garden.gacha['leaves'], self.garden.fertilizer),
+                         (FERTILIZER_LEAF_PRICE, 5))
+        self.assertFalse(button.isEnabled())
+        button.click()
+        restored = self.store.load(self.garden.last_update)
+        self.assertEqual((restored.gacha['leaves'], restored.fertilizer),
+                         (FERTILIZER_LEAF_PRICE, 5))
+        self.garden.fertilizer = 0
+        self.garden.gacha['leaves'] = FERTILIZER_LEAF_PRICE - 1
+        self.window.refresh()
+        self.assertFalse(button.isEnabled())
 
     def test_skin_purchase_apply_and_failure_restore_money_and_saved_appearance(self):
         self.garden.sunlight = 30
@@ -419,3 +461,4 @@ class GardenInterface(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+

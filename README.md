@@ -4,7 +4,7 @@
 
 **목표: Python + PySide6 / 2D 전용 / Windows 우선**
 
-현재 60칸 가챠의 재화·보장·곁길 동작과 다음 변경은 [현재 가챠 규칙](docs/gacha-current-rules.ko.md)을 기준으로 확인합니다. 로즈 리본의 뽑기 전용화와 교환잎 비료 구매는 다음 변경이며, 공개 Release에는 아직 포함되지 않았습니다.
+v0.8.6에는 로즈 리본의 뽑기 전용화와 교환잎 5개당 비료 1개 구매가 포함됩니다. 현재 60칸 가챠의 재화·보장·곁길 동작은 [현재 가챠 규칙](docs/gacha-current-rules.ko.md)을 기준으로 확인합니다.
 
 **Python 실행:** Release의 Python-BAT ZIP을 풀고 `run-python.bat`으로 실행하세요. 매번 GitHub 최신 버전을 확인하고 기존 정원을 유지하며 업데이트합니다. [Python 실행 방법·구현 상태](python/README.md)를 확인하세요.
 
@@ -115,9 +115,10 @@ godot --headless --path . --script tests/ui_smoke.gd -- --demo
 
 ## Windows 실행 파일과 업데이트
 
-최신 [v0.7.3 Release](https://github.com/badbed7/morning-bloom/releases/tag/v0.7.3)는 바탕화면 꽃을 일반 폴더·앱보다 위에 표시하고 비료 보상 대기시간을 실시간으로 보여 줍니다. Python-BAT ZIP 또는 Windows-x64 ZIP을 받아 전체 압축을 풀고 실행하세요. v0.7.0부터 제공한 자동 업데이트와 v0.7.2의 Google 계정·비공개 Drive 백업·복원도 그대로 유지합니다.
+최신 [v0.8.6 Release](https://github.com/badbed7/morning-bloom/releases/tag/v0.8.6)는 로즈 화분의 햇빛 직접 구매를 막고 교환잎 비료 상점을 제공합니다. Python-BAT ZIP 또는 Windows-x64 ZIP을 받아 전체 압축을 풀고 실행하세요. 기존 자동 업데이트와 Google 계정·비공개 Drive 백업·복원도 유지합니다.
 
 Python BAT는 Python 3.12 64비트로 실행하며, EXE는 Python 설치가 필요 없습니다. 사용자 배포에는 MSIX를 사용하지 않습니다. v0.6.0 이하를 쓰던 사용자는 v0.7.0 런처로 한 번 교체하면 이후 실행부터 자동 업데이트됩니다.
 
 공개 저장소의 최신 Release에서 인증 없이 업데이트를 받습니다. 게임 저장은 `%LOCALAPPDATA%/MorningBloomPython`에 보존합니다. [실행 순서·실패 복구·새 버전 게시](release/README.md)를 확인하세요.
+
 

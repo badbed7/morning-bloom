@@ -101,11 +101,13 @@ def main():
     zip_folder(bootstrap, output / f'MorningBloom-{release_version}-Windows-x64.zip')
     (output / 'release-notes.md').write_text(
         f'Morning Bloom {release_version}\n\n'
-        '## 홀씨 바람놀이 수정\n\n'
-        '- 진행 게이지는 버튼·비행장·스페이스를 누르고 있는 실제 시간에만 찹니다. 손을 놓으면 멈춥니다.\n'
-        '- 바닥에 닿으면 고리의 좌측 이동과 등장 시간이 멈춥니다. 다시 누르면 홀씨가 떠오르고 전진합니다.\n'
-        '- 천장 반사, 고리 10개당 1G, 누적 1시간의 민들레·햇빛 보상은 유지합니다.\n'
-        '- 저장 v13의 기존 진행도와 보상은 보존하며, 업데이트 후부터 새 시간 판정을 적용합니다.\n\n'
+        '## 로즈 화분과 교환잎 비료 상점\n\n'
+        '- 로즈 리본 화분은 화분 SSR 뽑기 전용입니다. 상점의 햇빛 직접 구매를 막고 획득 경로를 표시합니다.\n'
+        '- 이미 보유한 로즈 화분의 소유권과 장착은 유지합니다.\n'
+        '- 상점에서 교환잎 5개로 비료 1개를 구매합니다. 비료 보유 상한은 5개입니다.\n'
+        '- 잎 부족·비료 재고 상한에서는 차감하지 않으며, 저장 실패 시 잎과 비료를 함께 복원합니다.\n'
+        '- 현재 v14 정원의 꽃·재화·꾸미기·배치와 가챠 진행을 보존합니다.\n'
+        '- 뽑기는 기존처럼 1회 햇빛 10개, 10회 100개입니다. 여러 독립 특수 보드의 진입·추첨은 후속 개발 대상입니다.\n\n'
         '## 다운로드\n\n'
         f'- Python 실행: `MorningBloom-{release_version}-Python-BAT.zip` 전체 압축 해제 후 `run-python.bat` 실행. Python 3.12 64비트가 필요합니다.\n'
         f'- EXE 실행: `MorningBloom-{release_version}-Windows-x64.zip` 전체 압축 해제 후 `MorningBloom.exe` 실행. Python 설치가 필요 없습니다.\n'
@@ -113,3 +115,4 @@ def main():
         'Windows CI에서 게임·업데이터 테스트와 EXE·Python 묶음의 격리된 실행 검사를 통과했습니다.\n', encoding='utf-8')
 
 if __name__ == '__main__': main()
+

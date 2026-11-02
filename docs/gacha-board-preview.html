@@ -41,6 +41,7 @@
     .tile.here::after { content:"●"; position:absolute; right:3px; top:-10px; color:#386f4d; font-size:21px; text-shadow:0 1px white; }
     .tile.landing { animation:land .28s ease-out; }
     .seed-token { position:absolute; z-index:5; width:30px; height:30px; display:grid; place-items:center; font-size:28px; pointer-events:none; filter:drop-shadow(0 2px 3px #47664588); transition:left .16s ease-in-out,top .16s ease-in-out; }
+    .seed-token[hidden] { display:none; }
     .dice { display:flex; align-items:center; gap:9px; margin:4px 0; font-size:30px; font-weight:800; }
     .dice span { display:grid; place-items:center; width:44px; height:44px; background:#fffaf0; border:2px solid #b7bea9; border-radius:9px; }
     .dice strong { font-size:20px; }

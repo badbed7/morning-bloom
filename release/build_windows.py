@@ -101,6 +101,10 @@ def main():
     zip_folder(bootstrap, output / f'MorningBloom-{release_version}-Windows-x64.zip')
     (output / 'release-notes.md').write_text(
         f'Morning Bloom {release_version}\n\n'
+        '## 0.8.8 철회 대체 · 60칸 꽃길 보드와 프리뷰\n\n'
+        '- 주사위 2개의 눈과 합을 표시하고 민들레 씨가 합만큼 칸을 따라 이동합니다. 60번 다음은 1번으로 이어지며 도착 칸에서만 보상을 받습니다.\n'
+        '- 10회 연속 연출과 건너뛰기를 지원합니다. docs/gacha-board-preview.html도 같은 규칙으로 갱신했습니다.\n'
+        '- 0.8.8 공개 배포는 철회했으며 이 버전이 대체합니다.\n'
         '## 자동 업데이트 조회와 구버전 실행 안내 수정\n\n'
         '- 조회 제한을 5초에서 15초로 늘리고 GitHub Release API와 버전별 고정 주소를 사용합니다. API 실패 시 기존 공개 주소로 재시도합니다.\n'
         '- 조회·설치 실패로 이전 버전을 실행하면 현재 버전과 진단 로그를 안내합니다.\n'

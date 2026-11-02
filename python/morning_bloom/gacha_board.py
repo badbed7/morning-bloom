@@ -71,9 +71,16 @@ def validate(state):
 
 
 def _next(state, randbelow):
-    position = state['position'] + 1
-    if position > LENGTH:
-        position = 1
+    dice = []
+    for _ in range(2):
+        face = randbelow(6)
+        if type(face) is not int or not 0 <= face < 6:
+            raise ValueError('주사위 범위')
+        dice.append(face + 1)
+    start = state['position']
+    distance = sum(dice)
+    path = [(start + step - 1) % LENGTH + 1 for step in range(1, distance + 1)]
+    position = path[-1]
     if state['side_gate'] is not None:
         if state['side_step'] == 4:
             state['side_gate'] = None
@@ -101,6 +108,10 @@ def _next(state, randbelow):
     state['sr_miss'] = state['sr_miss'] + 1 if rarity == 'R' else 0
     state['ssr_miss'] = state['ssr_miss'] + 1 if rarity != 'SSR' else 0
     return {
+        'dice': dice,
+        'start': start,
+        'distance': distance,
+        'path': path,
         'position': position,
         'rarity': rarity,
         'special': position in SPECIALS,

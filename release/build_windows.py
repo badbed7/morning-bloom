@@ -101,6 +101,9 @@ def main():
     zip_folder(bootstrap, output / f'MorningBloom-{release_version}-Windows-x64.zip')
     (output / 'release-notes.md').write_text(
         f'Morning Bloom {release_version}\n\n'
+        '## 상점 꽃길 뽑기 진입 강조\n\n'
+        '- 상점 맨 위의 초록색 강조 카드와 큰 버튼에서 60칸 보드를 바로 엽니다. 무료권과 1회/10회 비용을 함께 표시합니다.\n'
+        '- 작은 창에서도 진입 버튼이 보이며 씨앗 구매는 스크롤로 이용할 수 있습니다.\n\n'
         '## 0.8.8 철회 대체 · 60칸 꽃길 보드와 프리뷰\n\n'
         '- 주사위 2개의 눈과 합을 표시하고 민들레 씨가 합만큼 칸을 따라 이동합니다. 60번 다음은 1번으로 이어지며 도착 칸에서만 보상을 받습니다.\n'
         '- 10회 연속 연출과 건너뛰기를 지원합니다. docs/gacha-board-preview.html도 같은 규칙으로 갱신했습니다.\n'

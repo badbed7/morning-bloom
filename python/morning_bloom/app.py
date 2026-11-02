@@ -1010,6 +1010,27 @@ class Window(QWidget):
             wallet.addSpacing(8)
         wallet.addStretch()
         layout.addLayout(wallet)
+        gacha_card = QFrame()
+        gacha_card.setObjectName('gachaCard')
+        gacha_card.setStyleSheet('''
+            QFrame#gachaCard {background:#e6f1de;border:2px solid #729760;border-radius:12px;}
+            QFrame#gachaCard QLabel {background:transparent;border:0;color:#365b39;}
+            QFrame#gachaCard QPushButton {background:#47784f;color:white;border:1px solid #35633d;
+                border-radius:8px;font-size:15px;font-weight:700;padding:9px;}
+            QFrame#gachaCard QPushButton:hover {background:#345f3c;}
+        ''')
+        gacha_layout = QVBoxLayout(gacha_card)
+        gacha_layout.setContentsMargins(10, 9, 10, 9)
+        gacha_layout.setSpacing(3)
+        gacha_heading = QLabel('🎲 꽃길 뽑기 · 60칸')
+        gacha_heading.setStyleSheet('font-size:16px;font-weight:700;')
+        gacha_layout.addWidget(gacha_heading)
+        self.gacha_offer = QLabel()
+        self.gacha_offer.setWordWrap(True)
+        gacha_layout.addWidget(self.gacha_offer)
+        self.gacha_button = self.button(gacha_layout, '주사위 2개 굴리기 →', self.open_gacha_board)
+        self.gacha_button.setAccessibleName('꽃길 뽑기 60칸 보드 열기')
+        layout.addWidget(gacha_card)
         seed_title = QLabel('재배 상점 · 골드')
         seed_title.setObjectName('section')
         layout.addWidget(seed_title)
@@ -1023,10 +1044,6 @@ class Window(QWidget):
         self.buy_seed_button = self.button(layout, '씨앗 구매', lambda: self.garden.buy_seed(self.shop_picker.selected))
         layout.addWidget(QLabel('화분 확장 · 씨앗은 별도 구매'))
         self.buy_pot_button = self.button(layout, '두 번째 화분 구매 · 150G', self.garden.buy_pot)
-        gacha_title = QLabel('꽃길 뽑기 · 60칸')
-        gacha_title.setObjectName('section')
-        layout.addWidget(gacha_title)
-        self.button(layout, '보드 열기 · 1회 햇빛 10 / 10회 햇빛 100', self.open_gacha_board)
         self.leaf_shop_info = QLabel()
         self.leaf_shop_info.setWordWrap(True)
         layout.addWidget(self.leaf_shop_info)
@@ -1691,6 +1708,9 @@ class Window(QWidget):
         self.shop_gold.setAccessibleName(f'골드 {garden.coins}G')
         self.shop_sunlight.setText(str(garden.sunlight))
         self.shop_sunlight.setAccessibleName(f'햇빛 {garden.sunlight}')
+        self.gacha_offer.setText(
+            f'무료권 {garden.gacha["tickets"]}장 · 1회 햇빛 10 / 10회 햇빛 100'
+        )
         self.shop_pots.setText(f'{len(garden.pots)}/{len(POT_PRICES)}')
         self.shop_pots.setAccessibleName(f'화분 {len(garden.pots)}/{len(POT_PRICES)}')
         species = self.shop_picker.selected

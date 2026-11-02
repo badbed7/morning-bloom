@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>아침 한 송이 · 꽃길 보드 시안</title>
+  <style>
+    :root { color-scheme: light; --ink:#344437; --muted:#718072; --cream:#fbf6e9; --edge:#d7d7bf; --leaf:#52785b; --mint:#e4eee0; --silver:#e5e7ef; --gold:#f5db8d; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:radial-gradient(circle at 8% 6%,#fffdf5 0,#eff1df 43%,#e5ebd9 100%); color:var(--ink); font:15px/1.5 "Noto Sans KR","Malgun Gothic",sans-serif; }
+    main { max-width:1160px; margin:0 auto; padding:32px 20px 48px; }
+    h1,h2,p { margin-top:0; }
+    h1 { margin-bottom:5px; font-size:clamp(24px,3vw,37px); letter-spacing:-.04em; }
+    h2 { font-size:19px; margin-bottom:12px; }
+    button { font:inherit; cursor:pointer; }
+    .eyebrow { color:#6b886c; font-size:12px; font-weight:800; letter-spacing:.18em; }
+    .lead { color:var(--muted); max-width:750px; margin-bottom:18px; }
+    .notice { border:1px solid #d4dcbf; background:#edf1dc; border-radius:14px; padding:10px 14px; margin-bottom:18px; font-size:13px; }
+    .shell { display:grid; grid-template-columns:minmax(0,1fr) 280px; gap:18px; align-items:start; }
+    .panel { background:rgba(255,252,244,.92); border:1px solid #dcd5bc; box-shadow:0 14px 40px #687b5b1a; border-radius:20px; padding:18px; }
+    .board-head { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:end; gap:8px; }
+    .board-head p { margin-bottom:0; font-size:13px; color:var(--muted); }
+    .legend { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0 15px; font-size:12px; }
+    .legend span { border-radius:999px; padding:3px 10px; border:1px solid var(--edge); background:#fbfaf5; }
+    .legend .s { background:var(--silver); border-color:#bbbfd1; }
+    .legend .g { background:var(--gold); border-color:#dfbf69; }
+    .board-scroll { overflow-x:auto; }
+    .board { position:relative; min-width:760px; display:grid; grid-template-columns:repeat(20,minmax(0,1fr)); grid-template-rows:repeat(12,minmax(0,1fr)); gap:4px; aspect-ratio:20/12; background:#dce8d7; border:1px solid #c8d7c3; padding:8px; border-radius:16px; }
+    .tile { min-width:0; border:1px solid #c7d7c1; border-radius:7px; background:#f7fbf0; color:#5e7661; position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:1px; transition:transform .12s,box-shadow .12s; }
+    .tile:hover,.tile:focus-visible { transform:translateY(-2px); box-shadow:0 2px 8px #62735d55; outline:none; }
+    .tile .num { font-size:12px; font-weight:800; }
+    .tile .word { font-size:9px; font-weight:800; line-height:1.1; white-space:nowrap; }
+    .centerpiece { grid-column:3/19; grid-row:3/11; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:7px; text-align:center; background:radial-gradient(circle,#faf9e8,#e6efdb); border:1px dashed #adc3a8; border-radius:18px; padding:15px; color:#45664b; }
+    .centerpiece .flower { font-size:50px; line-height:1; }
+    .centerpiece strong { font-size:clamp(18px,2.4vw,29px); }
+    .centerpiece p { margin:0; font-size:13px; }
+    .tile.special-sr { background:linear-gradient(145deg,#f3f3fa,#dfe2f0); border-color:#abb5d3; color:#555d86; }
+    .tile.special-ssr { background:linear-gradient(145deg,#fff4c4,#eecb71); border-color:#d1a950; color:#61481f; }
+    .tile.passed { opacity:.58; }
+    .tile.here { outline:3px solid #477858; outline-offset:0; z-index:1; box-shadow:0 0 0 4px #fafff5,0 6px 12px #55765b55; opacity:1; }
+    .tile.here::after { content:"●"; position:absolute; right:3px; top:-10px; color:#386f4d; font-size:21px; text-shadow:0 1px white; }
+    .tile.landing { animation:land .28s ease-out; }
+    .seed-token { position:absolute; z-index:5; width:30px; height:30px; display:grid; place-items:center; font-size:28px; pointer-events:none; filter:drop-shadow(0 2px 3px #47664588); transition:left .16s ease-in-out,top .16s ease-in-out; }
+    .dice { display:flex; align-items:center; gap:9px; margin:4px 0; font-size:30px; font-weight:800; }
+    .dice span { display:grid; place-items:center; width:44px; height:44px; background:#fffaf0; border:2px solid #b7bea9; border-radius:9px; }
+    .dice strong { font-size:20px; }
+    @keyframes land { from { transform:scale(.72); box-shadow:0 0 0 0 #87b78899; } to { transform:scale(1); box-shadow:0 0 0 7px #87b78800; } }
+    .route { display:flex; justify-content:space-between; gap:8px; margin-top:12px; color:#5f745e; font-size:13px; }
+    .route strong { color:#365a3d; }
+    .side-board { margin-top:16px; padding:14px; border:1px solid #c6d5c0; border-radius:15px; background:#f0f5e9; }
+    .side-board h3 { margin:0 0 4px; font-size:16px; }
+    .side-board p { margin:0 0 10px; color:#607360; font-size:12px; }
+    .gate-list { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:7px; }
+    .gate { min-width:0; border:1px solid #cbd6c7; border-radius:10px; padding:6px 3px; text-align:center; background:#fafbf4; color:#617363; font-size:11px; }
+    .gate strong { display:block; font-size:12px; }
+    .gate.open { border-color:#62916e; background:#e1f0da; color:#355e40; box-shadow:0 0 0 2px #bcdcb7; }
+    .gate.complete { border-color:#c7aa63; background:#fbf1d2; color:#745b2b; }
+    .side-path { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:6px; margin-top:9px; }
+    .side-cell { padding:8px 2px; border:1px solid #bfd0ba; border-radius:9px; text-align:center; background:#fbfdf8; color:#617363; font-size:11px; }
+    .side-cell.active { background:#d9eacf; border-color:#69956f; color:#315b3a; font-weight:800; }
+    .side-cell.done { background:#e9eedf; }
+    .balances { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:12px 0; }
+    .balance { border-radius:12px; background:#f3f4e9; padding:10px; font-size:12px; color:var(--muted); }
+    .balance strong { display:block; font-size:19px; color:var(--ink); }
+    .tabs { display:flex; gap:6px; margin:10px 0; }
+    .tabs button { flex:1; padding:8px 6px; border:1px solid var(--edge); border-radius:10px; background:#fbfbf6; color:var(--ink); }
+    .tabs button[aria-selected="true"] { background:var(--mint); border-color:#68946f; color:#315838; font-weight:800; }
+    .meter { font-size:13px; color:#566e5b; margin:0 0 10px; }
+    .actions { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    .actions button { border:0; border-radius:11px; color:white; background:#527b58; padding:11px 6px; font-size:13px; font-weight:800; }
+    .actions button:last-child { background:#786a51; }
+    .actions .skip { grid-column:1/-1; background:#b47143; }
+    .actions button:disabled { opacity:.45; cursor:not-allowed; }
+    .reset { border:0; background:transparent; color:#657565; font-size:12px; text-decoration:underline; padding:8px 0 0; }
+    .detail { min-height:64px; border-radius:12px; background:#f7f1df; padding:11px; margin-top:14px; font-size:13px; }
+    .history { margin:10px 0 0; padding:0; list-style:none; max-height:245px; overflow:auto; }
+    .history li { border-top:1px solid #e4e3d6; padding:6px 0; font-size:12px; }
+    .history b { color:#6e5c35; }
+    .hint { margin:12px 0 0; font-size:12px; color:var(--muted); }
+    @media (max-width:860px) { .shell { grid-template-columns:1fr; } .board { gap:4px; } }
+    @media (max-width:430px) { main { padding:18px 9px 30px; } .panel { padding:11px; } .route { font-size:10px; gap:3px; } }
+    @media (prefers-reduced-motion:reduce) { .tile, .tile.landing { animation:none; transition:none; } }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="eyebrow">MORNING BLOOM · BOARD CONCEPT</div>
+    <h1>주사위 둘, 민들레 씨 하나</h1>
+    <p class="lead">주사위 2개의 합인 2~12칸을 민들레 씨가 따라 이동합니다. 60번 다음은 1번이며, 보상은 도착 칸에서만 지급됩니다.</p>
+    <div class="notice">기획용 시뮬레이션입니다. 화면의 햇빛·뽑기권·결과는 실제 게임 저장이나 계정과 연결되지 않습니다.</div>
+    <div class="shell">
+      <section class="panel" aria-labelledby="board-title">
+        <div class="board-head"><h2 id="board-title">60칸 꽃길 보드</h2><p id="position">출발 · 0 / 60</p></div>
+        <div class="legend"><span>일반 칸</span><span class="s">은빛 꽃칸 · SR+</span><span class="g">황금 화분칸 · SSR</span></div>
+        <div class="board-scroll"><div class="board" id="board" aria-label="직사각형 테두리 60칸 꽃길 보드"><div class="centerpiece"><div class="dice" aria-label="주사위 눈과 합"><span id="die-one">⚀</span>+<span id="die-two">⚀</span><strong id="dice-sum">합 2</strong></div><strong>꽃길 한 바퀴</strong><p id="center-position">출발 · 0 / 60</p><p id="center-next">다음 특수 칸까지 11칸</p></div><div id="seed-token" class="seed-token" aria-label="민들레 씨">✻</div></div></div>
+        <div class="route"><span>시작 · 왼쪽 아래 → 아래·오른쪽·위·왼쪽</span><span id="next-square"></span></div>
+        <section class="side-board" aria-labelledby="side-title">
+          <h3 id="side-title">곁길 보드 · 네 면의 출입구</h3>
+          <p id="side-status" aria-live="polite">높은 등급 칸에 도착하면 해당 면의 출입구가 열립니다.</p>
+          <div class="gate-list" id="gate-list" aria-label="곁길 출입구"></div>
+          <div class="side-path" id="side-path" aria-label="곁길 진행 칸"></div>
+          <p style="margin:8px 0 0">곁길은 다음 4번의 뽑기 동안 함께 진행합니다. 시안 단계에서는 추가 보상이 없습니다.</p>
+        </section>
+      </section>
+      <aside class="panel" aria-labelledby="draw-title">
+        <h2 id="draw-title">정원 공방</h2>
+        <div class="balances">
+          <div class="balance">시안용 햇빛<strong id="sunlight">600</strong></div>
+          <div class="balance">무료권<strong id="tickets">3</strong></div>
+          <div class="balance">교환잎<strong id="leaves">0</strong></div>
+          <div class="balance">총 진행<strong id="total">0회</strong></div>
+        </div>
+        <div class="tabs" role="tablist" aria-label="뽑기 종류">
+          <button id="pot-tab" role="tab" aria-selected="true" type="button">화분</button>
+          <button id="garden-tab" role="tab" aria-selected="false" type="button">정원</button>
+        </div>
+        <p class="meter" id="meters"></p>
+        <div class="actions"><button id="draw-one" type="button">주사위 2개 · 햇빛 10</button><button id="draw-ten" type="button">10회 연속 · 햇빛 100</button><button id="skip" class="skip" type="button" hidden>연출 건너뛰기</button></div>
+        <button class="reset" id="reset" type="button">시안 처음부터 보기</button>
+        <div class="detail" id="detail" aria-live="polite">칸을 누르면 확정 등급을 볼 수 있습니다. 뽑기 버튼으로만 이동합니다.</div>
+        <ol class="history" id="history" aria-label="최근 뽑기 결과"></ol>
+        <p class="hint">기본 확률 R 70% · SR 25% · SSR 5%. 10회 이내 SR+, 60회 이내 SSR 천장은 보드와 별도로 계산됩니다.</p>
+      </aside>
+    </div>
+  </main>
+  <script>
+    (() => {
+      const silver = new Set([11, 26, 41]);
+      const gold = 56;
+      const specials = [11, 26, 41, gold];
+      const gateNames = { 11:'아래 · 은빛', 26:'오른쪽 · 은빛', 41:'위 · 은빛', 56:'왼쪽 · 황금' };
+      const sideNames = ['출입구','씨앗길','물길','햇빛길','복귀'];
+      const distanceTo = (position, target) => target>position ? target-position : 60-position+target;
+      const nextSpecial = position => specials.find(number=>number>position) ?? specials[0];
+      const names = {
+        pot: { R:['스톤','라운드','우드','블루 라인'], SR:['아이보리','세이지','로즈','그린 체크'], SSR:['리프 패턴','플라워 패턴','데이지','라벤더'] },
+        garden: { R:['작은 꽃','들꽃','잎사귀','풀밭'], SR:['클로버','허브','라벤더 정원','핑크 플라워'], SSR:['햇빛 비추는 잔디','장미 정원','벚꽃','온실 주변'] }
+      };
+      const $ = id => document.getElementById(id);
+      const tiles = new Map();
+      const initial = () => ({ position:0, total:0, srMiss:0, ssrMiss:0, sunlight:600, tickets:3, leaves:0, category:'pot', owned:new Set(), sideGate:null, sideStep:0, visitedGates:new Set() });
+      let state = initial();
+      let busy = false;
+      let skipAnimation = false;
+      const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+      const pause = (ms=170) => new Promise(resolve => setTimeout(resolve, skipAnimation||reducedMotion.matches ? 0 : ms));
+      const faces = ['⚀','⚁','⚂','⚃','⚄','⚅'];
+      const showDice = (a,b) => { $('die-one').textContent=faces[a-1]; $('die-two').textContent=faces[b-1]; $('dice-sum').textContent=`합 ${a+b}`; };
+      function placeSeed(position) {
+        if (!position) { $('seed-token').hidden=true; return; }
+        const tile=tiles.get(position);
+        $('seed-token').hidden=false;
+        $('seed-token').style.left=`${tile.offsetLeft+(tile.offsetWidth-30)/2}px`;
+        $('seed-token').style.top=`${tile.offsetTop+(tile.offsetHeight-30)/2}px`;
+      }
+      for (const number of specials) {
+        const gate=document.createElement('div');
+        gate.className='gate';
+        gate.textContent='출입구';
+        const label=document.createElement('strong');
+        label.textContent=`${number}번 · ${gateNames[number]}`;
+        gate.prepend(label);
+        gate.dataset.gate=String(number);
+        $('gate-list').append(gate);
+      }
+      for (const [step,name] of sideNames.entries()) {
+        const cell=document.createElement('div');
+        cell.className='side-cell';
+        cell.textContent=name;
+        cell.dataset.step=String(step);
+        $('side-path').append(cell);
+      }
+      for (let number=1;number<=60;number++) {
+        const index=number-1;
+        let row, column;
+        if (index<20) { row=12; column=index+1; }
+        else if (index<30) { row=12-(index-19); column=20; }
+        else if (index<50) { row=1; column=20-(index-30); }
+        else { row=index-48; column=1; }
+        const tile=document.createElement('button');
+        const tier=number===gold?'SSR':silver.has(number)?'SR+':'';
+        tile.type='button';
+        tile.className='tile'+(tier==='SSR'?' special-ssr':tier?' special-sr':'');
+        tile.style.gridRow=String(row);
+        tile.style.gridColumn=String(column);
+        tile.innerHTML='<span class="num">'+number+'</span><span class="word">'+(tier||'·')+'</span>';
+        tile.setAttribute('aria-label',number+'번 칸'+(tier==='SSR'?' · SSR 확정':tier?' · SR 이상 확정':' · 일반 칸'));
+        tile.addEventListener('click',()=>{
+          $('detail').textContent=number===gold?`${number}번 황금 화분칸 · 도착한 뽑기에서 SSR 100%.`:
+            silver.has(number)?`${number}번 은빛 꽃칸 · 도착한 뽑기에서 SR 95%, SSR 5%.`:
+            `${number}번 일반 꽃칸 · 기본 확률. 기존 10회/60회 천장은 그대로 적용됩니다.`;
+        });
+        tiles.set(number,tile);
+        $('board').append(tile);
+      }
+      function render(displayPosition=state.position) {
+        const p=displayPosition;
+        for (const [number,tile] of tiles) {
+          tile.classList.toggle('here',number===p);
+          tile.classList.toggle('passed',p>0&&number<p);
+        }
+        placeSeed(p);
+        $('position').textContent=p?`현재 ${p} / 60`:'출발 · 0 / 60';
+        const upcoming=nextSpecial(p);
+        $('next-square').textContent=`다음 특수 ${distanceTo(p,upcoming)}회 · SSR ${distanceTo(p,gold)}회`;
+        $('center-position').textContent=p?`현재 ${p} / 60`:'출발 · 0 / 60';
+        $('center-next').textContent=`다음 ${upcoming===gold?'SSR':'SR+'} 칸까지 ${distanceTo(p,upcoming)}회`;
+        $('side-status').textContent=state.sideGate===null ? '높은 등급 칸에 도착하면 해당 면의 출입구가 열립니다.' :
+          `${gateNames[state.sideGate]} 출입구 · ${state.sideStep===4?'복귀 칸 도착':`곁길 ${state.sideStep} / 4`}`;
+        for (const gate of $('gate-list').children) {
+          const number=Number(gate.dataset.gate);
+          gate.classList.toggle('open',number===state.sideGate);
+          gate.classList.toggle('complete',state.visitedGates.has(number)&&number!==state.sideGate);
+        }
+        for (const cell of $('side-path').children) {
+          const step=Number(cell.dataset.step);
+          cell.classList.toggle('active',state.sideGate!==null&&step===state.sideStep);
+          cell.classList.toggle('done',state.sideGate!==null&&step<state.sideStep);
+        }
+        $('sunlight').textContent=state.sunlight;
+        $('tickets').textContent=state.tickets;
+        $('leaves').textContent=state.leaves;
+        $('total').textContent=state.total+'회';
+        $('meters').textContent=`SR+ 천장 최대 ${10-state.srMiss}회 · SSR 천장 최대 ${60-state.ssrMiss}회`;
+        $('pot-tab').setAttribute('aria-selected',state.category==='pot');
+        $('garden-tab').setAttribute('aria-selected',state.category==='garden');
+        $('draw-one').disabled=busy||(state.tickets<1&&state.sunlight<10);
+        $('draw-ten').disabled=busy||(state.tickets<10&&state.sunlight<100);
+        $('pot-tab').disabled=busy;
+        $('garden-tab').disabled=busy;
+        $('reset').disabled=busy;
+        $('skip').hidden=!busy;
+        $('board').setAttribute('aria-busy',String(busy));
+      }
+      function oneResult() {
+        const start=state.position;
+        const dice=[1+Math.floor(Math.random()*6),1+Math.floor(Math.random()*6)];
+        const path=Array.from({length:dice[0]+dice[1]},(_,index)=>(start+index)%60+1);
+        const position=path.at(-1);
+        if (state.sideGate!==null) {
+          if (state.sideStep===4) { state.sideGate=null; state.sideStep=0; }
+          else state.sideStep++;
+        }
+        if (specials.includes(position)) {
+          state.sideGate=position;
+          state.sideStep=0;
+          state.visitedGates.add(position);
+        }
+        const forcedSSR=position===gold||state.ssrMiss>=59;
+        const forcedSR=forcedSSR||silver.has(position)||state.srMiss>=9;
+        const roll=Math.random();
+        const rarity=forcedSSR?'SSR':forcedSR?(roll<.05?'SSR':'SR'):(roll<.05?'SSR':roll<.30?'SR':'R');
+        const pool=names[state.category][rarity];
+        const item=pool[Math.floor(Math.random()*pool.length)];
+        const ownershipKey=state.category+':'+item;
+        const duplicate=state.owned.has(ownershipKey);
+        state.owned.add(ownershipKey);
+        state.leaves+=1+(duplicate?({ R:1,SR:3,SSR:10 })[rarity]:0);
+        state.position=position===60?0:position;
+        state.total++;
+        state.srMiss=rarity==='R'?state.srMiss+1:0;
+        state.ssrMiss=rarity==='SSR'?0:state.ssrMiss+1;
+        return { dice, path, position, rarity, item, duplicate, special:position===gold||silver.has(position) };
+      }
+      async function draw(count) {
+        if (busy) return;
+        const withTickets=state.tickets>=count;
+        if (!withTickets&&state.sunlight<count*10) { $('detail').textContent='시안용 재화가 부족합니다. 처음부터 보기로 다시 진행할 수 있습니다.'; return; }
+        if (withTickets) state.tickets-=count; else state.sunlight-=count*10;
+        busy=true;
+        skipAnimation=false;
+        render();
+        const results=[];
+        for (let index=0;index<count;index++) {
+          const result=oneResult();
+          results.push(result);
+        }
+        for (let index=0;index<results.length;index++) {
+          const result=results[index];
+          if (!skipAnimation) {
+            for (let frame=0;frame<7&&!skipAnimation;frame++) {
+              showDice(1+Math.floor(Math.random()*6),1+Math.floor(Math.random()*6));
+              $('detail').textContent=`주사위 굴리는 중 · ${index+1}/${count}`;
+              await pause(55);
+            }
+          }
+          showDice(...result.dice);
+          $('detail').textContent=`${result.dice[0]} + ${result.dice[1]} = ${result.path.length}칸 · ${index+1}/${count}`;
+          await pause(240);
+          for (const position of result.path) {
+            if (skipAnimation) break;
+            render(position);
+            await pause();
+          }
+          render(result.position);
+          const li=document.createElement('li');
+          const marker=result.special?' · 특수 칸':'';
+          li.innerHTML=`<b>${result.position}번 · ${result.rarity}</b> · ${result.item}${result.duplicate?' · 중복':' · NEW'}${marker}`;
+          $('history').prepend(li);
+          $('detail').textContent=`도착 ${index+1}/${count} · ${result.position}번 칸 보상 · ${result.rarity} ${result.item}`;
+          const tile=tiles.get(result.position);
+          tile.classList.remove('landing');
+          void tile.offsetWidth;
+          tile.classList.add('landing');
+          await pause(240);
+          tile.classList.remove('landing');
+        }
+        const specialResults=results.filter(result=>result.special);
+        $('detail').textContent=specialResults.length?
+          specialResults.map(result=>`${result.position}번 ${result.rarity} 확정 · ${result.item}`).join(' / '):
+          `${count}회 굴렸습니다. 다음 특수 칸까지 ${distanceTo(state.position,nextSpecial(state.position))}칸.`;
+        busy=false;
+        render();
+      }
+      $('draw-one').addEventListener('click',()=>draw(1));
+      $('draw-ten').addEventListener('click',()=>draw(10));
+      $('skip').addEventListener('click',()=>{ skipAnimation=true; });
+      $('pot-tab').addEventListener('click',()=>{ if (!busy) { state.category='pot'; render(); } });
+      $('garden-tab').addEventListener('click',()=>{ if (!busy) { state.category='garden'; render(); } });
+      $('reset').addEventListener('click',()=>{ if (!busy) { state=initial(); $('history').replaceChildren(); $('detail').textContent='시안이 초기화됐습니다. 뽑기 버튼으로 꽃길을 이동해 보세요.'; render(); } });
+      window.addEventListener('resize',()=>placeSeed(state.position));
+      render();
+    })();
+  </script>
+</body>
+</html>

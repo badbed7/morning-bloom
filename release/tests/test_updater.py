@@ -1,4 +1,5 @@
 import hashlib
+import io
 import json
 import shutil
 import tempfile
@@ -7,7 +8,7 @@ import unittest
 import zipfile
 from pathlib import Path
 from unittest.mock import patch
-from update_core import Installer, UpdateError, extract, manifest, version, download
+from update_core import Installer, UpdateError, extract, manifest, version, download, read_latest
 
 REPO='badbed7/morning-bloom'
 
@@ -224,6 +225,98 @@ class Updating(unittest.TestCase):
                 self.assertEqual(installer.current()['version'],current['version'])
                 self.assertFalse(installer.folder(data).exists())
 
+    def test_latest_api_uses_tagged_manifest_and_allows_slow_connections(self):
+        for python_mode in (False, True):
+            with self.subTest(python_mode=python_mode), tempfile.TemporaryDirectory() as tmp:
+                _, data = self.payload(Path(tmp), '0.8.7', python_mode=python_mode)
+                name = 'python-update.json' if python_mode else 'update.json'
+                feed = f'https://github.com/{REPO}/releases/download/v0.8.7/{name}'
+                api = f'https://api.github.com/repos/{REPO}/releases/latest'
+                release = dict(tag_name='v0.8.7', draft=False, prerelease=False,
+                               assets=[dict(name=name, browser_download_url=feed)])
+                visited = []
+                def response(request, timeout):
+                    # A connection that takes longer than the former 5s budget.
+                    if timeout < 10: raise TimeoutError('slow connection')
+                    self.assertEqual(request.get_header('Cache-control'), 'no-cache')
+                    visited.append(request.full_url)
+                    value = release if request.full_url == api else data
+                    result = io.BytesIO(json.dumps(value).encode())
+                    result.url = request.full_url
+                    return result
+                with patch('urllib.request.urlopen', side_effect=response):
+                    self.assertEqual(read_latest(REPO, python_mode), data)
+                self.assertEqual(visited, [api, feed])
+
+    def test_latest_falls_back_when_release_api_is_unavailable(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _, data = self.payload(Path(tmp), '0.8.7')
+            fallback = io.BytesIO(json.dumps(data).encode())
+            fallback.url = f'https://github.com/{REPO}/releases/latest/download/update.json'
+            with patch('urllib.request.urlopen', side_effect=[OSError('API rate limit'), fallback]) as fetch:
+                self.assertEqual(read_latest(REPO), data)
+            self.assertEqual(fetch.call_count, 2)
+
+    def test_invalid_api_asset_never_redirects_to_untrusted_origin(self):
+        release = dict(tag_name='v0.8.7', assets=[dict(name='update.json', browser_download_url='https://evil.example/update.json')])
+        response = io.BytesIO(json.dumps(release).encode())
+        response.url = f'https://api.github.com/repos/{REPO}/releases/latest'
+        with patch('urllib.request.urlopen', side_effect=[response, TimeoutError('offline')]) as fetch:
+            with self.assertRaisesRegex(UpdateError, 'Release update feed is missing'):
+                read_latest(REPO)
+        self.assertEqual(fetch.call_count, 2)
+        self.assertNotIn('evil.example', fetch.call_args.args[0].full_url)
+
+    def test_unapplied_update_warns_and_logs_both_versions(self):
+        from launcher import prepare
+        for python_mode in (False, True):
+            with self.subTest(python_mode=python_mode), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                installer = Installer(root / 'launcher', python_mode)
+                archive, current = self.payload(root, python_mode=python_mode)
+                installer.install(archive, current, lambda _: True)
+                _, latest = self.payload(root, '0.8.7', python_mode=python_mode)
+                warnings = []
+                with patch('launcher.read_latest', return_value=latest), patch('launcher.download', side_effect=TimeoutError('download stalled')):
+                    result = prepare(installer, root, lambda _: None, warning=warnings.append)
+                self.assertEqual(result, installer.executable(current))
+                self.assertEqual(len(warnings), 1)
+                self.assertIn('v0.8.7', warnings[0])
+                self.assertIn('v0.3.0', warnings[0])
+                log = (installer.root / 'update.log').read_text(encoding='utf-8')
+                self.assertIn('Latest verified: 0.8.7', log)
+                self.assertIn('Selected: 0.3.0', log)
+                self.assertIn('download stalled', log)
+
+    def test_failed_latest_lookup_warns_instead_of_silently_using_old_game(self):
+        from launcher import prepare
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            installer = Installer(root / 'launcher')
+            archive, current = self.payload(root)
+            installer.install(archive, current, lambda _: True)
+            warnings = []
+            with patch('launcher.read_latest', side_effect=TimeoutError('lookup stalled')):
+                prepare(installer, root, lambda _: None, warning=warnings.append)
+            self.assertEqual(len(warnings), 1)
+            self.assertIn('확인하지 못했습니다', warnings[0])
+            self.assertIn('0.3.0', warnings[0])
+            self.assertEqual(installer.current(), {'version': current['version'], 'sha256': current['sha256']})
+
+    def test_successful_update_has_no_fallback_warning(self):
+        from launcher import prepare
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            installer = Installer(root / 'launcher')
+            archive, latest = self.payload(root, '0.8.7')
+            warnings = []
+            with patch('launcher.read_latest', return_value=latest), \
+                    patch('launcher.download', side_effect=lambda data, path, report: shutil.copyfile(archive, path)), \
+                    patch('launcher.health_check', return_value=True):
+                prepare(installer, root, lambda _: None, warning=warnings.append)
+            self.assertEqual(warnings, [])
+            self.assertEqual(installer.current()['version'], '0.8.7')
+
     def test_windowed_game_exception_is_logged(self):
         from game_entry import checked_smoke_test
         with tempfile.TemporaryDirectory() as tmp:
@@ -233,3 +326,4 @@ class Updating(unittest.TestCase):
             self.assertIn('ImportError: missing test runtime',log.read_text(encoding='utf-8'))
 
 if __name__=='__main__':unittest.main()
+

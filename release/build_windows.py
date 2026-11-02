@@ -101,13 +101,12 @@ def main():
     zip_folder(bootstrap, output / f'MorningBloom-{release_version}-Windows-x64.zip')
     (output / 'release-notes.md').write_text(
         f'Morning Bloom {release_version}\n\n'
-        '## 주사위 2개와 민들레 씨 보드 이동\n\n'
-        '- 주사위 2개를 독립적으로 굴려 눈의 합인 2~12칸을 이동합니다. 60번 다음은 1번으로 이어집니다.\n'
-        '- 주사위 굴림과 눈 확정 뒤 민들레 씨가 보드의 칸을 따라 부드럽게 떠서 이동합니다.\n'
-        '- 최종 도착 칸에서 회차당 보상 한 개를 받으며, 통과한 특수 칸은 발동하지 않습니다.\n'
-        '- 10회 뽑기도 회차별로 연출하며, 연출 건너뛰기·닫기·재실행 때 저장된 보상을 보존합니다.\n'
-        '- 기존 v14 정원의 재화·꾸미기·가챠 진행, 로즈 뽑기 전용과 교환잎 5개당 비료 1개 구매를 유지합니다.\n'
-        '- 뽑기 비용은 1회 햇빛 10개, 10회 100개입니다.\n\n'
+        '## 자동 업데이트 조회와 구버전 실행 안내 수정\n\n'
+        '- 조회 제한을 5초에서 15초로 늘리고 GitHub Release API와 버전별 고정 주소를 사용합니다. API 실패 시 기존 공개 주소로 재시도합니다.\n'
+        '- 조회·설치 실패로 이전 버전을 실행하면 현재 버전과 진단 로그를 안내합니다.\n'
+        '- 중요: 런처 자체는 게임 자동 업데이트로 바뀌지 않습니다. 이번 ZIP을 새 폴더에 전체 해제하고 그 폴더의 BAT 또는 런처로 한 번 실행하세요. 기존 바로가기는 새 폴더로 바꿔 주세요.\n'
+        '- 기존 정원 저장은 유지합니다. 설치 폴더나 저장 폴더를 지울 필요가 없습니다.\n'
+        '- 주사위 2개와 민들레 씨 보드 이동, 로즈 뽑기 전용, 교환잎 비료 구매를 포함합니다.\n\n'
         '## 다운로드\n\n'
         f'- Python 실행: `MorningBloom-{release_version}-Python-BAT.zip` 전체 압축 해제 후 `run-python.bat` 실행. Python 3.12 64비트가 필요합니다.\n'
         f'- EXE 실행: `MorningBloom-{release_version}-Windows-x64.zip` 전체 압축 해제 후 `MorningBloom.exe` 실행. Python 설치가 필요 없습니다.\n'
@@ -115,4 +114,5 @@ def main():
         'Windows CI에서 게임·업데이터 테스트와 EXE·Python 묶음의 격리된 실행 검사를 통과했습니다.\n', encoding='utf-8')
 
 if __name__ == '__main__': main()
+
 

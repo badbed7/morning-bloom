@@ -23,6 +23,7 @@ WATER_INTERVAL = 30 * 60
 MIST_INTERVAL = 15 * 60
 FERTILIZER_SECONDS = 10 * 60
 FERTILIZER_CAP = 5
+FERTILIZER_LEAF_PRICE = 5
 REWARD_INTERVAL = 3 * 60
 WIND_BASE_SECONDS = HOUR
 WIND_RINGS_PER_GOLD = 10
@@ -322,6 +323,18 @@ class Garden:
     def can_reward_fertilizer(self):
         return (self.tutorial_reward_claimed and not self.vacation
                 and self.fertilizer < FERTILIZER_CAP and self.reward_wait <= 0)
+
+    @property
+    def can_buy_fertilizer_with_leaves(self):
+        return (self.gacha['leaves'] >= FERTILIZER_LEAF_PRICE
+                and self.fertilizer < FERTILIZER_CAP)
+
+    def buy_fertilizer_with_leaves(self):
+        if not self.can_buy_fertilizer_with_leaves:
+            return False
+        self.gacha['leaves'] -= FERTILIZER_LEAF_PRICE
+        self.fertilizer += 1
+        return True
 
     @property
     def can_use_fertilizer(self):
@@ -651,6 +664,8 @@ class Garden:
     def buy_skin(self, skin_id):
         if type(skin_id) is not str or skin_id not in POT_SKINS or skin_id in self.owned_skins:
             return False
+        if pot_skin(skin_id).gacha_only:
+            return False
         price = pot_skin(skin_id).price
         if self.sunlight < price:
             return False
@@ -907,3 +922,4 @@ class Garden:
             ):
                 raise ValueError('대기 햇빛')
             ids.add(token['id'])
+

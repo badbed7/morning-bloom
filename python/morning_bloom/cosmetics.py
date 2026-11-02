@@ -1,4 +1,4 @@
-"""Garden backgrounds and reusable pot skins bought with sunlight."""
+"""Garden backgrounds and reusable pot skins with explicit acquisition routes."""
 from dataclasses import dataclass
 
 
@@ -40,6 +40,7 @@ class PotSkin:
     rim: str
     edge: str
     pattern: str = ''
+    gacha_only: bool = False
 
 
 POT_SKINS = {
@@ -51,7 +52,7 @@ POT_SKINS = {
         PotSkin('sage', '세이지 물방울', '세이지', 18, '작은 점무늬가 있는 세이지색 화분',
                 '#8eaa83', '#dbe3c7', '#647e5d', 'dots'),
         PotSkin('rose', '로즈 리본', '로즈', 24, '아이보리 띠를 두른 차분한 장밋빛 화분',
-                '#c78e92', '#f0dfcb', '#9f6f77', 'band'),
+                '#c78e92', '#f0dfcb', '#9f6f77', 'band', gacha_only=True),
     )
 }
 
@@ -68,3 +69,4 @@ def garden_theme(key):
         return THEMES[key]
     except KeyError as exc:
         raise ValueError('알 수 없는 정원 배경') from exc
+

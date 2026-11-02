@@ -40,7 +40,7 @@ from .desktop_flowers import DesktopFlowers
 from .garden_view import CollectionGarden, sale_price
 from .gacha_board_window import GachaBoardWindow
 from .google_cloud import CloudError, GoogleDriveSync
-from .model import FERTILIZER_CAP, FERTILIZER_SECONDS, POT_PRICES, TYCOON_RULE, WIND_BASE_SECONDS
+from .model import FERTILIZER_CAP, FERTILIZER_LEAF_PRICE, FERTILIZER_SECONDS, POT_PRICES, TYCOON_RULE, WIND_BASE_SECONDS
 from .icon_picker import IconPicker
 from .locked_catalog import LockedCatalog
 from .navigation import SlideStack, chevron_icon
@@ -1027,6 +1027,13 @@ class Window(QWidget):
         gacha_title.setObjectName('section')
         layout.addWidget(gacha_title)
         self.button(layout, '보드 열기 · 1회 햇빛 10 / 10회 햇빛 100', self.open_gacha_board)
+        self.leaf_shop_info = QLabel()
+        self.leaf_shop_info.setWordWrap(True)
+        layout.addWidget(self.leaf_shop_info)
+        self.buy_fertilizer_with_leaves_button = self.button(
+            layout, f'비료 1개 구매 · 교환잎 {FERTILIZER_LEAF_PRICE}',
+            lambda: self.garden.buy_fertilizer_with_leaves(),
+        )
         theme_title = QLabel('정원 배경 · 햇빛')
         theme_title.setObjectName('section')
         layout.addWidget(theme_title)
@@ -1041,10 +1048,10 @@ class Window(QWidget):
         self.buy_theme_button = self.button(theme_row, '배경 구매', self.buy_selected_theme)
         self.apply_theme_button = self.button(theme_row, '배경 적용', self.apply_selected_theme)
         layout.addLayout(theme_row)
-        skin_title = QLabel('화분 스킨 · 햇빛')
+        skin_title = QLabel('화분 스킨 · 햇빛 / 뽑기')
         skin_title.setObjectName('section')
         layout.addWidget(skin_title)
-        skin_scope = QLabel('한 번 구매하면 재배·정원의 모든 화분에 계속 사용할 수 있어요.')
+        skin_scope = QLabel('한 번 획득하면 재배·정원의 모든 화분에 계속 사용할 수 있어요.')
         skin_scope.setObjectName('small')
         skin_scope.setWordWrap(True)
         layout.addWidget(skin_scope)
@@ -1716,7 +1723,8 @@ class Window(QWidget):
         ):
             for key, button in picker.buttons.items():
                 item = catalog[key]
-                state = '사용 중' if key == equipped else ('보유' if key in owned else f'햇빛 {item.price}')
+                acquisition = '뽑기 전용' if getattr(item, 'gacha_only', False) else f'햇빛 {item.price}'
+                state = '사용 중' if key == equipped else ('보유' if key in owned else acquisition)
                 button.setText(f'{item.label}\n{state}')
                 button.setAccessibleName(f'{item.name} · {state}')
                 button.setToolTip(f'{item.name} · {state}\n{item.description}')
@@ -1729,13 +1737,24 @@ class Window(QWidget):
         self.buy_theme_button.setEnabled(not owned and garden.sunlight >= theme.price)
         self.apply_theme_button.setText('사용 중' if equipped else '정원에 적용')
         self.apply_theme_button.setEnabled(owned and not equipped)
+        self.leaf_shop_info.setText(
+            f'교환잎 {garden.gacha["leaves"]}개 · 비료 {garden.fertilizer}/{FERTILIZER_CAP}'
+            f' · {FERTILIZER_LEAF_PRICE}잎으로 비료 1개 교환'
+        )
+        self.buy_fertilizer_with_leaves_button.setEnabled(garden.can_buy_fertilizer_with_leaves)
+        self.buy_fertilizer_with_leaves_button.setToolTip(
+            '비료가 가득 차면 교환잎을 사용하지 않습니다. 비료 만들기 대기시간과 별도로 구매합니다.'
+        )
         skin = pot_skin(self.skin_picker.selected)
         owned = skin.key in garden.owned_skins
         equipped = skin.key == garden.equipped_skin
         self.skin_info.setText(skin.description)
-        self.buy_skin_button.setText('보유한 스킨' if owned else f'구매 · 햇빛 {skin.price}')
-        self.buy_skin_button.setEnabled(not owned and garden.sunlight >= skin.price)
-        self.buy_skin_button.setToolTip(f'보유 햇빛 {garden.sunlight} · 부족 {max(0, skin.price - garden.sunlight)}')
+        self.buy_skin_button.setText('보유한 스킨' if owned else ('뽑기 전용' if skin.gacha_only else f'구매 · 햇빛 {skin.price}'))
+        self.buy_skin_button.setEnabled(not owned and not skin.gacha_only and garden.sunlight >= skin.price)
+        self.buy_skin_button.setToolTip(
+            '꽃길 뽑기 · 화분 SSR에서 획득' if skin.gacha_only
+            else f'보유 햇빛 {garden.sunlight} · 부족 {max(0, skin.price - garden.sunlight)}'
+        )
         self.apply_skin_button.setText('사용 중' if equipped else '모든 화분에 적용')
         self.apply_skin_button.setEnabled(owned and not equipped)
         self.desktop_opacity.blockSignals(True)
@@ -1917,3 +1936,4 @@ def main():
     window = Window(store, garden, args.demo, save_lock=lock, cloud=GoogleDriveSync())
     window.show()
     return app.exec()
+

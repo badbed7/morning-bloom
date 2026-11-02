@@ -4,6 +4,8 @@
 
 **목표: Python + PySide6 / 2D 전용 / Windows 우선**
 
+현재 60칸 가챠의 재화·보장·곁길 동작과 다음 변경은 [현재 가챠 규칙](docs/gacha-current-rules.ko.md)을 기준으로 확인합니다. 로즈 리본의 뽑기 전용화와 교환잎 비료 구매는 다음 변경이며, 공개 Release에는 아직 포함되지 않았습니다.
+
 **Python 실행:** Release의 Python-BAT ZIP을 풀고 `run-python.bat`으로 실행하세요. 매번 GitHub 최신 버전을 확인하고 기존 정원을 유지하며 업데이트합니다. [Python 실행 방법·구현 상태](python/README.md)를 확인하세요.
 
 아래 Godot 실행·테스트 안내는 보존된 이전 시제품에 해당합니다.
@@ -118,3 +120,4 @@ godot --headless --path . --script tests/ui_smoke.gd -- --demo
 Python BAT는 Python 3.12 64비트로 실행하며, EXE는 Python 설치가 필요 없습니다. 사용자 배포에는 MSIX를 사용하지 않습니다. v0.6.0 이하를 쓰던 사용자는 v0.7.0 런처로 한 번 교체하면 이후 실행부터 자동 업데이트됩니다.
 
 공개 저장소의 최신 Release에서 인증 없이 업데이트를 받습니다. 게임 저장은 `%LOCALAPPDATA%/MorningBloomPython`에 보존합니다. [실행 순서·실패 복구·새 버전 게시](release/README.md)를 확인하세요.
+

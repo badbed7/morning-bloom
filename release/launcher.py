@@ -75,8 +75,10 @@ def acquire_lock(path):
     return handle
 
 
-def prepare(installer, bundle, report):
+def prepare(installer, bundle, report, warning=None):
     current = installer.current()
+    previous_version = current['version'] if current else None
+    latest = None
     errors, candidates = [], []
     def check(executable):
         runtime = python_runtime(executable, installer.root, report) if installer.python_mode else None
@@ -113,12 +115,21 @@ def prepare(installer, bundle, report):
         except Exception as exc:
             errors.append(f'Install {data["version"]}: {exc}')
     try:
-        (installer.root / 'update.log').write_text('\n'.join(errors) or 'Up to date', encoding='utf-8')
+        details = [f'Installed before: {previous_version or "none"}',
+                   f'Latest verified: {latest["version"] if latest else "unavailable"}',
+                   f'Selected: {current["version"] if current else "none"}']
+        (installer.root / 'update.log').write_text('\n'.join(details + (errors or ['Up to date'])), encoding='utf-8')
     except OSError:
         pass
     if current is None:
         raise UpdateError('실행할 버전을 준비하지 못했습니다. 인터넷과 배포 ZIP을 확인하세요.\n'
                           + str(installer.root / 'update.log') + '\n' + '\n'.join(errors))
+    if warning and errors and (latest is None or version(latest['version']) > version(current['version'])):
+        reason = ('최신 버전을 확인하지 못했습니다.' if latest is None
+                  else f'최신 v{latest["version"]} 업데이트를 적용하지 못했습니다.')
+        warning(reason + f'\n현재 설치된 v{current["version"]}로 실행합니다.'
+                + '\n인터넷 연결을 확인한 뒤 다시 실행하거나 최신 ZIP을 새 폴더에 풀어 실행하세요.'
+                + '\n진단 로그: ' + str(installer.root / 'update.log'))
     report(f'v{current["version"]} 시작 중…' + (' 업데이트 로그를 남겼습니다.' if errors else ''))
     return installer.executable(current)
 
@@ -179,7 +190,8 @@ def main():
     events = queue.Queue()
     def worker():
         try:
-            exe = prepare(installer, bundle, lambda text: events.put(('status', text)))
+            exe = prepare(installer, bundle, lambda text: events.put(('status', text)),
+                          warning=lambda text: events.put(('warning', text)))
             runtime = python_runtime(exe, installer.root, lambda text: events.put(('status', text))) if args.python_mode else None
             events.put(('ready', (command(exe, runtime) + game_args, exe.parent)))
         except Exception as exc: events.put(('error', str(exc)))
@@ -188,6 +200,8 @@ def main():
             while True:
                 kind, value = events.get_nowait()
                 if kind == 'status': status.set(value)
+                elif kind == 'warning':
+                    messagebox.showwarning('Morning Bloom · 업데이트 미적용', value)
                 elif kind == 'error':
                     messagebox.showerror('Morning Bloom', '시작하지 못했습니다.\n' + value)
                     root.destroy()
@@ -216,3 +230,4 @@ def main():
     return 0
 
 if __name__ == '__main__': raise SystemExit(main())
+

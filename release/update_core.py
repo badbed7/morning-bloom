@@ -37,18 +37,52 @@ def manifest(data, repository, python_mode=False):
         raise UpdateError('Unexpected update origin')
     return data
 
+def _read_json(url, limit=65536):
+    request = urllib.request.Request(url, headers={
+        'User-Agent': 'MorningBloomLauncher/2',
+        'Accept': 'application/json',
+        'Cache-Control': 'no-cache',
+    })
+    with urllib.request.urlopen(request, timeout=15) as response:
+        if not response.url.startswith('https://'):
+            raise UpdateError('HTTPS required')
+        raw = response.read(limit + 1)
+    if len(raw) > limit: raise UpdateError('Update response too large')
+    return json.loads(raw)
+
 def read_latest(repository, python_mode=False):
     if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', repository):
         raise UpdateError('Invalid repository')
     name = 'python-update.json' if python_mode else 'update.json'
-    url = f'https://github.com/{repository}/releases/latest/download/{name}'
-    request = urllib.request.Request(url, headers={'User-Agent': 'MorningBloomLauncher/1'})
-    with urllib.request.urlopen(request, timeout=5) as response:
-        if not response.url.startswith('https://'):
-            raise UpdateError('HTTPS required')
-        raw = response.read(65537)
-    if len(raw) > 65536: raise UpdateError('Manifest too large')
-    return manifest(json.loads(raw), repository, python_mode)
+    errors = []
+    # Resolve the release through the API first, then fetch its immutable feed.
+    # The old /latest/download redirect can time out or remain cached on clients.
+    try:
+        release = _read_json(f'https://api.github.com/repos/{repository}/releases/latest', 262144)
+        if not isinstance(release, dict) or release.get('draft') or release.get('prerelease'):
+            raise UpdateError('Invalid latest release')
+        tag = release.get('tag_name')
+        if not isinstance(tag, str) or not tag.startswith('v'):
+            raise UpdateError('Invalid release tag')
+        version(tag[1:])
+        expected = f'https://github.com/{repository}/releases/download/{tag}/{name}'
+        if not any(isinstance(a, dict) and a.get('name') == name
+                   and a.get('browser_download_url') == expected
+                   for a in release.get('assets', [])):
+            raise UpdateError('Release update feed is missing')
+        data = manifest(_read_json(expected), repository, python_mode)
+        if data['version'] != tag[1:]:
+            raise UpdateError('Release and manifest versions do not match')
+        return data
+    except Exception as exc:
+        errors.append(f'Release API: {exc}')
+    # Keep public, unauthenticated updating usable during API rate limits/outages.
+    try:
+        url = f'https://github.com/{repository}/releases/latest/download/{name}'
+        return manifest(_read_json(url), repository, python_mode)
+    except Exception as exc:
+        errors.append(f'Public feed: {exc}')
+        raise UpdateError(' / '.join(errors)) from exc
 
 def verify(path, data):
     if path.stat().st_size != data['size']: raise UpdateError('Download size mismatch')
@@ -153,3 +187,4 @@ class Installer:
             atomic_json(self.root / 'previous.json', previous)
         atomic_json(self.pointer, installed)
         return installed
+

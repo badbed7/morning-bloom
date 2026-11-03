@@ -39,20 +39,20 @@ class SideBoardRules(unittest.TestCase):
                         self.assertEqual(draw['rarity'], expected)
                         board.validate(result['state'])
 
-    def test_enter_four_paid_draws_exit_and_resume_at_gate(self):
+    def test_enter_two_paid_draws_exit_and_resume_at_gate(self):
         for gate in board.SIDE_BOARDS:
             garden = Garden(100, sunlight=100)
             garden.gacha['tickets'] = 0
             garden.gacha['board']['position'] = gate - 2
             entry = garden.draw_gacha('pot', randbelow=low_roll)[0]
             self.assertIsNone(entry['board_gate'])
-            for i in range(4):
+            for i in range(2):
                 draw = garden.draw_gacha('pot', randbelow=low_roll)[0]
                 self.assertEqual(draw['board_gate'], gate)
                 self.assertIn(draw['rarity'], ('SR', 'SSR'))
-                self.assertEqual(draw['exited'], i == 3)
+                self.assertEqual(draw['exited'], i == 1)
                 garden = Garden.from_dict(garden.to_dict())
-            self.assertEqual(garden.sunlight, 50)
+            self.assertEqual(garden.sunlight, 70)
             self.assertEqual(garden.gacha['board']['position'], gate)
             self.assertIsNone(garden.gacha['board']['side_gate'])
             next_draw = garden.draw_gacha('pot', randbelow=low_roll)[0]
@@ -68,15 +68,15 @@ class SideBoardRules(unittest.TestCase):
                 self.assertEqual(results[0]['position'], 11)  # Side 11 is not another entrance.
                 self.assertEqual(results[0]['side_gate'], gate)
                 self.assertEqual(results[0]['rarity'], 'SSR')
-                for draw in results[:4]:
+                for draw in results[:2]:
                     self.assertIn(draw['item'], board.reward_pool(category, draw['rarity'], gate))
                     self.assertNotEqual(draw['rarity'], 'R')
-                self.assertIsNone(results[4]['board_gate'])
+                self.assertIsNone(results[2]['board_gate'])
                 Garden.from_dict(garden.to_dict())
 
     def test_insufficient_payment_and_invalid_roll_are_atomic_on_side(self):
         state = board.initial_state()
-        state.update(position=26, side_gate=26, side_position=11, side_step=2)
+        state.update(position=26, side_gate=26, side_position=11, side_step=1)
         original = deepcopy(state)
         with self.assertRaises(ValueError):
             board.simulate(state, 10, 99, randbelow=low_roll)
@@ -103,8 +103,8 @@ class SideBoardRules(unittest.TestCase):
             self.assertEqual(restored.owned_skins, old['owned_skins'])
             self.assertEqual(updated['gacha']['history'][0]['board_gate'], None)
             new_state = restored.gacha['board']
-            self.assertEqual(new_state['side_gate'], 26 if step < 4 else None)
-            self.assertEqual(new_state['side_step'], step if step < 4 else 0)
+            self.assertEqual(new_state['side_gate'], 26 if step < 2 else None)
+            self.assertEqual(new_state['side_step'], step if step < 2 else 0)
             with tempfile.TemporaryDirectory() as tmp:
                 store = Store(Path(tmp) / 'garden.json')
                 store.path.write_text(json.dumps(old), encoding='utf-8')
@@ -124,6 +124,53 @@ class SideBoardRules(unittest.TestCase):
                 store = Store(Path(tmp) / 'garden.json')
                 restored = store.replace_from_cloud(garden.to_dict(), 100)
                 self.assertEqual(restored.to_dict(), garden.to_dict())
+
+    def test_v16_two_draw_limit_migrates_local_and_cloud_without_changing_rewards(self):
+        for gate in board.SIDE_BOARDS:
+            for step in range(4):
+                garden = Garden(100, sunlight=100)
+                garden.draw_gacha('pot', randbelow=low_roll)
+                old = garden.to_dict()
+                old['schema'] = 16
+                old['gacha']['board'].update(position=gate, side_gate=gate,
+                                             side_step=step, side_position=9)
+                original = deepcopy(old)
+                expected = deepcopy(old)
+                expected['schema'] = Garden.CURRENT_SCHEMA
+                if step >= 2:
+                    expected['gacha']['board'].update(side_gate=None, side_step=0, side_position=0)
+                self.assertEqual(migrate(old), expected)
+                self.assertEqual(old, original)
+                with tempfile.TemporaryDirectory() as tmp:
+                    store = Store(Path(tmp) / 'garden.json')
+                    store.path.write_text(json.dumps(old), encoding='utf-8')
+                    loaded = store.load(100)
+                    self.assertEqual(loaded.to_dict(), expected)
+                    store.save(loaded)
+                    self.assertEqual(json.loads(store.migration_backup.read_text()), original)
+                    self.assertEqual(store.replace_from_cloud(old, 100).to_dict(), expected)
+                if step == 1:
+                    draw = loaded.draw_gacha('pot', randbelow=low_roll)[0]
+                    self.assertTrue(draw['exited'])
+                    self.assertEqual(draw['board_gate'], gate)
+
+    def test_v16_migration_rejects_corrupt_progress_and_current_schema_keeps_two_draw_limit(self):
+        old = Garden(100).to_dict()
+        old['schema'] = 16
+        old['gacha']['board'].update(position=26, side_gate=26, side_step=2)
+        for field, invalid in (('side_step', 4), ('side_step', True), ('side_gate', 12),
+                               ('side_position', 12), ('total', -1)):
+            broken = deepcopy(old)
+            broken['gacha']['board'][field] = invalid
+            with self.assertRaises(ValueError):
+                migrate(broken)
+        broken = deepcopy(old)
+        broken.pop('gacha')
+        with self.assertRaises(ValueError):
+            migrate(broken)
+        old['schema'] = Garden.CURRENT_SCHEMA
+        with self.assertRaises(ValueError):
+            Garden.from_dict(old)
 
     def test_corrupt_legacy_markers_and_side_history_are_rejected(self):
         old = Garden(100).to_dict()
@@ -179,7 +226,7 @@ class SideBoardUI(unittest.TestCase):
                 self.assertIn(board.board_name(draw['board_gate']), dialog.result.text())
                 dialog.timer.stop()
                 dialog.animation_step()
-            self.assertEqual(seen[:6], [None, 11, 11, 11, 11, None])
+            self.assertEqual(seen[:4], [None, 11, 11, None])
             self.assertEqual(garden.gacha, saved)
             self.assertEqual(store.load(garden.last_update).gacha, saved)
             dialog.close()
@@ -189,7 +236,7 @@ class SideBoardUI(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             store = Store(Path(tmp) / 'garden.json')
             garden = Garden(time.time(), sunlight=100)
-            garden.gacha['board'].update(position=56, side_gate=56, side_step=2, side_position=11)
+            garden.gacha['board'].update(position=56, side_gate=56, side_step=0, side_position=11)
             window = Window(store, garden, True)
             window._test_sunlight = False
             window.open_gacha_board()
@@ -212,7 +259,7 @@ class SideBoardUI(unittest.TestCase):
             dialog = window._gacha_board_window
             self.assertEqual(dialog._layout_gate, 56)
             self.assertIn('황금 곁길', dialog.position_label.text())
-            self.assertIn('3/4', dialog.gate_label.text())
+            self.assertIn('1/2', dialog.gate_label.text())
             self.assertEqual(store.load(garden.last_update).gacha, saved)
             dialog.close()
             window.close()

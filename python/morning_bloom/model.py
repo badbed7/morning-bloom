@@ -175,7 +175,7 @@ def _validate_legacy_collection(items):
 @dataclass
 class Garden:
     """Shared inventory with up to four independently simulated pots."""
-    CURRENT_SCHEMA: ClassVar[int] = 15
+    CURRENT_SCHEMA: ClassVar[int] = 16
 
     last_update: float
     schema: int = CURRENT_SCHEMA
@@ -738,7 +738,7 @@ class Garden:
         seeds = dict(self.seeds)
         results = []
         for step in outcome['results']:
-            pool = gacha_board.REWARDS[category][step['rarity']]
+            pool = gacha_board.reward_pool(category, step['rarity'], step['board_gate'])
             index = draw_random(len(pool))
             if type(index) is not int or not 0 <= index < len(pool):
                 return False
@@ -750,12 +750,12 @@ class Garden:
                     seeds[item] += 1
             leaves = 1 + ({'R': 1, 'SR': 3, 'SSR': 10}[step['rarity']] if duplicate else 0)
             record = {
-                'position': step['position'], 'category': category,
+                'position': step['position'], 'board_gate': step['board_gate'], 'category': category,
                 'rarity': step['rarity'], 'item': item,
                 'duplicate': duplicate, 'leaves': leaves,
             }
             results.append({**record, 'side_gate': step['side_gate'], 'side_step': step['side_step'],
-                            **{key: step[key] for key in ('dice', 'start', 'distance', 'path')}})
+                            **{key: step[key] for key in ('dice', 'start', 'distance', 'path', 'side_position', 'exited')}})
         setattr(self, field, owned)
         self.seeds = seeds
         self.gacha['leaves'] += sum(result['leaves'] for result in results)
@@ -765,7 +765,7 @@ class Garden:
         if not test_free:
             self.sunlight = outcome['sunlight']
         self.gacha['history'] = (self.gacha['history'] + [
-            {key: result[key] for key in ('position', 'category', 'rarity', 'item', 'duplicate', 'leaves')}
+            {key: result[key] for key in ('position', 'category', 'rarity', 'item', 'duplicate', 'leaves', 'board_gate')}
             for result in results
         ])[-200:]
         return results

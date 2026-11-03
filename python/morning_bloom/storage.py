@@ -21,10 +21,16 @@ from .model import (
     empty_pot,
 )
 from .plant_catalog import LEGACY_REGULAR_PLANTS, V10_REGULAR_PLANTS, REGULAR_PLANTS, plant_definition
-from .gacha_board import initial_account
+from .gacha_board import initial_account, validate_account
 
 
 V14_SAVE_FIELDS = frozenset(('coins', 'collection', 'desktop_flowers', 'desktop_opacity', 'equipped_skin', 'equipped_theme', 'fertilizer', 'fertilizer_reserve', 'gacha', 'last_reward_id', 'last_update', 'last_wind_reward_id', 'mystery_plants', 'mystery_seeds', 'owned_skins', 'owned_themes', 'pots', 'reward_wait', 'schema', 'seeds', 'selected', 'settings', 'sun_cursor', 'sun_elapsed', 'sun_intro_claimed', 'sun_tokens', 'sunlight', 'tutorial_reward_claimed', 'tutorial_used', 'vacation', 'wind_progress', 'wind_ring_hits', 'wind_upgrade'))
+
+
+def _legacy_gacha_account():
+    account = initial_account()
+    account['board'].pop('side_position')
+    return account
 
 
 class SaveError(Exception):
@@ -209,7 +215,7 @@ def _v7_to_v8(data):
 
 def _v8_to_v9(data):
     migrated = {**deepcopy(data), 'schema': 9}
-    state = Garden.from_dict(_v14_to_v15(_v13_to_v14(_v12_to_v13(_v11_to_v12(_v10_to_v11(_v9_to_v10(migrated)))))))
+    state = Garden.from_dict(migrate(_v14_to_v15(_v13_to_v14(_v12_to_v13(_v11_to_v12(_v10_to_v11(_v9_to_v10(migrated))))))))
     if not set(state.desktop_flowers) <= {item['id'] for item in state.collection}:
         raise ValueError('v8 바탕화면 꽃 식별')
     return migrated
@@ -255,15 +261,15 @@ def _v12_to_v13(data):
         raise ValueError('v12 저장 항목 오류')
     migrated = deepcopy(data)
     migrated.update(schema=13, wind_progress=float(data['wind_progress']) / 2, wind_ring_hits=0)
-    Garden.from_dict(_v14_to_v15({**migrated, 'schema': 14, 'gacha': initial_account()}))
+    Garden.from_dict(migrate(_v14_to_v15({**migrated, 'schema': 14, 'gacha': _legacy_gacha_account()})))
     return migrated
 
 
 def _v13_to_v14(data):
     if not isinstance(data, dict) or data.get('schema') != 13 or set(data) != V14_SAVE_FIELDS - {'gacha'}:
         raise ValueError('v13 저장 항목 오류')
-    migrated = {**deepcopy(data), 'schema': 14, 'gacha': initial_account()}
-    Garden.from_dict(_v14_to_v15(migrated))
+    migrated = {**deepcopy(data), 'schema': 14, 'gacha': _legacy_gacha_account()}
+    Garden.from_dict(migrate(_v14_to_v15(migrated)))
     return migrated
 
 
@@ -286,6 +292,39 @@ def _v14_to_v15(data):
     species = [item['species'] for item in data['collection']]
     species += [pot['species'] for pot in data['pots'] if pot['planted'] and pot['growth'] >= pot['duration']]
     migrated['discovered_plants'] = list(dict.fromkeys(species))
+    Garden.from_dict(_v15_to_v16(migrated))
+    return migrated
+
+
+def _v15_to_v16(data):
+    migrated = deepcopy(data)
+    account = migrated['gacha']
+    if not isinstance(account, dict) or set(account) != set(initial_account()):
+        raise ValueError('v15 뽑기 계정')
+    state = account['board']
+    # Validate the exact old shape before adding new fields. Never repair corrupt saves.
+    if not isinstance(state, dict) or set(state) != set(initial_account()['board']) - {'side_position'}:
+        raise ValueError('v15 보드 저장 항목')
+    step = state['side_step']
+    if type(step) is not int or not 0 <= step <= 4:
+        raise ValueError('v15 곁길 진행')
+    if state['side_gate'] is None and step != 0:
+        raise ValueError('v15 닫힌 곁길')
+    state['side_position'] = 0
+    if not isinstance(account['history'], list):
+        raise ValueError('v15 뽑기 이력')
+    for record in account['history']:
+        if not isinstance(record, dict) or set(record) != {'position', 'category', 'rarity', 'item', 'duplicate', 'leaves'}:
+            raise ValueError('v15 뽑기 이력')
+        record['board_gate'] = None
+    # Validate every old value before converting a completed marker or return position.
+    state['side_step'] = min(step, 3)
+    validate_account(account)
+    if step == 4:
+        state.update(side_gate=None, side_step=0)
+    elif state['side_gate'] is not None:
+        state['position'] = state['side_gate'] % 60
+    migrated['schema'] = 16
     Garden.from_dict(migrated)
     return migrated
 
@@ -332,6 +371,8 @@ def migrate(data):
         migrated = _v13_to_v14(migrated)
     if migrated.get('schema') == 14:
         migrated = _v14_to_v15(migrated)
+    if migrated.get('schema') == 15:
+        migrated = _v15_to_v16(migrated)
     return migrated
 
 

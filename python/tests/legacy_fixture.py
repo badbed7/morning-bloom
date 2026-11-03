@@ -10,4 +10,7 @@ def v14_shape(data):
     data["seeds"] = {
         key: value for key, value in data["seeds"].items() if key in REGULAR_PLANTS
     }
+    data['gacha']['board'].pop('side_position', None)
+    for record in data['gacha']['history']:
+        record.pop('board_gate', None)
     return data

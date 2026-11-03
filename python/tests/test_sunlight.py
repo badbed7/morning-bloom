@@ -156,6 +156,7 @@ class CosmeticsAndMigration(unittest.TestCase):
                       owned_themes=['grass', 'sky'], equipped_theme='sky').to_dict()
         data = v14_shape(data)
         gacha = data.pop('gacha')
+        gacha['board']['side_position'] = 0
         additions = {key: data.pop(key) for key in V8_FIELDS | V12_FIELDS | V13_FIELDS}
         data.pop('owned_skins')
         data.pop('equipped_skin')

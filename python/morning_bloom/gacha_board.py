@@ -1,4 +1,4 @@
-"""Pure rules for the proposed 60-space flower board.
+"""Pure rules for the main flower board and four high-grade side boards.
 
 This module does not spend a real garden balance or grant inventory. The eventual
 save transaction must persist the complete draw result before showing animation.
@@ -13,6 +13,15 @@ PRICE = 10
 SILVER = frozenset((11, 26, 41))
 GOLD = 56
 SPECIALS = SILVER | {GOLD}
+SIDE_LENGTH = 12
+SIDE_DRAWS = 4
+SIDE_BOARDS = {
+    11: {'name': '새싹 곁길', 'ssr_cells': frozenset((6, 12))},
+    26: {'name': '이슬 곁길', 'ssr_cells': frozenset((4, 8, 12))},
+    41: {'name': '꽃망울 곁길', 'ssr_cells': frozenset((3, 6, 9, 12))},
+    56: {'name': '황금 곁길', 'ssr_cells': frozenset(range(1, 13))},
+}
+
 REWARDS = {
     'pot': {'R': ('ivory',), 'SR': ('sage',), 'SSR': ('rose',)},
     'garden': {'R': ('cream',), 'SR': ('sky',), 'SSR': ('lavender',)},
@@ -32,6 +41,16 @@ for category, catalog, prefix in (('pot', POT_SKINS, 'catalog_pot_'), ('garden',
             REWARDS[category][tier] += (key,)
 
 
+def board_name(gate):
+    return SIDE_BOARDS[gate]['name'] if gate is not None else '일반 꽃길'
+
+
+def reward_pool(category, rarity, gate=None):
+    # Side boards exclude all R rewards; category and tier weights stay uniform.
+    if gate is not None and (rarity == 'R' or (gate == GOLD and rarity != 'SSR')):
+        return ()
+    return REWARDS[category].get(rarity, ())
+
 def initial_state():
     return {
         'position': 0,
@@ -40,6 +59,7 @@ def initial_state():
         'ssr_miss': 0,
         'side_gate': None,
         'side_step': 0,
+        'side_position': 0,
     }
 
 
@@ -57,11 +77,15 @@ def validate_account(account):
     if not isinstance(history, list) or len(history) > 200:
         raise ValueError('뽑기 이력')
     for result in history:
-        if not isinstance(result, dict) or set(result) != {'position', 'category', 'rarity', 'item', 'duplicate', 'leaves'}:
+        if not isinstance(result, dict) or set(result) != {'position', 'category', 'rarity', 'item', 'duplicate', 'leaves', 'board_gate'}:
             raise ValueError('뽑기 결과')
-        if result['position'] not in range(1, 61) or result['category'] not in REWARDS:
+        gate = result['board_gate']
+        if gate is not None and (type(gate) is not int or gate not in SIDE_BOARDS):
+            raise ValueError('보상 보드')
+        length = SIDE_LENGTH if gate is not None else LENGTH
+        if type(result['position']) is not int or result['position'] not in range(1, length + 1) or result['category'] not in REWARDS:
             raise ValueError('뽑기 결과 칸')
-        if result['item'] not in REWARDS[result['category']].get(result['rarity'], ()):
+        if result['item'] not in reward_pool(result['category'], result['rarity'], gate):
             raise ValueError('뽑기 결과 아이템')
         if type(result['duplicate']) is not bool or type(result['leaves']) is not int or result['leaves'] < 1:
             raise ValueError('뽑기 결과 지급')
@@ -70,16 +94,18 @@ def validate_account(account):
 def validate(state):
     if not isinstance(state, dict) or set(state) != set(initial_state()):
         raise ValueError('보드 저장 항목')
-    for key in ('position', 'total', 'sr_miss', 'ssr_miss', 'side_step'):
+    for key in ('position', 'total', 'sr_miss', 'ssr_miss', 'side_step', 'side_position'):
         if type(state[key]) is not int or state[key] < 0:
             raise ValueError('보드 저장 값')
     if not 0 <= state['position'] < LENGTH or not 0 <= state['sr_miss'] <= 9:
         raise ValueError('보드 진행')
-    if not 0 <= state['ssr_miss'] <= 59 or not 0 <= state['side_step'] <= 4:
+    if not 0 <= state['ssr_miss'] <= 59 or not 0 <= state['side_step'] < SIDE_DRAWS:
         raise ValueError('보드 보장')
-    if state['side_gate'] is not None and state['side_gate'] not in SPECIALS:
+    if state['side_gate'] is not None and (type(state['side_gate']) is not int or state['side_gate'] not in SPECIALS):
         raise ValueError('곁길 출입구')
-    if state['side_gate'] is None and state['side_step'] != 0:
+    if not 0 <= state['side_position'] < SIDE_LENGTH:
+        raise ValueError('곁길 위치')
+    if state['side_gate'] is None and (state['side_step'] != 0 or state['side_position'] != 0):
         raise ValueError('닫힌 곁길 진행')
 
 
@@ -90,22 +116,15 @@ def _next(state, randbelow):
         if type(face) is not int or not 0 <= face < 6:
             raise ValueError('주사위 범위')
         dice.append(face + 1)
-    start = state['position']
+    gate = state['side_gate']  # Board on which THIS roll takes place.
+    start = state['side_position'] if gate is not None else state['position']
+    length = SIDE_LENGTH if gate is not None else LENGTH
     distance = sum(dice)
-    path = [(start + step - 1) % LENGTH + 1 for step in range(1, distance + 1)]
+    path = [(start + step - 1) % length + 1 for step in range(1, distance + 1)]
     position = path[-1]
-    if state['side_gate'] is not None:
-        if state['side_step'] == 4:
-            state['side_gate'] = None
-            state['side_step'] = 0
-        else:
-            state['side_step'] += 1
-    if position in SPECIALS:
-        state['side_gate'] = position
-        state['side_step'] = 0
-
-    forced_ssr = position == GOLD or state['ssr_miss'] == 59
-    forced_sr = forced_ssr or position in SILVER or state['sr_miss'] == 9
+    forced_ssr = (position in SIDE_BOARDS[gate]['ssr_cells'] if gate is not None
+                  else position == GOLD) or state['ssr_miss'] == 59
+    forced_sr = forced_ssr or gate is not None or position in SILVER or state['sr_miss'] == 9
     roll = randbelow(10000)
     if type(roll) is not int or not 0 <= roll < 10000:
         raise ValueError('추첨값 범위')
@@ -116,7 +135,17 @@ def _next(state, randbelow):
     else:
         rarity = 'SSR' if roll < 500 else 'SR' if roll < 3000 else 'R'
 
-    state['position'] = position % LENGTH
+    exited = False
+    if gate is not None:
+        state['side_position'] = position % SIDE_LENGTH
+        state['side_step'] += 1
+        if state['side_step'] == SIDE_DRAWS:
+            state.update(side_gate=None, side_step=0, side_position=0)
+            exited = True
+    else:
+        state['position'] = position % LENGTH
+        if position in SPECIALS:
+            state.update(side_gate=position, side_step=0, side_position=0)
     state['total'] += 1
     state['sr_miss'] = state['sr_miss'] + 1 if rarity == 'R' else 0
     state['ssr_miss'] = state['ssr_miss'] + 1 if rarity != 'SSR' else 0
@@ -127,7 +156,10 @@ def _next(state, randbelow):
         'path': path,
         'position': position,
         'rarity': rarity,
-        'special': position in SPECIALS,
+        'special': forced_ssr if gate is not None else position in SPECIALS,
+        'board_gate': gate,
+        'side_position': state['side_position'],
+        'exited': exited,
         'side_gate': state['side_gate'],
         'side_step': state['side_step'],
     }

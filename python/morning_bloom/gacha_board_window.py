@@ -1,4 +1,4 @@
-"""Visible sixty-space board for the first, existing-cosmetics-only release."""
+"""Main and high-grade side boards with saved, two-dice movement."""
 
 import math
 
@@ -111,6 +111,7 @@ class GachaBoardWindow(QDialog):
         self.animating = False
         self.display_position = None
         self.display_side = None
+        self.display_gate = None
         self.phase = 'idle'
         self.current_result = None
         self._visible_history = None
@@ -125,7 +126,7 @@ class GachaBoardWindow(QDialog):
         title = QLabel('꽃길 뽑기')
         title.setStyleSheet('font-size:20px;font-weight:700;color:#466347')
         outer.addWidget(title)
-        explanation = QLabel('주사위 2개의 합만큼 민들레 씨 이동 · 도착 칸에서 보상 · 11/26/41번 SR 이상 · 56번 SSR 확정')
+        explanation = QLabel('주사위 2개로 이동 · 특수 칸 도착 시 전용 곁길 진입 · 곁길 4회 후 복귀 · 매회 햇빛 10 · 곁길은 SR 이상, 황금 곁길은 SSR 전용')
         explanation.setWordWrap(True)
         outer.addWidget(explanation)
         self.balance = QLabel()
@@ -136,7 +137,8 @@ class GachaBoardWindow(QDialog):
         scroll.setMinimumHeight(465)
         board_widget = self.board_widget = QWidget()
         board_widget.installEventFilter(self)
-        grid = QGridLayout(board_widget)
+        grid = self.board_grid = QGridLayout(board_widget)
+        self._layout_gate = False
         grid.setSpacing(3)
         grid.setContentsMargins(24, 24, 24, 24)
         self.cells = {}
@@ -224,32 +226,47 @@ class GachaBoardWindow(QDialog):
 
     def sync(self):
         garden = self.owner.garden
-        pool = board.REWARDS[self.category.currentData()]
-        rates = ' / '.join(f'{tier}: {len(items)}종 · 개별 {100 / len(items):.2f}%' for tier, items in pool.items())
-        self.probability.setText('일반 칸 R 70% / SR 25% / SSR 5% · 등급 내 동일 확률\n' + rates
-            + '\n은색 칸·10회 보장: SR 95%/SSR 5% · 금색 칸·60회 보장: SSR 100%')
         account = garden.gacha
         state = account['board']
-        position = state['position'] if self.display_position is None else self.display_position
+        gate = self.display_gate if self.animating else state['side_gate']
+        self._layout_board(gate)
+        pool = board.REWARDS[self.category.currentData()]
+        tiers = ('SSR',) if gate == board.GOLD else ('SR', 'SSR') if gate is not None else ('R', 'SR', 'SSR')
+        rates = ' / '.join(f'{tier}: {len(pool[tier])}종 · 등급 내 개별 {100 / len(pool[tier]):.2f}%' for tier in tiers)
+        self.probability.setText('일반 R 70% / SR 25% / SSR 5% · 은색 칸·10회 보장 SR 95%/SSR 5%\n'
+            + '곁길 일반 칸 SR 95%/SSR 5% · 금색 칸·60회 보장 SSR 100%\n' + rates)
+        position = (state['side_position'] if gate is not None else state['position']) if self.display_position is None else self.display_position
+        length = board.SIDE_LENGTH if gate is not None else board.LENGTH
         self.balance.setText(f"햇빛 {garden.sunlight} · 무료권 {account['tickets']} · 교환잎 {account['leaves']}")
-        self.position_label.setText(f'현재 {position or board.LENGTH}번')
-        upcoming = next((number for number in sorted(board.SPECIALS) if number > position), 71)
-        self.next_label.setText(f'다음 특수 칸까지 {upcoming - position}칸 · 통과 보상 없음')
+        self.position_label.setText(f'{board.board_name(gate)} · 현재 {position or length}번')
         side_gate, side_step = self.display_side if self.display_side is not None else (state['side_gate'], state['side_step'])
-        self.gate_label.setText('곁길 출입구 닫힘' if side_gate is None else f'{side_gate}번 출입구 열림 · 곁길 {side_step}/4')
+        if gate is None:
+            upcoming = next((number for number in sorted(board.SPECIALS) if number > position), 71)
+            self.next_label.setText(f'다음 특수 칸까지 {upcoming - position}칸 · 통과 보상 없음')
+        else:
+            ssr = ', '.join(map(str, sorted(board.SIDE_BOARDS[gate]['ssr_cells'])))
+            self.next_label.setText(f'SR 이상 전용 · SSR 확정 칸: {ssr}')
+        if side_gate is None:
+            message = '곁길 종료 · 다음 회차 일반 꽃길 복귀' if gate is not None else '특수 칸 도착 시 곁길 진입'
+        else:
+            message = f'{board.board_name(side_gate)} · {side_step}/{board.SIDE_DRAWS}회 · 일반 {side_gate}번으로 복귀'
+        self.gate_label.setText(message)
         for number in sorted(board.SPECIALS):
             cell = self.side_cells[number]
-            cell.setText(f'{number}번 입구')
+            cell.setText(f'{number}번 · {board.board_name(number)}')
             cell.setStyleSheet('background:#f1d98d;border:2px solid #467955;border-radius:5px;' if number == side_gate else 'background:#eee;border:1px solid #ccc;border-radius:5px;')
         for step in range(1, 5):
             cell = self.side_cells[step]
-            cell.setText(f'곁길 {step}')
+            cell.setText(f'{step}회')
             cell.setStyleSheet('background:#cde5cc;border:2px solid #467955;border-radius:5px;' if side_gate is not None and step == side_step else 'background:#f6faef;border:1px solid #c5d2bb;border-radius:5px;')
         for number, cell in self.cells.items():
-            tier = 'SSR' if number == board.GOLD else 'SR+' if number in board.SILVER else ''
+            if number > length:
+                continue
+            tier = ('SSR' if number in board.SIDE_BOARDS[gate]['ssr_cells'] else 'SR+') if gate is not None else ('SSR' if number == board.GOLD else 'SR+' if number in board.SILVER else '')
             cell.setText(f'{number}\n{tier}')
-            color = '#f1d98d' if number == board.GOLD else '#e1e4f0' if tier else '#f6faef'
-            border = '3px solid #467955' if number == position else '1px solid #c5d2bb'
+            cell.setAccessibleName(f'{board.board_name(gate)} {number}번 {tier or "일반"} 칸')
+            color = '#f1d98d' if tier == 'SSR' else '#e1e4f0' if tier else '#f6faef'
+            border = '3px solid #467955' if number == (position or length) else '1px solid #c5d2bb'
             cell.setStyleSheet(f'background:{color};border:{border};border-radius:5px;color:#3d5e44;font-size:10px;font-weight:600;')
         self.one.setText('주사위 굴리기 · 테스트' if self.owner.test_sunlight else '주사위 굴리기 · 햇빛 10')
         self.ten.setText('10회 굴리기 · 테스트' if self.owner.test_sunlight else '10회 굴리기 · 햇빛 100')
@@ -264,7 +281,7 @@ class GachaBoardWindow(QDialog):
         history = self._visible_history if busy and self._visible_history is not None else account['history']
         for item in reversed(history[-10:]):
             catalog = PLANTS if item['category'] == 'plant' else POT_SKINS if item['category'] == 'pot' else THEMES
-            self.history.addItem(f"{item['position']}번 · {item['rarity']} {catalog[item['item']].name} · {'중복' if item['duplicate'] else '신규'}")
+            self.history.addItem(f"{board.board_name(item.get('board_gate'))} {item['position']}번 · {item['rarity']} {catalog[item['item']].name} · {'중복' if item['duplicate'] else '신규'}")
         if not self.animating or self.phase != 'moving':
             self._align_seed()
 
@@ -274,7 +291,8 @@ class GachaBoardWindow(QDialog):
         results = []
         category = self.category.currentData()
         state = self.owner.garden.gacha['board']
-        start_position = state['position']
+        start_position = state['side_position'] if state['side_gate'] is not None else state['position']
+        start_gate = state['side_gate']
         start_side = (state['side_gate'], state['side_step'])
         history = list(self.owner.garden.gacha['history'])
 
@@ -290,6 +308,7 @@ class GachaBoardWindow(QDialog):
             return
         self.animation = results
         self.animating = True
+        self.display_gate = start_gate
         self.display_position = start_position
         self.display_side = start_side
         self._visible_history = history
@@ -305,6 +324,9 @@ class GachaBoardWindow(QDialog):
             return
         self.current_result = self.animation.pop(0)
         self.phase = 'rolling'
+        self.display_gate = self.current_result['board_gate']
+        self.display_position = self.current_result['start']
+        self.sync()
         self._roll_frame = 0
         self.dice_total.setText('주사위를 굴리는 중…')
         self.result.setText('민들레 씨가 바람을 기다리고 있어요.')
@@ -344,14 +366,33 @@ class GachaBoardWindow(QDialog):
         self.movement.setDuration(item['distance'] * self.STEP_MS)
         self.movement.start()
 
+    def _layout_board(self, gate):
+        if self._layout_gate == gate:
+            return
+        self._layout_gate = gate
+        side_coordinates = ((11, 0), (11, 6), (11, 12), (11, 19), (7, 19), (3, 19),
+                            (0, 19), (0, 12), (0, 6), (0, 0), (3, 0), (7, 0))
+        for cell in self.cells.values():
+            self.board_grid.removeWidget(cell)
+            cell.hide()
+        length = board.SIDE_LENGTH if gate is not None else board.LENGTH
+        for number in range(1, length + 1):
+            row, column = side_coordinates[number - 1] if gate is not None else coordinates(number)
+            self.board_grid.addWidget(self.cells[number], row, column)
+            self.cells[number].show()
+        self.board_grid.activate()
+
     def _cell_center(self, number):
-        cell = self.cells[number or board.LENGTH]
+        gate = self.display_gate if self.animating else self.owner.garden.gacha['board']['side_gate']
+        length = board.SIDE_LENGTH if gate is not None else board.LENGTH
+        cell = self.cells[number or length]
         return QPointF(cell.mapTo(self.board_widget, cell.rect().center()))
 
     def _align_seed(self):
         if not hasattr(self, 'seed'):
             return
-        position = self.owner.garden.gacha['board']['position'] if self.display_position is None else self.display_position
+        state = self.owner.garden.gacha['board']
+        position = (state['side_position'] if state['side_gate'] is not None else state['position']) if self.display_position is None else self.display_position
         center = self._cell_center(position)
         self.seed.move(round(center.x() - self.seed.width() / 2),
                        round(center.y() - self.seed.height() / 2))
@@ -386,7 +427,7 @@ class GachaBoardWindow(QDialog):
         self.display_side = (item['side_gate'], item['side_step'])
         self._visible_history.append(item)
         catalog = PLANTS if item['category'] == 'plant' else POT_SKINS if item['category'] == 'pot' else THEMES
-        self.result.setText(f"{item['position']}번 도착 · {item['rarity']} {catalog[item['item']].name} · {'중복' if item['duplicate'] else '신규'}")
+        self.result.setText(f"{board.board_name(item['board_gate'])} {item['position']}번 도착 · {item['rarity']} {catalog[item['item']].name} · {'중복' if item['duplicate'] else '신규'}")
         self.seed.sway = 0
         self.seed.update()
         self.sync()
@@ -403,7 +444,7 @@ class GachaBoardWindow(QDialog):
                 die.set_face(face)
             self.dice_total.setText(f'{last["dice"][0]} + {last["dice"][1]} = {last["distance"]}칸')
             catalog = PLANTS if last['category'] == 'plant' else POT_SKINS if last['category'] == 'pot' else THEMES
-            self.result.setText(f"{last['position']}번 도착 · {last['rarity']} {catalog[last['item']].name} · 결과 저장 완료")
+            self.result.setText(f"{board.board_name(last['board_gate'])} {last['position']}번 도착 · {last['rarity']} {catalog[last['item']].name} · 결과 저장 완료")
         self.animation.clear()
         self.current_result = None
         self.animating = False
@@ -411,6 +452,7 @@ class GachaBoardWindow(QDialog):
         self._visible_history = None
         self.display_position = None
         self.display_side = None
+        self.display_gate = None
         self.seed.sway = 0
         self.seed.update()
         self.sync()

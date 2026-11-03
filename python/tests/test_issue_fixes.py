@@ -157,6 +157,7 @@ class CollectionExpansion(unittest.TestCase):
         for key in V15_FIELDS:
             old.pop(key)
         old["seeds"] = {k: v for k, v in old["seeds"].items() if k not in GACHA_PLANTS}
+        old["gacha"]["board"].pop("side_position")
         old["schema"] = 14
         source = deepcopy(old)
         converted = Garden.from_dict(migrate(old))
@@ -175,6 +176,7 @@ class CollectionExpansion(unittest.TestCase):
         garden.gacha["history"] = [
             dict(
                 position=56,
+                board_gate=None,
                 category="pot",
                 rarity="SSR",
                 item="rose",

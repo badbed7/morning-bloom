@@ -4,6 +4,8 @@ import io
 import json
 from pathlib import Path
 import ssl
+import subprocess
+import sys
 import tempfile
 import unittest
 import urllib.error
@@ -64,6 +66,18 @@ class UpdateTLS(unittest.TestCase):
             copy_bat_updater(tmp)
             for name in ('update_tls.py', 'truststore/__init__.py', 'truststore/_windows.py', 'truststore/LICENSE'):
                 self.assertTrue((Path(tmp) / name).is_file(), name)
+
+    def test_vendored_bat_imports_in_isolated_python(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            copy_bat_updater(folder)
+            log = folder / 'probe.log'
+            result = subprocess.run([sys.executable, '-I', str(folder / 'launcher.py'),
+                '--tls-probe', 'https://example.com/', '--diagnostic-log', str(log)],
+                capture_output=True, timeout=20)
+            self.assertEqual(result.returncode, 1, result.stderr)
+            self.assertTrue(log.exists(), result.stderr)
+            self.assertIn('restricted to HTTPS loopback', log.read_text())
 
     def test_tls_probe_cannot_contact_arbitrary_external_hosts(self):
         from launcher import diagnose

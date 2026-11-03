@@ -11,6 +11,11 @@ import threading
 from pathlib import Path
 import tkinter as tk
 from tkinter import messagebox
+
+# Isolated BAT diagnostics must still import this trusted, bundled release directory.
+if not getattr(sys, 'frozen', False):
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+
 from release_config import REPOSITORY
 from update_core import Installer, UpdateError, read_latest, manifest, download, version
 from live_update import Coordinator, ControlServer, PREFIX

@@ -175,7 +175,7 @@ def _validate_legacy_collection(items):
 @dataclass
 class Garden:
     """Shared inventory with up to four independently simulated pots."""
-    CURRENT_SCHEMA: ClassVar[int] = 16
+    CURRENT_SCHEMA: ClassVar[int] = 17
 
     last_update: float
     schema: int = CURRENT_SCHEMA

@@ -1,3 +1,5 @@
+from morning_bloom.plant_catalog import SEED_PLANTS
+from legacy_fixture import v14_shape
 import json
 import tempfile
 import unittest
@@ -81,14 +83,15 @@ class NewFlowers(unittest.TestCase):
 
     def test_v9_save_and_cloud_upgrade_preserve_every_existing_value(self):
         original = Garden(NOW, coins=456, sunlight=23).to_dict()
+        original = v14_shape(original)
         original.pop('gacha')
         for key in V12_FIELDS | V13_FIELDS:
             original.pop(key)
         original['schema'] = 9
         original['seeds'] = dict(daisy=2, starflower=4, tulip=6)
         defaults = Garden(0).to_dict()
-        expected = {**original, 'schema': Garden.CURRENT_SCHEMA, 'gacha': defaults['gacha'],
-                    'seeds': {**dict.fromkeys(REGULAR_PLANTS, 0), **original['seeds']},
+        expected = {**{key: defaults[key] for key in ('desktop_scale', 'unlocked_plants', 'discovered_plants', 'wind_reward_upgrade')}, **original, 'schema': Garden.CURRENT_SCHEMA, 'gacha': defaults['gacha'],
+                    'seeds': {**dict.fromkeys(SEED_PLANTS, 0), **original['seeds']},
                     **{key: defaults[key] for key in V12_FIELDS | V13_FIELDS}}
         raw = json.dumps(original)
         with tempfile.TemporaryDirectory() as tmp:
@@ -135,6 +138,7 @@ class NewFlowers(unittest.TestCase):
         garden.care('water', NOW)
         garden.place_desktop(garden.pot['plant_id'], -320, 120)
         original = garden.to_dict()
+        original = v14_shape(original)
         original.pop('gacha')
         for key in V12_FIELDS | V13_FIELDS:
             original.pop(key)
@@ -157,6 +161,7 @@ class NewFlowers(unittest.TestCase):
 
     def test_v11_upgrade_adds_saved_wind_journey_fields(self):
         old = Garden(NOW, coins=432).to_dict()
+        old = v14_shape(old)
         old.pop('gacha')
         for key in V12_FIELDS | V13_FIELDS:
             old.pop(key)
@@ -170,6 +175,7 @@ class NewFlowers(unittest.TestCase):
 
     def test_v12_progress_keeps_percentage_and_uses_one_hour_target(self):
         old = Garden(NOW, wind_progress=1800, wind_upgrade=3, coins=432).to_dict()
+        old = v14_shape(old)
         old.pop('gacha')
         old.pop('wind_ring_hits')
         old.update(schema=12, wind_progress=3600)
@@ -186,12 +192,12 @@ class NewFlowers(unittest.TestCase):
 
 
 class WindPhysics(unittest.TestCase):
-    def test_progress_requires_holding_but_flight_bounces_at_edges(self):
+    def test_progress_tracks_airborne_motion_and_stops_on_ground(self):
         state = WindState()
         state.press()
         self.assertLess(state.velocity, 0)
         state.step(.1, False)
-        self.assertEqual(state.progress, 0)
+        self.assertAlmostEqual(state.progress, .1)
         self.assertLess(state.y, .5)
         state.y = .944
         state.velocity = 2
@@ -215,16 +221,16 @@ class WindPhysics(unittest.TestCase):
         self.assertGreater(state.velocity, 0)
         state.progress = WIND_BASE_SECONDS - .05
         state.step(.1, False)
-        self.assertFalse(state.ended)
-        self.assertAlmostEqual(state.progress, WIND_BASE_SECONDS - .05)
+        self.assertTrue(state.ended)
+        self.assertAlmostEqual(state.progress, WIND_BASE_SECONDS)
         state.step(.1, True)
         self.assertTrue(state.ended)
         self.assertEqual(state.progress, WIND_BASE_SECONDS)
 
-    def test_old_upgrade_does_not_shorten_new_target(self):
+    def test_saved_upgrade_increases_airborne_speed(self):
         state = WindState(upgrade=1)
         state.step(.1, True)
-        self.assertAlmostEqual(state.progress, .1)
+        self.assertAlmostEqual(state.progress, .115)
 
     def test_invalid_time_and_post_arrival_input_do_not_change_progress(self):
         state = WindState()
@@ -320,24 +326,24 @@ class ContentUI(unittest.TestCase):
                 if not picker.next.isEnabled():
                     break
                 picker.next.click()
-            self.assertEqual(seen, {*REGULAR_PLANTS, 'random'})
+            self.assertEqual(seen, {*SEED_PLANTS, 'random'})
         self.assertEqual(self.garden.coins, 120)
         self.assertEqual(sum(self.garden.seeds.values()), 1)
 
-    def test_progress_bar_stops_when_input_is_released(self):
+    def test_progress_bar_continues_airborne_after_release(self):
         game = self.game()
         game.last_tick = 100
         with patch('morning_bloom.wind_game.time.monotonic', return_value=100.1):
             game.set_held('canvas', True)
-        self.assertEqual(game.state.progress, 0)
+        self.assertGreater(game.state.progress, 0)
         with patch('morning_bloom.wind_game.time.monotonic', return_value=100.2):
             game.set_held('canvas', False)
         pressed_progress = game.state.progress
         self.assertGreater(pressed_progress, 0)
         with patch('morning_bloom.wind_game.time.monotonic', return_value=100.3):
             game.tick()
-        self.assertEqual(game.state.progress, pressed_progress)
-        self.assertEqual(self.garden.wind_progress, pressed_progress)
+        self.assertGreater(game.state.progress, pressed_progress)
+        self.assertEqual(self.garden.wind_progress, game.state.progress)
 
     def test_mouse_keyboard_pause_and_opacity_follow_running_game(self):
         self.window.opacity.setValue(65)

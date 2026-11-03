@@ -13,6 +13,7 @@ class GardenTheme:
     tuft: str
     text: str
     label: str
+    gacha_only: bool = False
 
 
 THEMES = {
@@ -70,3 +71,37 @@ def garden_theme(key):
     except KeyError as exc:
         raise ValueError('알 수 없는 정원 배경') from exc
 
+
+
+# Runtime styles use clean vector shapes, never text/card crops from preview sheets.
+from .content_names import GARDEN_NAMES, POT_NAMES
+_POT_COLORS = (
+    '#e8dfc9','#f0e6cf','#e4ba70','#879571','#9db4c9','#e6bcb3','#667251','#eee4d0',
+    '#d4b78c','#e6e0d0','#ad805b','#e6bdb1','#b7cae0','#ece6d0','#e9dfc9','#92a277',
+    '#d7a99b','#e2b853','#c5d8e1','#a0b18c','#efe8db','#b8b7ad','#823d40','#e9dcc2',
+    '#8b9872','#d5a7a6','#d9cbb2','#7897a4','#e1c19f','#7e8962','#e8e0ce','#42413e',
+    '#eae0c9','#bb7c4b','#a5bed9','#d8c49e','#d9cfb5','#dfb7a3','#e6e2ce','#ad9aba','#e9e1cf')
+
+for i, name in enumerate(GARDEN_NAMES):
+    if i == 0:
+        continue
+    top, bottom, tuft = '#d6dfb7', '#adc38c', '#789967'
+    if any(x in name for x in ('핑크', '벚꽃')):
+        top, bottom, tuft = '#f1d3d0', '#e3bbb8', '#b67f8b'
+    elif any(x in name for x in ('낙엽', '단풍', '가을')):
+        top, bottom, tuft = '#ebd6aa', '#d8b985', '#b17e58'
+    elif any(x in name for x in ('물가', '연못', '시냇물', '호수', '비 온')):
+        top, bottom, tuft = '#c9e0dc', '#a2c8bf', '#648e85'
+    elif '밤하늘' in name:
+        top, bottom, tuft = '#3d565a', '#273e47', '#92aaa0'
+    elif any(x in name for x in ('눈', '서리')):
+        top, bottom, tuft = '#eef0e7', '#c9d7d2', '#95b5aa'
+    key = f'catalog_garden_{i:03}'
+    THEMES[key] = GardenTheme(key, name, 0, name + ' · 꽃길 뽑기 전용',
+        top, bottom, tuft, '#f3efdb' if '밤하늘' in name else '#354b38', name, True)
+for i, name in enumerate(POT_NAMES):
+    if i < 4:
+        continue
+    key = f'catalog_pot_{i:03}'
+    POT_SKINS[key] = PotSkin(key, name, name, 0, name + ' · 꽃길 뽑기 전용',
+        _POT_COLORS[i - 4], '#e8d5b6', '#b89e80', name, True)

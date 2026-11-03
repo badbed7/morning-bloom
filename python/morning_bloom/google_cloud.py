@@ -4,6 +4,7 @@ import ctypes
 import hashlib
 import json
 import math
+import logging
 import os
 import secrets
 import sys
@@ -29,7 +30,38 @@ _UNSET = object()
 
 
 class CloudError(Exception):
-    pass
+    """Safe, structured failure metadata. Never expose request bodies or tokens."""
+    def __init__(self, message, *, stage='unknown', status=None, code='', reason='', location=''):
+        self.stage, self.status = stage, status
+        self.code, self.reason, self.location = code, reason, location
+        self.auth_required = code in ('invalid_grant', 'client_changed', 'login_required')
+        self.retryable = status in (408, 429, 500, 502, 503, 504) or code == 'network_error' or reason in ('rateLimitExceeded', 'userRateLimitExceeded')
+        self.guidance = ('Google 계정을 다시 연결하세요.' if self.auth_required else
+                         '앱의 Google OAuth 설정을 확인하세요.' if code == 'invalid_client' else
+                         'Google Drive API 활성화와 권한 설정을 확인하세요.' if status == 403 and not self.retryable else
+                         '잠시 후 다시 백업하세요.' if self.retryable else
+                         '오류 단계와 코드를 확인하세요. 로컬 정원은 보존됩니다.')
+        metadata = ' · '.join(str(v) for v in (stage if stage != 'unknown' else '', status, code, reason, location) if v)
+        super().__init__(message + (' [' + metadata + ']' if metadata else ''))
+
+
+def _safe_field(value):
+    # Codes and parameter names only; arbitrary server text may contain secrets.
+    import re
+    return value if isinstance(value, str) and re.fullmatch(r'[A-Za-z_][A-Za-z0-9_.-]{0,79}', value) else ''
+
+
+def _stage(url, method):
+    if url == TOKEN_URL:
+        return 'token'
+    if url.startswith(DRIVE_UPLOAD_URL):
+        return 'upload'
+    if url.startswith(DRIVE_FILES_URL):
+        return 'create' if method == 'POST' else 'download' if 'alt=media' in url else 'list'
+    if url == USERINFO_URL:
+        return 'profile'
+    return 'oauth'
+
 
 
 def configured_client_id():
@@ -68,28 +100,47 @@ def _request(url, method='GET', token=None, body=None, content_type=None, timeou
     if content_type:
         headers['Content-Type'] = content_type
     request = urllib.request.Request(url, data=body, headers=headers, method=method)
-    try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            return response.read()
-    except urllib.error.HTTPError as exc:
+    stage = _stage(url, method)
+    for attempt in range(3):
         try:
-            payload = json.loads(exc.read().decode('utf-8'))
-            detail = payload.get('error', {})
-            message = (detail.get('message') if isinstance(detail, dict)
-                       else payload.get('error_description') or detail)
-        except (UnicodeDecodeError, json.JSONDecodeError, AttributeError):
-            message = None
-        raise CloudError(message or f'Google 요청 실패 ({exc.code})') from exc
-    except (urllib.error.URLError, OSError) as exc:
-        raise CloudError('Google 서비스에 연결할 수 없습니다.') from exc
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                return response.read()
+        except urllib.error.HTTPError as exc:
+            code = reason = location = ''
+            try:
+                payload = json.loads(exc.read().decode('utf-8'))
+                detail = payload.get('error', {})
+                if isinstance(detail, dict):
+                    errors = detail.get('errors', [])
+                    info = errors[0] if isinstance(errors, list) and errors and isinstance(errors[0], dict) else {}
+                    code = _safe_field(detail.get('status'))
+                    reason, location = _safe_field(info.get('reason')), _safe_field(info.get('location'))
+                else:
+                    code = _safe_field(detail)
+            except (UnicodeDecodeError, json.JSONDecodeError, AttributeError, TypeError):
+                pass
+            failure = CloudError('Google 요청 실패', stage=stage, status=exc.code,
+                                 code=code, reason=reason, location=location)
+            # Never retry file creation automatically; a lost response may already have created it.
+            if failure.retryable and method != 'POST' and attempt < 2:
+                time.sleep(.2 * (attempt + 1))
+                continue
+            logging.getLogger(__name__).warning('cloud stage=%s status=%s code=%s reason=%s location=%s',
+                stage, exc.code, code, reason, location)
+            raise failure from exc
+        except (urllib.error.URLError, OSError) as exc:
+            raise CloudError('Google 서비스에 연결할 수 없습니다.', stage=stage, code='network_error') from exc
 
 
 def _json_request(url, method='GET', token=None, data=None):
     body = None if data is None else json.dumps(data, ensure_ascii=False).encode('utf-8')
     raw = _request(url, method, token, body, 'application/json' if body is not None else None)
     try:
-        return json.loads(raw.decode('utf-8')) if raw else {}
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        result = json.loads(raw.decode('utf-8')) if raw else {}
+        if not isinstance(result, dict):
+            raise ValueError('Expected a JSON object')
+        return result
+    except (UnicodeDecodeError, ValueError) as exc:
         raise CloudError('Google 응답을 읽을 수 없습니다.') from exc
 
 
@@ -97,8 +148,11 @@ def _form_request(url, values):
     body = urllib.parse.urlencode(values).encode('ascii')
     raw = _request(url, 'POST', body=body, content_type='application/x-www-form-urlencoded')
     try:
-        return json.loads(raw.decode('utf-8')) if raw else {}
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        result = json.loads(raw.decode('utf-8')) if raw else {}
+        if not isinstance(result, dict):
+            raise ValueError('Expected a JSON object')
+        return result
+    except (UnicodeDecodeError, ValueError) as exc:
         raise CloudError('Google 인증 응답을 읽을 수 없습니다.') from exc
 
 
@@ -151,10 +205,17 @@ def authorize(client_id, browser_open=webbrowser.open, timeout=180, client_secre
     server = HTTPServer(('127.0.0.1', 0), Callback)
     redirect_uri = f'http://127.0.0.1:{server.server_port}/oauth2callback'
     try:
-        browser_open(oauth_url(client_id, redirect_uri, state, verifier))
+        try:
+            opened = browser_open(oauth_url(client_id, redirect_uri, state, verifier))
+        except (OSError, webbrowser.Error) as exc:
+            raise CloudError('로그인 브라우저를 열지 못했습니다.', stage='browser') from exc
+        if opened is False:
+            raise CloudError('로그인 브라우저를 열지 못했습니다.', stage='browser')
         _wait_for_callback(server, result, timeout)
     finally:
         server.server_close()
+    if not result:
+        raise CloudError('Google 로그인 시간이 만료되었습니다.', stage='callback')
     if result.get('state') != state:
         raise CloudError('Google 로그인 응답을 확인할 수 없습니다.')
     if result.get('error'):
@@ -256,6 +317,9 @@ class GoogleDriveSync:
             self.credentials = {}
         self._access_token = ''
         self._expires_at = 0.0
+        self.reauth_required = bool(self.credentials.get('reauth_required')) or bool(self.credentials.get('client_id') and self.credentials['client_id'] != self.client_id)
+        self.auto_retry_allowed = not self.reauth_required
+        self.last_error = '저장된 인증을 사용할 수 없습니다. Google 계정을 다시 연결하세요.' if self.reauth_required else ''
 
     @property
     def configured(self):
@@ -263,7 +327,7 @@ class GoogleDriveSync:
 
     @property
     def connected(self):
-        return self.configured and bool(self.credentials.get('refresh_token'))
+        return self.configured and bool(self.credentials.get('refresh_token')) and not self.reauth_required
 
     @property
     def email(self):
@@ -273,9 +337,12 @@ class GoogleDriveSync:
         if not self.configured:
             raise CloudError('Google OAuth 클라이언트 설정이 필요합니다.')
         tokens = authorize(self.client_id, client_secret=self.client_secret)
-        saved = {'refresh_token': tokens['refresh_token'], 'email': tokens.get('email', '')}
+        saved = {'refresh_token': tokens['refresh_token'], 'email': tokens.get('email', ''), 'client_id': self.client_id}
         save_credentials(saved)
         self.credentials = saved
+        self.reauth_required = False
+        self.auto_retry_allowed = True
+        self.last_error = ''
         self._access_token = tokens['access_token']
         self._expires_at = tokens['expires_at']
         return self.email
@@ -289,23 +356,67 @@ class GoogleDriveSync:
             pass
         delete_credentials()
         self.credentials = {}
+        self.reauth_required = False
+        self.auto_retry_allowed = True
+        self.last_error = ''
         self._access_token = ''
         self._expires_at = 0
 
+    def _record_error(self, error):
+        self.last_error = str(error) + ' ' + error.guidance
+        self.auto_retry_allowed = error.retryable
+        if error.auth_required:
+            self.reauth_required = True
+            self._access_token = ''
+            self.credentials['reauth_required'] = True
+            try:
+                save_credentials(self.credentials)
+            except CloudError:
+                pass
+
+    def _drive_call(self, call):
+        try:
+            return call()
+        except CloudError as error:
+            if error.status == 401:
+                self._access_token = ''
+                self._expires_at = 0
+                try:
+                    result = call()  # Refresh access token once, then retry once.
+                    self.auto_retry_allowed = True
+                    self.last_error = ''
+                    return result
+                except CloudError as retry_error:
+                    error = retry_error
+            self._record_error(error)
+            raise error
+
     def _token(self):
+        if self.reauth_required:
+            raise CloudError('Google 계정 재연결이 필요합니다.', stage='token', code='login_required')
         if self._access_token and self.clock() < self._expires_at - 60:
             return self._access_token
         refresh = self.credentials.get('refresh_token')
         if not refresh:
             raise CloudError('Google 계정 연결이 필요합니다.')
-        result = _form_request(TOKEN_URL, {
-            **_client_fields(self.client_id, self.client_secret), 'refresh_token': refresh,
-            'grant_type': 'refresh_token',
-        })
+        try:
+            result = _form_request(TOKEN_URL, {
+                **_client_fields(self.client_id, self.client_secret), 'refresh_token': refresh,
+                'grant_type': 'refresh_token',
+            })
+        except CloudError as error:
+            self._record_error(error)
+            raise
+        if self.credentials.get('client_id') != self.client_id:
+            self.credentials['client_id'] = self.client_id
+            try:
+                save_credentials(self.credentials)
+            except CloudError:
+                pass
         self._access_token = result.get('access_token', '')
         self._expires_at = self.clock() + int(result.get('expires_in', 3600))
         if not self._access_token:
-            raise CloudError('Google 로그인을 갱신하지 못했습니다. 다시 연결하세요.')
+            raise CloudError('Google 로그인을 갱신하지 못했습니다.', stage='token', code='login_required')
         return self._access_token
 
     def _file_id(self):
@@ -313,24 +424,28 @@ class GoogleDriveSync:
             'spaces': 'appDataFolder', 'q': f"name='{SAVE_NAME}'",
             'orderBy': 'modifiedTime desc', 'pageSize': 1, 'fields': 'files(id)',
         })
-        result = _json_request(DRIVE_FILES_URL + '?' + query, token=self._token())
+        result = self._drive_call(lambda: _json_request(DRIVE_FILES_URL + '?' + query, token=self._token()))
         files = result.get('files', [])
         return files[0].get('id') if files else None
 
     def download_save(self):
         file_id = self._file_id()
         if not file_id:
+            self.auto_retry_allowed = True
+            self.last_error = ''
             return None
-        raw = _request(f'{DRIVE_FILES_URL}/{urllib.parse.quote(file_id, safe="")}?alt=media', token=self._token())
+        raw = self._drive_call(lambda: _request(f'{DRIVE_FILES_URL}/{urllib.parse.quote(file_id, safe="")}?alt=media', token=self._token()))
         try:
             envelope = json.loads(raw.decode('utf-8'))
-        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        except (UnicodeDecodeError, ValueError) as exc:
             raise CloudError('클라우드 저장 파일이 손상되었습니다.') from exc
         if (not isinstance(envelope, dict) or set(envelope) != {'schema', 'saved_at', 'save'}
                 or envelope['schema'] != 1 or type(envelope['saved_at']) not in (int, float)
                 or not math.isfinite(envelope['saved_at'])
                 or not isinstance(envelope['save'], dict)):
             raise CloudError('지원하지 않는 클라우드 저장 형식입니다.')
+        self.auto_retry_allowed = True
+        self.last_error = ''
         return envelope
 
     def upload_save(self, save):
@@ -340,14 +455,16 @@ class GoogleDriveSync:
         file_id = self._file_id()
         token = self._token()
         if not file_id:
-            created = _json_request(DRIVE_FILES_URL + '?fields=id', 'POST', token, {
+            created = self._drive_call(lambda: _json_request(DRIVE_FILES_URL + '?fields=id', 'POST', self._token(), {
                 'name': SAVE_NAME, 'parents': ['appDataFolder'],
-            })
+            }))
             file_id = created.get('id')
             if not file_id:
                 raise CloudError('Google Drive 저장 파일을 만들지 못했습니다.')
-        _json_request(
+        self._drive_call(lambda: _json_request(
             f'{DRIVE_UPLOAD_URL}/{urllib.parse.quote(file_id, safe="")}?uploadType=media',
-            'PATCH', token, envelope,
-        )
+            'PATCH', self._token(), envelope,
+        ))
+        self.auto_retry_allowed = True
+        self.last_error = ''
         return envelope['saved_at']

@@ -10,6 +10,7 @@ import tempfile
 import zipfile
 from pathlib import Path
 from build_icons import generate_icons
+from build_cloud_config import validate_cloud_config
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -31,10 +32,11 @@ def main():
     common = [sys.executable, '-m', 'PyInstaller', '--noconfirm', '--clean', '--windowed', '--distpath', 'dist', '--workpath', 'build', '--specpath', 'build', '--icon', str(icon)]
     google_id = os.environ.get('GOOGLE_OAUTH_CLIENT_ID', '').strip()
     google_secret = os.environ.get('GOOGLE_OAUTH_CLIENT_SECRET', '').strip()
-    if google_id and not re.fullmatch(r'[A-Za-z0-9_-]+\.apps\.googleusercontent\.com', google_id):
-        raise SystemExit('Invalid GOOGLE_OAUTH_CLIENT_ID')
-    if bool(google_id) != bool(google_secret):
-        raise SystemExit('GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET must be set together')
+    local_only = os.environ.get('BLOOM_CLOUD_DISABLED') == '1'
+    try:
+        validate_cloud_config(google_id, google_secret, local_only)
+    except ValueError as error:
+        raise SystemExit(str(error)) from error
     with tempfile.TemporaryDirectory(prefix='MorningBloom-build-config-') as config_dir:
         google_args = []
         if google_id:
@@ -81,6 +83,7 @@ def main():
     shutil.copy(output / 'update.json', bootstrap / 'bundled-update.json')
     (bootstrap / 'run.bat').write_text('@echo off\r\nstart "" /wait "%~dp0MorningBloom.exe" %*\r\n', encoding='ascii')
     (bootstrap / 'READ-ME.txt').write_text(
+        ('Google Drive disabled: local-only build.\n' if local_only else 'Google Drive cloud support included.\n') +
         'Extract this entire ZIP, then run MorningBloom.exe. No Python installation needed.\n'
         'Keep MorningBloom-game.zip and bundled-update.json beside the launcher for first launch.\n'
         'Game saves are kept separately in LocalAppData/MorningBloomPython.\n'

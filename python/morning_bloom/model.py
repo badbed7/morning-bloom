@@ -8,7 +8,7 @@ import secrets
 
 from .cosmetics import POT_SKINS, THEMES, garden_theme, pot_skin
 from . import gacha_board
-from .plant_catalog import DAY, HOUR, PLANTS, REGULAR_PLANTS, VACATION_PLANTS, RANDOM_SEED_PRICE, plant_definition, roll_mystery_seed
+from .plant_catalog import DAY, HOUR, PLANTS, REGULAR_PLANTS, VACATION_PLANTS, RANDOM_SEED_PRICE, SEED_PLANTS, GACHA_PLANTS, plant_definition, roll_mystery_seed
 
 OFFLINE_CAP = 3 * DAY
 MID_WATER_EARLY = 22 * HOUR
@@ -31,6 +31,7 @@ WIND_MAX_UPGRADE = 10
 V8_FIELDS = {'fertilizer_reserve', 'mystery_seeds', 'mystery_plants', 'desktop_flowers', 'desktop_opacity'}
 V12_FIELDS = {'wind_progress', 'wind_upgrade', 'last_wind_reward_id'}
 V13_FIELDS = {'wind_ring_hits'}
+V15_FIELDS = {'desktop_scale', 'unlocked_plants', 'discovered_plants', 'wind_reward_upgrade'}
 TYCOON_POT_DEFAULTS = dict(water_wait=0.0, mist_wait=0.0, water_count=0,
                            mist_count=0, fertilizer_used=0, fertilizer_limit=0)
 LEGACY_SPECIES = ('daisy', 'tulip')
@@ -174,18 +175,22 @@ def _validate_legacy_collection(items):
 @dataclass
 class Garden:
     """Shared inventory with up to four independently simulated pots."""
-    CURRENT_SCHEMA: ClassVar[int] = 14
+    CURRENT_SCHEMA: ClassVar[int] = 15
 
     last_update: float
     schema: int = CURRENT_SCHEMA
     tutorial_used: bool = False
     tutorial_reward_claimed: bool = False
     coins: int = 120
-    seeds: dict = field(default_factory=lambda: {key: int(key == 'daisy') for key in REGULAR_PLANTS})
+    seeds: dict = field(default_factory=lambda: {key: int(key == 'daisy') for key in SEED_PLANTS})
     mystery_seeds: list = field(default_factory=list)
     mystery_plants: list = field(default_factory=list)
     desktop_flowers: dict = field(default_factory=dict)
     desktop_opacity: float = 1.0
+    desktop_scale: int = 100
+    unlocked_plants: list = field(default_factory=list)
+    discovered_plants: list = field(default_factory=list)
+    wind_reward_upgrade: int = 0
     collection: list = field(default_factory=list)
     sunlight: int = 0
     sun_tokens: list = field(default_factory=list)
@@ -213,7 +218,7 @@ class Garden:
     def __post_init__(self):
         if not self.pots:
             self.pots = [empty_pot()]
-        self.seeds = {**dict.fromkeys(REGULAR_PLANTS, 0), **self.seeds}
+        self.seeds = {**dict.fromkeys(SEED_PLANTS, 0), **self.seeds}
 
     @property
     def pot(self):
@@ -234,6 +239,8 @@ class Garden:
     @growth.setter
     def growth(self, value):
         self.pot['growth'] = value
+        if self.pot['planted'] and value >= self.pot['duration']:
+            self._discover(self.pot['species'])
 
     @property
     def duration(self):
@@ -375,7 +382,24 @@ class Garden:
             return False
         self.wind_ring_hits = total_hits
         if total_hits % WIND_RINGS_PER_GOLD == 0:
-            self.coins += 1
+            self.coins += 1 + self.wind_reward_upgrade
+        return True
+
+    @staticmethod
+    def wind_upgrade_price(kind, level):
+        maximum = WIND_MAX_UPGRADE if kind == "speed" else 5
+        return (20 if kind == "speed" else 40) * (level + 1) ** 2 if level < maximum else None
+
+    def buy_wind_upgrade(self, kind):
+        if kind not in ("speed", "reward"):
+            return False
+        field = "wind_upgrade" if kind == "speed" else "wind_reward_upgrade"
+        level = getattr(self, field)
+        price = self.wind_upgrade_price(kind, level)
+        if price is None or self.coins < price:
+            return False
+        self.coins -= price
+        setattr(self, field, level + 1)
         return True
 
     def complete_wind(self, game_id, now):
@@ -398,12 +422,13 @@ class Garden:
         # Completion grants one sunlight directly; skip the first-harvest bonus token.
         self.sun_intro_claimed = True
         self.sunlight += 1
+        self._discover('dandelion')
         self.wind_progress = 0.0
         self.last_wind_reward_id = game_id
         return True
 
     def can_plant(self, species):
-        if species not in (*REGULAR_PLANTS, 'random') or self.planted or self.vacation:
+        if species not in (*SEED_PLANTS, 'random') or self.planted or self.vacation:
             return False
         if not self.tutorial_used and species != 'daisy':
             return False
@@ -446,6 +471,9 @@ class Garden:
             growth_elapsed = min(offline, pot['duration']) if pot['species'] in VACATION_PLANTS else elapsed
             self._advance_pot(pot, growth_elapsed)
         self._advance_sunlight(elapsed, now)
+        for pot in self.pots:
+            if pot['planted'] and pot['growth'] >= pot['duration']:
+                self._discover(pot['species'])
 
     def _advance_sunlight(self, elapsed, now):
         if not self.collection:
@@ -561,6 +589,7 @@ class Garden:
             return False
         was_empty = not self.collection
         self.collection.append(item)
+        self._discover(item['species'])
         if item['id'] in self.mystery_plants:
             self.mystery_plants.remove(item['id'])
         if was_empty:
@@ -579,7 +608,9 @@ class Garden:
         return True
 
     def buy_seed(self, species='daisy'):
-        if species not in (*REGULAR_PLANTS, 'random'):
+        if species not in (*SEED_PLANTS, 'random'):
+            return False
+        if species in GACHA_PLANTS and species not in self.unlocked_plants:
             return False
         price = RANDOM_SEED_PRICE if species == 'random' else plant_definition(species).seed_price
         if self.coins < price:
@@ -645,10 +676,22 @@ class Garden:
                 return True
         return False
 
-    def buy_theme(self, theme_id):
+    def _discover(self, species):
+        if species not in self.discovered_plants:
+            self.discovered_plants.append(species)
+
+    def set_desktop_scale(self, value):
+        if type(value) is not int or value not in range(50, 201, 10):
+            return False
+        self.desktop_scale = value
+        return True
+
+    def buy_theme(self, theme_id, *, test_free=False):
         if theme_id not in THEMES or theme_id in self.owned_themes:
             return False
-        price = garden_theme(theme_id).price
+        if garden_theme(theme_id).gacha_only:
+            return False
+        price = 0 if test_free else garden_theme(theme_id).price
         if self.sunlight < price:
             return False
         self.sunlight -= price
@@ -661,12 +704,12 @@ class Garden:
         self.equipped_theme = theme_id
         return True
 
-    def buy_skin(self, skin_id):
+    def buy_skin(self, skin_id, *, test_free=False):
         if type(skin_id) is not str or skin_id not in POT_SKINS or skin_id in self.owned_skins:
             return False
         if pot_skin(skin_id).gacha_only:
             return False
-        price = pot_skin(skin_id).price
+        price = 0 if test_free else pot_skin(skin_id).price
         if self.sunlight < price:
             return False
         self.sunlight -= price
@@ -679,25 +722,32 @@ class Garden:
         self.equipped_skin = skin_id
         return True
 
-    def draw_gacha(self, category, count=1, randbelow=None):
-        if category not in gacha_board.REWARDS:
+    def draw_gacha(self, category, count=1, randbelow=None, *, test_free=False):
+        if type(category) is not str or category not in gacha_board.REWARDS or type(count) is not int or count not in (1, 10):
             return False
         try:
             outcome = gacha_board.simulate(
-                self.gacha['board'], count, self.sunlight,
-                self.gacha['tickets'], randbelow,
+                self.gacha['board'], count, count * gacha_board.PRICE if test_free else self.sunlight,
+                0 if test_free else self.gacha['tickets'], randbelow,
             )
         except ValueError:
             return False
         draw_random = randbelow or secrets.randbelow
-        owned = self.owned_skins if category == 'pot' else self.owned_themes
+        field = 'unlocked_plants' if category == 'plant' else 'owned_skins' if category == 'pot' else 'owned_themes'
+        owned = list(getattr(self, field))
+        seeds = dict(self.seeds)
         results = []
         for step in outcome['results']:
             pool = gacha_board.REWARDS[category][step['rarity']]
-            item = pool[draw_random(len(pool))]
+            index = draw_random(len(pool))
+            if type(index) is not int or not 0 <= index < len(pool):
+                return False
+            item = pool[index]
             duplicate = item in owned
             if not duplicate:
                 owned.append(item)
+                if category == 'plant':
+                    seeds[item] += 1
             leaves = 1 + ({'R': 1, 'SR': 3, 'SSR': 10}[step['rarity']] if duplicate else 0)
             record = {
                 'position': step['position'], 'category': category,
@@ -706,10 +756,14 @@ class Garden:
             }
             results.append({**record, 'side_gate': step['side_gate'], 'side_step': step['side_step'],
                             **{key: step[key] for key in ('dice', 'start', 'distance', 'path')}})
-            self.gacha['leaves'] += leaves
+        setattr(self, field, owned)
+        self.seeds = seeds
+        self.gacha['leaves'] += sum(result['leaves'] for result in results)
         self.gacha['board'] = outcome['state']
-        self.gacha['tickets'] = outcome['free_tickets']
-        self.sunlight = outcome['sunlight']
+        if not test_free:
+            self.gacha['tickets'] = outcome['free_tickets']
+        if not test_free:
+            self.sunlight = outcome['sunlight']
         self.gacha['history'] = (self.gacha['history'] + [
             {key: result[key] for key in ('position', 'category', 'rarity', 'item', 'duplicate', 'leaves')}
             for result in results
@@ -746,13 +800,24 @@ class Garden:
                 raise ValueError(key)
         if data['tutorial_reward_claimed'] and not data['tutorial_used']:
             raise ValueError('첫 재배 보상')
-        if not isinstance(data['seeds'], dict) or set(data['seeds']) != set(REGULAR_PLANTS):
+        if not isinstance(data['seeds'], dict) or set(data['seeds']) != set(SEED_PLANTS):
             raise ValueError('씨앗')
         if any(type(value) is not int or value < 0 for value in data['seeds'].values()):
             raise ValueError('씨앗')
         if type(data['sunlight']) is not int or data['sunlight'] < 0:
             raise ValueError('햇빛')
         gacha_board.validate_account(data['gacha'])
+        if type(data['desktop_scale']) is not int or data['desktop_scale'] not in range(50, 201, 10):
+            raise ValueError('바탕화면 꽃 크기')
+        if type(data['wind_reward_upgrade']) is not int or not 0 <= data['wind_reward_upgrade'] <= 5:
+            raise ValueError('바람놀이 보상 강화')
+        for key, allowed in (('unlocked_plants', GACHA_PLANTS), ('discovered_plants', PLANTS)):
+            values = data[key]
+            if (not isinstance(values, list) or any(type(v) is not str or v not in allowed for v in values)
+                    or len(values) != len(set(values))):
+                raise ValueError(key)
+        if any(data['seeds'][k] and k not in data['unlocked_plants'] for k in GACHA_PLANTS):
+            raise ValueError('잠긴 식물 씨앗')
         if type(data['fertilizer']) is not int or not 0 <= data['fertilizer'] <= FERTILIZER_CAP:
             raise ValueError('비료 재고')
         if type(data['fertilizer_reserve']) is not int or not 0 <= data['fertilizer_reserve'] <= 5:

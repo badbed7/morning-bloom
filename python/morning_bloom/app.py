@@ -42,9 +42,10 @@ from .gacha_board_window import GachaBoardWindow
 from .google_cloud import CloudError, GoogleDriveSync
 from .model import FERTILIZER_CAP, FERTILIZER_LEAF_PRICE, FERTILIZER_SECONDS, POT_PRICES, TYCOON_RULE, WIND_BASE_SECONDS
 from .icon_picker import IconPicker
+from .cosmetic_picker import CosmeticPicker
 from .locked_catalog import LockedCatalog
 from .navigation import SlideStack, chevron_icon
-from .plant_catalog import PLANTS, REGULAR_PLANTS, VACATION_PLANTS, WEEKEND_PLANTS, RANDOM_SEED_PRICE, plant_definition
+from .plant_catalog import PLANTS, REGULAR_PLANTS, GACHA_PLANTS, VACATION_PLANTS, WEEKEND_PLANTS, RANDOM_SEED_PRICE, plant_definition
 from .seed_picker import SeedPicker
 from .storage import SaveError, Store
 
@@ -144,6 +145,7 @@ class Window(QWidget):
     def __init__(self, store, garden, demo=False, save_lock=None, cloud=None):
         super().__init__()
         self.store, self.garden, self.demo = store, garden, demo
+        self._test_sunlight = True
         self.offset = max(0, garden.last_update - time.time()) if demo else 0
         self._save_lock = save_lock
         self._main_page = POT_PAGE
@@ -560,6 +562,14 @@ class Window(QWidget):
         self.desktop_opacity.valueChanged.connect(self.set_desktop_opacity)
         desktop_row.addWidget(self.desktop_opacity, 1)
         layout.addLayout(desktop_row)
+        self.desktop_scale = QSlider(Qt.Horizontal)
+        self.desktop_scale.setRange(5, 20)
+        self.desktop_scale.setValue(self.garden.desktop_scale // 10)
+        self.desktop_scale.setAccessibleName('바탕화면 꽃 크기')
+        self.desktop_scale.valueChanged.connect(lambda value: self.act(lambda: self.garden.set_desktop_scale(value * 10)))
+        self.desktop_scale_label = QLabel()
+        layout.addWidget(self.desktop_scale_label)
+        layout.addWidget(self.desktop_scale)
         desktop_hint = QLabel('정원의 꽃을 우클릭하면 화면 맨 위에 띄웁니다.\n꽃 주변 햇빛을 클릭해 수집 · 꽃을 드래그해 이동')
         desktop_hint.setWordWrap(True)
         desktop_hint.setObjectName('small')
@@ -587,9 +597,10 @@ class Window(QWidget):
             '식물 카탈로그\n'
             + '\n'.join(
                 f'• {item.name}: {format_duration(item.growth_seconds)} · 씨앗 {item.seed_price}G · 판매 {item.sale_price}G'
-                f' (+분무 {item.mist_bonus}G)'
-                for item in (PLANTS[key] for key in REGULAR_PLANTS)
+                f' (+분무 {item.mist_bonus}G) · {item.shop_tag}'
+                for item in PLANTS.values()
             )
+            + '\n• 민들레: 홀씨 바람놀이 완료 보상 · 신규 관엽식물: 식물 뽑기 해금 후 씨앗 구매'
             + '\n• 랜덤 씨앗 20G · 고대 0.1% · 고대 꽃 기본 판매 500G'
         )
         catalog.setObjectName('small')
@@ -602,6 +613,10 @@ class Window(QWidget):
         self.developer_mode.setChecked(self.demo)
         self.developer_mode.toggled.connect(self.set_developer_mode)
         layout.addWidget(self.developer_mode)
+        self.unlimited_sunlight = QCheckBox('햇빛 무한 · 테스트 전용')
+        self.unlimited_sunlight.setChecked(True)
+        self.unlimited_sunlight.toggled.connect(self.set_test_sunlight)
+        layout.addWidget(self.unlimited_sunlight)
         developer_hint = QLabel(
             '켜면 새 테스트 정원 또는 이전 테스트 저장을 엽니다. '
             '끄면 원래 정원으로 돌아갑니다. 꽃·재화는 서로 옮겨지지 않습니다.'
@@ -702,6 +717,8 @@ class Window(QWidget):
         active = connected and not self.demo and not self._cloud_busy
         if not configured:
             status = 'Google OAuth 클라이언트 설정이 필요합니다.'
+        elif getattr(self.cloud, 'reauth_required', False):
+            status = 'Google 계정 재연결 필요 · ' + getattr(self.cloud, 'last_error', '')
         elif connected:
             status = '연결됨 · ' + (self.cloud.email or 'Google 계정')
             if self.demo:
@@ -709,9 +726,9 @@ class Window(QWidget):
             elif self._startup_cloud_syncing:
                 status += ' · Drive 저장 불러오는 중'
             else:
-                status += ' · 5분마다 자동 백업'
-                if self._cloud_auto_error:
-                    status += ' · 다음 주기에 재시도'
+                status += ' · 5분마다 자동 백업' if getattr(self.cloud, 'auto_retry_allowed', True) else ' · 자동 백업 중지'
+                if self._cloud_auto_error or not getattr(self.cloud, 'auto_retry_allowed', True):
+                    status += ' · ' + (getattr(self.cloud, 'last_error', '') or '자동 백업 실패 · 다음 주기에 재시도')
                 elif self._cloud_last_backup_at:
                     status += ' · 최근 ' + time.strftime('%H:%M', time.localtime(self._cloud_last_backup_at))
         else:
@@ -756,6 +773,12 @@ class Window(QWidget):
         try:
             result = future.result()
         except (CloudError, OSError, ValueError) as exc:
+            if isinstance(exc, CloudError):
+                if hasattr(self.cloud, '_record_error'):
+                    self.cloud._record_error(exc)
+                if not exc.retryable:
+                    self.cloud_auto.stop()
+            self._sync_cloud_controls()
             if self._startup_cloud_syncing:
                 self._complete_startup_cloud_sync()
             if self._close_uploading:
@@ -768,7 +791,7 @@ class Window(QWidget):
                         pass
                 QMessageBox.warning(
                     self, 'Google Drive 백업 실패',
-                    f'{exc}\n\n로컬 정원은 저장했습니다. Google 계정을 다시 연결한 뒤 백업하세요.',
+                    f'{exc}\n\n로컬 정원은 저장했습니다. ' + (exc.guidance if isinstance(exc, CloudError) else '잠시 후 다시 백업하세요.'),
                 )
                 self._closing = True
                 self.close()
@@ -782,6 +805,9 @@ class Window(QWidget):
                 self._start_close_upload()
             return
         done(result)
+        if (self.cloud and self.cloud.connected and not self.demo and not self._closing
+                and getattr(self.cloud, 'auto_retry_allowed', True)):
+            self.cloud_auto.start()
         if self._close_requested and not self._cloud_busy and not self._close_uploading:
             self._start_close_upload()
 
@@ -834,7 +860,7 @@ class Window(QWidget):
     def _complete_startup_cloud_sync(self):
         self._startup_cloud_syncing = False
         self.pages.setEnabled(True)
-        if self.cloud and self.cloud.connected and not self.demo:
+        if self.cloud and self.cloud.connected and not self.demo and getattr(self.cloud, "auto_retry_allowed", True):
             self.cloud_auto.start()
         self._sync_cloud_controls()
 
@@ -845,6 +871,8 @@ class Window(QWidget):
 
     def auto_backup_cloud(self):
         """Upload changed local data every five minutes without overwriting a newer cloud save."""
+        if self.cloud and not getattr(self.cloud, "auto_retry_allowed", True):
+            return
         if not self.cloud or not self.cloud.connected or self.demo or self._cloud_busy:
             return False
         if not self.persist():
@@ -972,6 +1000,8 @@ class Window(QWidget):
         try:
             restored = self.store.replace_from_cloud(envelope['save'], self.now())
             self.close_collection_picker()
+            if self._gacha_board_window:
+                self._gacha_board_window.done(0)
             self.desktop.close()
             self._cancel_wind_game()
             self.garden.restore(restored.to_dict())
@@ -1022,14 +1052,14 @@ class Window(QWidget):
         gacha_layout = QVBoxLayout(gacha_card)
         gacha_layout.setContentsMargins(10, 9, 10, 9)
         gacha_layout.setSpacing(3)
-        gacha_heading = QLabel('🎲 꽃길 뽑기 · 60칸')
+        gacha_heading = QLabel('🎲 꽃길 뽑기')
         gacha_heading.setStyleSheet('font-size:16px;font-weight:700;')
         gacha_layout.addWidget(gacha_heading)
         self.gacha_offer = QLabel()
         self.gacha_offer.setWordWrap(True)
         gacha_layout.addWidget(self.gacha_offer)
-        self.gacha_button = self.button(gacha_layout, '주사위 2개 굴리기 →', self.open_gacha_board)
-        self.gacha_button.setAccessibleName('꽃길 뽑기 60칸 보드 열기')
+        self.gacha_button = self.button(gacha_layout, '주사위 굴리기', self.open_gacha_board)
+        self.gacha_button.setAccessibleName('꽃길 뽑기 보드 열기')
         layout.addWidget(gacha_card)
         seed_title = QLabel('재배 상점 · 골드')
         seed_title.setObjectName('section')
@@ -1054,8 +1084,9 @@ class Window(QWidget):
         theme_title = QLabel('정원 배경 · 햇빛')
         theme_title.setObjectName('section')
         layout.addWidget(theme_title)
-        self.theme_picker = IconPicker((theme.key, theme.label, theme_icon(theme)) for theme in THEMES.values())
+        self.theme_picker = CosmeticPicker((theme.key, theme.label, theme_icon(theme)) for theme in THEMES.values())
         self.theme_picker.buttons[self.garden.equipped_theme].setChecked(True)
+        self.theme_picker.reveal_selected()
         layout.addWidget(self.theme_picker)
         self.theme_info = QLabel()
         self.theme_info.setObjectName('small')
@@ -1072,8 +1103,9 @@ class Window(QWidget):
         skin_scope.setObjectName('small')
         skin_scope.setWordWrap(True)
         layout.addWidget(skin_scope)
-        self.skin_picker = IconPicker((skin.key, skin.label, skin_icon(skin)) for skin in POT_SKINS.values())
+        self.skin_picker = CosmeticPicker((skin.key, skin.label, skin_icon(skin)) for skin in POT_SKINS.values())
         self.skin_picker.buttons[self.garden.equipped_skin].setChecked(True)
+        self.skin_picker.reveal_selected()
         layout.addWidget(self.skin_picker)
         self.skin_info = QLabel()
         self.skin_info.setObjectName('small')
@@ -1083,7 +1115,7 @@ class Window(QWidget):
         self.buy_skin_button = self.button(skin_row, '스킨 구매', self.buy_selected_skin)
         self.apply_skin_button = self.button(skin_row, '스킨 적용', self.apply_selected_skin)
         layout.addLayout(skin_row)
-        self.locked_catalog = LockedCatalog()
+        self.locked_catalog = LockedCatalog(self.garden)
         layout.addSpacing(8)
         layout.addWidget(self.locked_catalog)
         layout.addStretch()
@@ -1126,9 +1158,9 @@ class Window(QWidget):
 
     def buy_selected_theme(self):
         theme = garden_theme(self.theme_picker.selected)
-        if not self.garden.buy_theme(theme.key):
+        if not self.garden.buy_theme(theme.key, test_free=self.test_sunlight):
             return False
-        self.notify(f'{theme.name} 구매 · 햇빛 {theme.price} 사용', important=True)
+        self.notify(f'{theme.name} · 테스트 구매 · 햇빛 미차감' if self.test_sunlight else f'{theme.name} 구매 · 햇빛 {theme.price} 사용', important=True)
         return True
 
     def apply_selected_theme(self):
@@ -1140,9 +1172,9 @@ class Window(QWidget):
 
     def buy_selected_skin(self):
         skin = pot_skin(self.skin_picker.selected)
-        if not self.garden.buy_skin(skin.key):
+        if not self.garden.buy_skin(skin.key, test_free=self.test_sunlight):
             return False
-        self.notify(f'{skin.name} 구매 · 햇빛 {skin.price} 사용', important=True)
+        self.notify(f'{skin.name} · 테스트 구매 · 햇빛 미차감' if self.test_sunlight else f'{skin.name} 구매 · 햇빛 {skin.price} 사용', important=True)
         return True
 
     def apply_selected_skin(self):
@@ -1449,10 +1481,24 @@ class Window(QWidget):
         self.notify(message, important=True)
         return True
 
+    @property
+    def test_sunlight(self):
+        return self.demo and self._test_sunlight
+
+    def set_test_sunlight(self, enabled):
+        self._test_sunlight = bool(enabled) if self.demo else False
+        self.refresh()
+        if self._gacha_board_window:
+            self._gacha_board_window.sync()
+
     def _sync_developer_controls(self):
         self.developer_mode.blockSignals(True)
         self.developer_mode.setChecked(self.demo)
         self.developer_mode.blockSignals(False)
+        self.unlimited_sunlight.blockSignals(True)
+        self.unlimited_sunlight.setChecked(self.test_sunlight)
+        self.unlimited_sunlight.setEnabled(self.demo)
+        self.unlimited_sunlight.blockSignals(False)
         self.fast_forward_button.setEnabled(self.demo)
         title = '개발자 · 테스트 정원' if self.demo else '아침 한 송이'
         self.title.setText(title)
@@ -1495,7 +1541,10 @@ class Window(QWidget):
             target_store.save(target_garden)
             self.desktop.close()
             self.garden.restore(target_garden.to_dict())
+            if self._gacha_board_window:
+                self._gacha_board_window.done(0)
             self.store, self.demo = target_store, enabled
+            self._test_sunlight = bool(enabled)
             self._local_saved_at = target_store.path.stat().st_mtime
             self._load_cloud_state()
             self.offset = max(0, target_garden.last_update - time.time()) if enabled else 0
@@ -1706,10 +1755,10 @@ class Window(QWidget):
             )
         self.shop_gold.setText(f'{garden.coins}G')
         self.shop_gold.setAccessibleName(f'골드 {garden.coins}G')
-        self.shop_sunlight.setText(str(garden.sunlight))
+        self.shop_sunlight.setText('∞ · 테스트' if self.test_sunlight else str(garden.sunlight))
         self.shop_sunlight.setAccessibleName(f'햇빛 {garden.sunlight}')
         self.gacha_offer.setText(
-            f'무료권 {garden.gacha["tickets"]}장 · 1회 햇빛 10 / 10회 햇빛 100'
+            '테스트 뽑기 · 햇빛/무료권 미차감' if self.test_sunlight else f'무료권 {garden.gacha["tickets"]}장 · 1회 햇빛 10 / 10회 햇빛 100'
         )
         self.shop_pots.setText(f'{len(garden.pots)}/{len(POT_PRICES)}')
         self.shop_pots.setAccessibleName(f'화분 {len(garden.pots)}/{len(POT_PRICES)}')
@@ -1724,12 +1773,19 @@ class Window(QWidget):
             purpose = '주말용' if species in WEEKEND_PLANTS else '휴가용'
             self.shop_info.setText(self.shop_info.text() + f'\n{purpose} · 접속 없이 개화까지 성장 · 휴가 모드는 꺼 두세요')
         self.buy_seed_button.setText(f'{item.name} 씨앗 구매 · {item.seed_price}G')
-        self.buy_seed_button.setEnabled(garden.coins >= item.seed_price)
+        self.buy_seed_button.setEnabled(garden.coins >= item.seed_price and (species not in GACHA_PLANTS or species in garden.unlocked_plants))
         if species == 'random':
             self.shop_info.setText('외관으로 정체를 추측해 보세요 · 개화 후 이름 공개\n고대 0.1% · 일반 3종 각 33.3% · 고대 꽃 기본 500G')
             self.shop_info.setToolTip('구매할 때 결과가 결정·저장됩니다. 고대 꽃 분무 시 550G')
             self.buy_seed_button.setText(f'랜덤 씨앗 구매 · {RANDOM_SEED_PRICE}G')
             self.buy_seed_button.setEnabled(garden.coins >= RANDOM_SEED_PRICE)
+        for picker in (self.species_picker, self.shop_picker):
+            for key in GACHA_PLANTS:
+                if key not in garden.unlocked_plants:
+                    picker.buttons[key].setToolTip('식물 뽑기로 먼저 해금하세요.')
+                    picker.buttons[key].setEnabled(False)
+                else:
+                    picker.buttons[key].setEnabled(True)
         price = garden.next_pot_price
         self.buy_pot_button.setEnabled(price is not None and garden.coins >= price)
         self.buy_pot_button.setText('화분 4개 보유 중' if price is None else f'{len(garden.pots) + 1}번 화분 구매 · {price}G')
@@ -1751,10 +1807,10 @@ class Window(QWidget):
         theme = garden_theme(self.theme_picker.selected)
         owned = theme.key in garden.owned_themes
         equipped = theme.key == garden.equipped_theme
-        state = '사용 중' if equipped else ('소유 중' if owned else f'가격 햇빛 {theme.price}')
+        state = '사용 중' if equipped else ('소유 중' if owned else '뽑기 전용' if theme.gacha_only else f'가격 햇빛 {theme.price}')
         self.theme_info.setText(f'{theme.description} · {state}')
-        self.buy_theme_button.setText('보유한 배경' if owned else f'구매 · 햇빛 {theme.price}')
-        self.buy_theme_button.setEnabled(not owned and garden.sunlight >= theme.price)
+        self.buy_theme_button.setText('보유한 배경' if owned else '뽑기 전용' if theme.gacha_only else '테스트 구매 · 햇빛 미차감' if self.test_sunlight else f'구매 · 햇빛 {theme.price}')
+        self.buy_theme_button.setEnabled(not owned and not theme.gacha_only and (self.test_sunlight or garden.sunlight >= theme.price))
         self.apply_theme_button.setText('사용 중' if equipped else '정원에 적용')
         self.apply_theme_button.setEnabled(owned and not equipped)
         self.leaf_shop_info.setText(
@@ -1769,10 +1825,10 @@ class Window(QWidget):
         owned = skin.key in garden.owned_skins
         equipped = skin.key == garden.equipped_skin
         self.skin_info.setText(skin.description)
-        self.buy_skin_button.setText('보유한 스킨' if owned else ('뽑기 전용' if skin.gacha_only else f'구매 · 햇빛 {skin.price}'))
-        self.buy_skin_button.setEnabled(not owned and not skin.gacha_only and garden.sunlight >= skin.price)
+        self.buy_skin_button.setText('보유한 스킨' if owned else ('뽑기 전용' if skin.gacha_only else '테스트 구매 · 햇빛 미차감' if self.test_sunlight else f'구매 · 햇빛 {skin.price}'))
+        self.buy_skin_button.setEnabled(not owned and not skin.gacha_only and (self.test_sunlight or garden.sunlight >= skin.price))
         self.buy_skin_button.setToolTip(
-            '꽃길 뽑기 · 화분 SSR에서 획득' if skin.gacha_only
+            '꽃길 뽑기 · 화분 분류에서 획득' if skin.gacha_only
             else f'보유 햇빛 {garden.sunlight} · 부족 {max(0, skin.price - garden.sunlight)}'
         )
         self.apply_skin_button.setText('사용 중' if equipped else '모든 화분에 적용')
@@ -1780,6 +1836,11 @@ class Window(QWidget):
         self.desktop_opacity.blockSignals(True)
         self.desktop_opacity.setValue(round(garden.desktop_opacity * 100))
         self.desktop_opacity.blockSignals(False)
+        self.desktop_scale.blockSignals(True)
+        self.desktop_scale.setValue(garden.desktop_scale // 10)
+        self.desktop_scale.blockSignals(False)
+        self.desktop_scale_label.setText(f'바탕화면 꽃 크기 · {garden.desktop_scale}%')
+        self.locked_catalog.show_page()
         self.desktop.sync()
         self.collection_garden.meadow.desktop_ids = set(self.desktop.windows)
         self.collection_garden.sync()

@@ -101,7 +101,9 @@ class GardenInterface(unittest.TestCase):
         self.assertIsNotNone(self.window.pages._animation)
         for _ in range(8):
             self.window.next_page.click()
-        QTest.qWait(240)
+        deadline = time.monotonic() + 2
+        while self.window.pages._animation is not None and time.monotonic() < deadline:
+            QTest.qWait(10)
         self.assertIsNone(self.window.pages._animation)
         self.assertEqual(self.window.pages._overlays, [])
         self.assertEqual(self.window.pages.currentIndex(), POT_PAGE)
@@ -319,6 +321,8 @@ class GardenInterface(unittest.TestCase):
                 scroll.ensureWidgetVisible(picker, 0, 0)
                 self.app.processEvents()
                 for button in picker.buttons.values():
+                    if button.isHidden():
+                        continue
                     self.assertFalse(button.icon().isNull())
                     self.assertTrue(scroll.viewport().rect().contains(button.mapTo(scroll.viewport(), button.rect().topLeft())))
                     self.assertTrue(scroll.viewport().rect().contains(button.mapTo(scroll.viewport(), button.rect().bottomRight())))

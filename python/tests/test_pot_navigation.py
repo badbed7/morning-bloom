@@ -1,3 +1,4 @@
+import time
 import tempfile
 import unittest
 from pathlib import Path
@@ -10,7 +11,7 @@ from PySide6.QtWidgets import QApplication, QComboBox
 
 from morning_bloom.app import POT_PAGE, SHOP_PAGE, Window
 from morning_bloom.model import Garden
-from morning_bloom.plant_catalog import REGULAR_PLANTS
+from morning_bloom.plant_catalog import REGULAR_PLANTS, SEED_PLANTS
 from morning_bloom.storage import SaveError, Store
 
 
@@ -61,7 +62,7 @@ class PotNavigation(unittest.TestCase):
             self.window.pages.widget(POT_PAGE).findChildren(QComboBox),
             [],
         )
-        self.assertEqual(set(self.window.species_picker.buttons), {*REGULAR_PLANTS, 'random'})
+        self.assertEqual(set(self.window.species_picker.buttons), {*SEED_PLANTS, 'random'})
         self.assertTrue(all(not button.icon().isNull() for button in self.window.species_picker.buttons.values()))
         self.assertEqual(self.window.pot_name.text(), '화분 1 / 2 · 데이지')
         self.assertIn('성장 중', self.window.pot_name.toolTip())
@@ -93,7 +94,9 @@ class PotNavigation(unittest.TestCase):
             self.assertEqual(len(slides._overlays), 2)
             self.assertEqual(slides._animation.animationAt(1).startValue().x(),
                              slides.width() * direction)
-            QTest.qWait(240)
+            deadline = time.monotonic() + 2
+            while self.window.pot_slides._animation is not None and time.monotonic() < deadline:
+                QTest.qWait(10)
             self.assertIsNone(slides._animation)
             self.assertEqual(slides._overlays, [])
 
@@ -164,7 +167,9 @@ class PotNavigation(unittest.TestCase):
         for _ in range(9):
             QTest.mouseClick(self.window.next_pot, Qt.LeftButton)
         self.assertEqual(self.garden.selected, 1)
-        QTest.qWait(240)
+        deadline = time.monotonic() + 2
+        while self.window.pot_slides._animation is not None and time.monotonic() < deadline:
+            QTest.qWait(10)
         self.assertIsNone(self.window.pot_slides._animation)
         self.assertEqual(self.window.pot_slides._overlays, [])
         self.window.previous_pot.click()

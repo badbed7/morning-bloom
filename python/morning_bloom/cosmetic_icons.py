@@ -21,6 +21,11 @@ def theme_icon(theme):
     for x, y in ((10, 15), (22, 24), (34, 15)):
         painter.drawLine(x, y, x - 2, y - 3)
         painter.drawLine(x, y, x + 2, y - 4)
+    from .catalog_art import paint_garden_pattern
+    painter.save()
+    painter.scale(.3, .3)
+    paint_garden_pattern(painter, QRectF(6, 10, 133, 100).toRect(), theme.key)
+    painter.restore()
     painter.end()
     return QIcon(pixmap)
 

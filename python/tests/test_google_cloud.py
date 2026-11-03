@@ -42,13 +42,13 @@ class GoogleCloudSave(unittest.TestCase):
         self.assertIn('https://www.googleapis.com/auth/drive.appdata', query['scope'][0])
         self.assertNotIn('client_secret', query)
 
-    def test_google_error_keeps_description(self):
+    def test_google_error_keeps_code_and_redacts_server_description(self):
         error = urllib.error.HTTPError(
             'https://example.invalid', 400, 'Bad Request', {},
             io.BytesIO(b'{"error":"invalid_request","error_description":"missing parameter"}'),
         )
         with patch('urllib.request.urlopen', side_effect=error):
-            with self.assertRaisesRegex(CloudError, 'missing parameter'):
+            with self.assertRaisesRegex(CloudError, 'invalid_request'):
                 _request('https://example.invalid')
 
     def test_refresh_sends_desktop_client_credentials(self):

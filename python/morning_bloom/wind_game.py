@@ -33,7 +33,7 @@ def duration_text(seconds):
 
 
 class WindState:
-    """UI-independent flight. Only held input advances reward progress."""
+    """UI-independent flight. Airborne horizontal travel advances reward progress."""
 
     player_x = .28
 
@@ -72,8 +72,6 @@ class WindState:
         while remaining > 1e-9:
             dt = min(remaining, 1 / 120)
             remaining -= dt
-            if held:
-                self.progress = min(float(WIND_BASE_SECONDS), self.progress + dt)
             self.elapsed += dt
             self.sparkle = max(0.0, self.sparkle - dt)
             self.wind += (float(held) - self.wind) * (1 - math.exp(-dt / .18))
@@ -92,9 +90,11 @@ class WindState:
                 self.grounded = True
             else:
                 self.grounded = False
+            if not self.grounded:
+                self.progress = min(float(WIND_BASE_SECONDS), self.progress + dt * 1.15 ** self.upgrade)
             for gate in self.gates:
                 if not self.grounded:
-                    gate['x'] -= .13 * dt
+                    gate['x'] -= .13 * dt * 1.15 ** self.upgrade
                 if not gate['collected'] and abs(gate['x'] - self.player_x) <= .052 and abs(gate['y'] - self.y) <= .105:
                     gate['collected'] = True
                     self.hits += 1
@@ -102,12 +102,12 @@ class WindState:
                     self.sparkle = .4
             self.gates = [gate for gate in self.gates if gate['x'] > -.15]
             if not self.grounded:
-                self.spawn_wait -= dt
+                self.spawn_wait -= dt * 1.15 ** self.upgrade
             if self.spawn_wait <= 0 and not self.grounded:
                 self.target_y = max(.22, min(.78, self.target_y + self.rng.uniform(-.22, .22)))
                 self.gates.append(dict(x=1.05, y=self.target_y, collected=False))
                 self.spawn_wait += 10.0
-        if held and WIND_BASE_SECONDS - self.progress < 1e-7:
+        if WIND_BASE_SECONDS - self.progress < 1e-7:
             self.progress = float(WIND_BASE_SECONDS)
         self.ended = self.progress >= WIND_BASE_SECONDS
         return new_hits
@@ -278,7 +278,7 @@ class WindGame(QDialog):
         self.canvas = WindCanvas(self)
         self.canvas.heldChanged.connect(lambda held: self.set_held('canvas', held))
         layout.addWidget(self.canvas)
-        self.hint = QLabel('누를 때만 게이지 증가 · 놓으면 하강\n바닥에서 전진 정지 · 버튼·비행장·스페이스 조작')
+        self.hint = QLabel('공중 전진 중 게이지 증가 · 바닥에서는 정지\n바닥에서 전진 정지 · 버튼·비행장·스페이스 조작')
         self.hint.setWordWrap(True)
         self.hint.setStyleSheet('font-size:11px;color:#778575;')
         layout.addWidget(self.hint)
@@ -295,6 +295,12 @@ class WindGame(QDialog):
         layout.addWidget(self.start_button)
         for button in (self.close_button, self.hold_button, self.start_button):
             button.setAutoDefault(False)
+        self.upgrade_buttons = {}
+        for kind in ('speed', 'reward'):
+            button = QPushButton()
+            button.clicked.connect(lambda checked=False, k=kind: self.buy_upgrade(k))
+            self.upgrade_buttons[kind] = button
+            layout.addWidget(button)
         self.timer = QTimer(self)
         self.timer.setInterval(16)
         self.timer.timeout.connect(self.tick)
@@ -303,6 +309,18 @@ class WindGame(QDialog):
         self.update_controls()
         if self.state.ended:
             QTimer.singleShot(0, self.finish_play)
+
+    def buy_upgrade(self, kind):
+        owner = self.parentWidget()
+        if self.reward_pending or self.ring_pending or self.finished_game:
+            return False
+        self.pause()
+        if not owner.act(lambda: owner.garden.buy_wind_upgrade(kind)):
+            self.update_controls()
+            return False
+        self.state.upgrade = owner.garden.wind_upgrade
+        self.update_controls()
+        return True
 
     def drag(self, event):
         if event.button() == Qt.LeftButton and self.windowHandle():
@@ -400,12 +418,22 @@ class WindGame(QDialog):
         self.update_controls()
 
     def update_controls(self):
+        garden = self.parentWidget().garden
+        for kind, button in self.upgrade_buttons.items():
+            level = garden.wind_upgrade if kind == 'speed' else garden.wind_reward_upgrade
+            price = garden.wind_upgrade_price(kind, level)
+            current = f'{1.15 ** level:.2f}배' if kind == 'speed' else f'고리 10개당 {1 + level}G'
+            following = f'{1.15 ** (level + 1):.2f}배' if kind == 'speed' else f'{2 + level}G'
+            title = '이동 속도' if kind == 'speed' else '고리 보상'
+            button.setText(f'{title} {level}단계 · {current}' + (' · 최대' if price is None else f' → {following} · {price}G'))
+            button.setEnabled(price is not None and garden.coins >= price and not self.reward_pending and not self.ring_pending and not self.finished_game)
+
         ratio = self.state.ratio
         self.bar.setValue(round(ratio * self.bar.maximum()))
         self.bar.setFormat(f'{ratio * 100:.2f}%')
         self.status.setText(
-            f'민들레까지 {ratio * 100:.2f}% · 남은 누르기 {duration_text(self.state.remaining_seconds)}\n'
-            f'고리 {self.state.hits % WIND_RINGS_PER_GOLD}/{WIND_RINGS_PER_GOLD} · 10개마다 1G'
+            f'민들레까지 {ratio * 100:.2f}% · 남은 비행 {duration_text(self.state.remaining_seconds / 1.15 ** self.state.upgrade)}\n'
+            f'고리 {self.state.hits % WIND_RINGS_PER_GOLD}/{WIND_RINGS_PER_GOLD} · 10개마다 {1 + garden.wind_reward_upgrade}G'
         )
         self.hold_button.setEnabled(not self.paused and not self.finished_game and not self.reward_pending and not self.ring_pending)
         self.start_button.setVisible(not self.running or self.paused)

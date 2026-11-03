@@ -1,3 +1,5 @@
+from morning_bloom.plant_catalog import SEED_PLANTS
+from legacy_fixture import v14_shape
 import json
 import tempfile
 import unittest
@@ -18,6 +20,7 @@ def flower(index=0, species='daisy'):
 
 def v4_data(garden):
     data = garden.to_dict()
+    data = v14_shape(data)
     data.pop('gacha')
     data['seeds'] = {key: data['seeds'][key] for key in LEGACY_REGULAR_PLANTS}
     for key in V8_FIELDS | V12_FIELDS | V13_FIELDS:
@@ -151,6 +154,7 @@ class CosmeticsAndMigration(unittest.TestCase):
     def test_v6_migration_preserves_inventory_and_creates_original_backup(self):
         data = Garden(100, coins=432, sunlight=30, fertilizer=2, collection=[flower()],
                       owned_themes=['grass', 'sky'], equipped_theme='sky').to_dict()
+        data = v14_shape(data)
         gacha = data.pop('gacha')
         additions = {key: data.pop(key) for key in V8_FIELDS | V12_FIELDS | V13_FIELDS}
         data.pop('owned_skins')
@@ -163,8 +167,9 @@ class CosmeticsAndMigration(unittest.TestCase):
             store.path.write_text(raw, encoding='utf-8')
             garden = store.load(100)
             self.assertEqual(garden.to_dict(), {**data, **additions, 'gacha': gacha, 'schema': Garden.CURRENT_SCHEMA,
-                                              'seeds': {**dict.fromkeys(REGULAR_PLANTS, 0), **data['seeds']},
-                                              'owned_skins': ['terracotta'], 'equipped_skin': 'terracotta'})
+                                              'seeds': {**dict.fromkeys(SEED_PLANTS, 0), **data['seeds']},
+                                              'owned_skins': ['terracotta'], 'equipped_skin': 'terracotta',
+                                              'desktop_scale': 100, 'unlocked_plants': [], 'discovered_plants': ['daisy'], 'wind_reward_upgrade': 0})
             store.save(garden)
             self.assertEqual(store.migration_backup.name, 'garden.json.v6-migration.bak')
             self.assertEqual(store.migration_backup.read_text(encoding='utf-8'), raw)

@@ -1,3 +1,5 @@
+from morning_bloom.plant_catalog import SEED_PLANTS
+from legacy_fixture import v14_shape
 import json
 import math
 import tempfile
@@ -73,6 +75,7 @@ class RulesAndMigration(unittest.TestCase):
     def test_v7_preserves_all_inventory_and_raw_backup(self):
         garden = growing()
         data = garden.to_dict()
+        data = v14_shape(data)
         data.pop('gacha')
         for key in V8_FIELDS | V12_FIELDS | V13_FIELDS:
             data.pop(key)
@@ -86,7 +89,7 @@ class RulesAndMigration(unittest.TestCase):
             self.assertEqual((upgraded.fertilizer, upgraded.fertilizer_reserve, upgraded.reward_wait), (5, 5, 130))
             for key in ('pots', 'coins', 'collection', 'settings', 'owned_skins'):
                 self.assertEqual(upgraded.to_dict()[key], data[key])
-            self.assertEqual(upgraded.seeds, {**dict.fromkeys(REGULAR_PLANTS, 0), **data['seeds']})
+            self.assertEqual(upgraded.seeds, {**dict.fromkeys(SEED_PLANTS, 0), **data['seeds']})
             store.save(upgraded)
             self.assertEqual(store.migration_backup.name, 'garden.json.v7-migration.bak')
             self.assertEqual(store.migration_backup.read_text(encoding='utf-8'), raw)
@@ -143,6 +146,7 @@ class RulesAndMigration(unittest.TestCase):
         garden = collected()
         garden.place_desktop(garden.collection[0]['id'], -240, 100)
         data = {**garden.to_dict(), 'schema': 8}
+        data = v14_shape(data)
         data.pop('gacha')
         for key in V12_FIELDS | V13_FIELDS:
             data.pop(key)

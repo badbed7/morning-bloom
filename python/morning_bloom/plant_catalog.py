@@ -113,6 +113,21 @@ PLANTS['dandelion'] = PlantDefinition(
 )
 
 
+# Gacha unlocks are separate from ordinary shop and mystery-seed pools.
+from .content_names import PLANT_NAMES
+GACHA_PLANTS = tuple(f'catalog_plant_{i:03}' for i in range(8))
+# hours, seed gold, sale gold: comparable margins to existing flowers.
+GACHA_PLANT_STATS = ((48, 35, 100), (24, 20, 50), (12, 15, 32), (72, 50, 150),
+                     (48, 35, 100), (72, 50, 150), (6, 10, 20), (24, 20, 50))
+for i, (key, name, stats) in enumerate(zip(GACHA_PLANTS, PLANT_NAMES, GACHA_PLANT_STATS)):
+    hours, price, sale = stats
+    PLANTS[key] = PlantDefinition(key, name, hours * HOUR, price, sale, 'start_only',
+        '꽃길 뽑기로 영구 해금 후 씨앗 구매', 18, 26,
+        ('#ece9cf', '#f0ccd9', '#e7dba8', '#ed9eb9', '#f3dfe6', '#40564b', '#aaa08a', '#985c6d')[i],
+        '#d3bd74', '#71966a', '#b98665')
+SEED_PLANTS = REGULAR_PLANTS + GACHA_PLANTS
+
+
 def roll_mystery_seed(draw):
     """Exactly one of 1,000 equally likely tickets is ancient."""
     ticket = draw(1000)

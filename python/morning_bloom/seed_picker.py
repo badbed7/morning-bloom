@@ -6,7 +6,7 @@ from PySide6.QtWidgets import QPushButton
 from .flower_art import paint_collection_flower
 from .icon_picker import IconPicker
 from .navigation import chevron_icon
-from .plant_catalog import HOUR, PLANTS, REGULAR_PLANTS, RANDOM_SEED_PRICE, VACATION_PLANTS
+from .plant_catalog import HOUR, PLANTS, REGULAR_PLANTS, SEED_PLANTS, GACHA_PLANTS, RANDOM_SEED_PRICE, VACATION_PLANTS
 
 
 def seed_packet_icon(definition=None):
@@ -37,7 +37,7 @@ def seed_packet_icon(definition=None):
 class SeedPicker(IconPicker):
     def __init__(self, shop=False):
         super().__init__([(key, PLANTS[key].name, seed_packet_icon(PLANTS[key]))
-                          for key in REGULAR_PLANTS] + [('random', '랜덤', seed_packet_icon())])
+                          for key in SEED_PLANTS] + [('random', '랜덤', seed_packet_icon())])
         self.shop = shop
         if shop:
             self.setFixedHeight(88)
@@ -53,6 +53,7 @@ class SeedPicker(IconPicker):
             button.clicked.connect(lambda checked=False, step=direction: self.change_page(step))
         self.layout().insertWidget(0, self.previous)
         self.layout().addWidget(self.next)
+        self.layout().setSpacing(4)
         self.selectionChanged.connect(self.reveal_selected)
         self.show_page()
         self.update_counts({})

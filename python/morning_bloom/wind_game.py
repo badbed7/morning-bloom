@@ -13,7 +13,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QProgressBar,
     QPushButton,
-    QStyle,
     QVBoxLayout,
     QWidget,
 )
@@ -62,7 +61,7 @@ class WindState:
         return max(0.0, WIND_BASE_SECONDS - self.progress)
 
     def press(self):
-        self.velocity = max(-.7, min(self.velocity, -.18))
+        self.velocity = max(-.7, min(self.velocity, -.07))
 
     def step(self, seconds, held):
         if self.ended or not math.isfinite(seconds) or seconds <= 0:
@@ -254,9 +253,8 @@ class WindGame(QDialog):
         self.title.setStyleSheet('font-size:18px;font-weight:600;')
         self.title.mousePressEvent = self.drag
         header.addWidget(self.title, 1)
-        self.close_button = QPushButton()
-        self.close_button.setIcon(self.style().standardIcon(QStyle.SP_DialogCloseButton))
-        self.close_button.setStyleSheet('padding:0;')
+        self.close_button = QPushButton('X')
+        self.close_button.setObjectName('quiet')
         self.close_button.setFixedSize(28, 28)
         self.close_button.setAccessibleName('미니게임 닫기')
         self.close_button.setToolTip('진행도를 저장하고 닫기 · Esc')

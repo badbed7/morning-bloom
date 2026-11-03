@@ -50,7 +50,7 @@ def main():
         (bootstrap / 'release').mkdir(parents=True)
         (bootstrap / 'assets/icons').mkdir(parents=True)
         shutil.copyfile(icon, bootstrap / 'assets/icons/morning-bloom.ico')
-        for name in ('run-python.bat', 'release/launcher.py', 'release/update_core.py', 'release/release_config.py'):
+        for name in ('run-python.bat', 'release/launcher.py', 'release/update_core.py', 'release/live_update.py', 'release/release_config.py'):
             shutil.copyfile(ROOT / name, bootstrap / name)
         (bootstrap / 'release/release_config.py').write_text(f'REPOSITORY = {repository!r}\n', encoding='utf-8')
         shutil.copyfile(payload, bootstrap / payload.name)
@@ -60,6 +60,8 @@ def main():
             'Install Python 3.12 64-bit with Python Launcher and Tcl/Tk once.\n'
             'Extract all files, then run run-python.bat. Do not move the BAT alone.\n'
             'Each launch checks GitHub Releases, verifies and installs an update, then starts the Python game.\n'
+            'This launcher also prepares updates while playing; choose Apply in the game to save and restart.\n'
+            'For first adoption, replace the entire old launcher ZIP once. Do not delete saved gardens.\n'
             'Internet is required to install dependencies for the first time. Later offline launches use the installed version.\n'
             'Saved gardens: %LOCALAPPDATA%/MorningBloomPython (shared with the EXE version).\n'
             'Game installations and dependency runtimes: %LOCALAPPDATA%/MorningBloomPythonLauncher.\n', encoding='utf-8')

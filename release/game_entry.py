@@ -47,6 +47,48 @@ def smoke_test():
     return 0
 
 
+def live_update_smoke():
+    """Packaged game subprocess exercising the real settings/apply/close path."""
+    import os
+    from PySide6.QtCore import QTimer, QLockFile
+    from PySide6.QtWidgets import QApplication
+    from morning_bloom.app import Window
+    from morning_bloom.storage import Store
+    root = Path(os.environ['MORNING_BLOOM_UPDATE_SMOKE_ROOT'])
+    if not root.is_dir():
+        raise ValueError('Missing isolated update smoke directory')
+    app = QApplication([])
+    app.setApplicationName('MorningBloomUpdateBuildCheck')
+    lock = QLockFile(str(root / 'garden.lock'))
+    if not lock.tryLock(0):
+        raise ValueError('Old game still holds the garden lock')
+    store = Store(root / 'garden.json')
+    garden = store.load(time.time())
+    first = not store.path.exists()
+    if first:
+        garden.coins = 321
+    if garden.coins != 321:
+        raise ValueError('Update did not preserve the saved garden')
+    window = Window(store, garden, False, save_lock=lock)
+    window.show()
+    expected = os.environ['MORNING_BLOOM_UPDATE_SMOKE_TARGET']
+    successful = [False]
+    def changed(state):
+        if window.update_client.version == expected:
+            successful[0] = True
+            window.close()
+        elif state.get('ready') and not window._update_busy:
+            successful[0] = True
+            window.apply_live_update()
+    window.update_client.changed.connect(changed)
+    QTimer.singleShot(100, lambda: window.update_client.command('check'))
+    QTimer.singleShot(25000, lambda: app.exit(3))
+    result = app.exec()
+    if not successful[0]:
+        return 4
+    return result
+
+
 def checked_smoke_test(log_path):
     with Path(log_path).open('a', encoding='utf-8') as log:
         with contextlib.redirect_stdout(log), contextlib.redirect_stderr(log):
@@ -58,6 +100,8 @@ def checked_smoke_test(log_path):
 
 
 if __name__ == '__main__':
+    if '--live-update-smoke' in sys.argv:
+        raise SystemExit(live_update_smoke())
     if '--smoke-test' in sys.argv:
         parser = argparse.ArgumentParser()
         parser.add_argument('--smoke-test', action='store_true')

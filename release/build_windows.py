@@ -88,6 +88,8 @@ def main():
         'Keep MorningBloom-game.zip and bundled-update.json beside the launcher for first launch.\n'
         'Game saves are kept separately in LocalAppData/MorningBloomPython.\n'
         'Updates are checked on launch. Offline mode uses the installed game.\n'
+            'This launcher also prepares updates while playing; choose Apply in the game to save and restart.\n'
+            'For first adoption, replace the entire old launcher ZIP once. Do not delete saved gardens.\n'
         'Update feed: https://github.com/' + repo + '/releases\n'
         'This prototype uses HTTPS and SHA-256 integrity checks; executables are not Authenticode signed.\n', encoding='utf-8')
     # Verify the packaged launcher without the build machine's Python/Qt paths.

@@ -164,7 +164,7 @@ class Installer:
     def executable(self, data):
         return self.folder(data) / ('release/game_entry.py' if self.python_mode else 'MorningBloomGame.exe')
 
-    def install(self, archive, data, health_check):
+    def stage(self, archive, data, health_check):
         verify(Path(archive), data)
         destination = self.folder(data)
         previous = self.current()
@@ -182,9 +182,41 @@ class Installer:
                     raise UpdateError('Existing installation is damaged')
             else:
                 os.replace(stage, destination)
+        return {'version': data['version'], 'sha256': data['sha256']}
+
+    def activate(self, data):
+        previous = self.current()
+        if previous and version(data['version']) < version(previous['version']):
+            raise UpdateError('Downgrade refused')
+        if not self.executable(data).is_file():
+            raise UpdateError('Prepared game is missing')
         installed = {'version': data['version'], 'sha256': data['sha256']}
         if previous and previous != installed:
             atomic_json(self.root / 'previous.json', previous)
         atomic_json(self.pointer, installed)
+        try:
+            self.pending_path.unlink(missing_ok=True)
+        except OSError:
+            pass  # The committed current pointer remains authoritative.
         return installed
+
+    def install(self, archive, data, health_check):
+        self.stage(archive, data, health_check)
+        return self.activate(data)
+
+    @property
+    def pending_path(self):
+        return self.root / 'pending-update.json'
+
+    def pending(self, repository):
+        try:
+            data = manifest(json.loads(self.pending_path.read_text(encoding='utf-8')), repository, self.python_mode)
+            verify(self.cached_archive(data), data)
+            return data
+        except (OSError, ValueError, TypeError, KeyError, UpdateError):
+            return None
+
+    def cached_archive(self, data):
+        # The path is constructed only from already validated version/hash metadata.
+        return self.root / ('pending-' + data['version'] + '-' + data['sha256'] + '.zip')
 

@@ -4,7 +4,7 @@
 
 **목표: Python + PySide6 / 2D 전용 / Windows 우선**
 
-v0.8.10은 상점 맨 위의 꽃길 뽑기 진입 버튼을 강조합니다. **기존 사용자는 새 ZIP을 새 폴더에 전체 해제하고 그 폴더의 BAT 또는 런처로 한 번 실행하세요. 런처 파일 자체는 게임 자동 업데이트로 바뀌지 않습니다.** 주사위 2개·민들레 씨 이동·10회 연출 건너뛰기와 [60칸 프리뷰](docs/gacha-board-preview.html)를 포함합니다. [업데이트 복구 안내](release/README.md).
+v0.8.11은 신규 128종의 획득·재배·꾸미기, 영구 도감 150종, 바람놀이 강화, 테스트 무한 햇빛, 바탕화면 꽃 크기와 Drive 오류 처리를 개선합니다. **게임 종료 후 BAT/런처로 다시 실행해 업데이트하세요.** [릴리스 변경 사항](release/notes/v0.8.11.md) · [업데이트 복구 안내](release/README.md).
 
 **Python 실행:** Release의 Python-BAT ZIP을 풀고 `run-python.bat`으로 실행하세요. 매번 GitHub 최신 버전을 확인하고 기존 정원을 유지하며 업데이트합니다. [Python 실행 방법·구현 상태](python/README.md)를 확인하세요.
 
@@ -28,7 +28,7 @@ godot --path . -- --demo
 
 ## 이번 버전
 
-- 상점의 신규 잠금 도감: 식물 8종·정원 79종·화분 41종 미리보기. 획득은 [후속 가챠 기획](docs/gacha-collection.ko.md)으로 보류
+- 수집 도감 총 150종: 신규 식물 8종·정원 79종·화분 41종을 꽃길 뽑기로 획득하고 실제로 재배·적용. 최초 개화 발견은 판매 후에도 유지
 - 정사각 창, 제목 드래그 이동, 작업 표시줄 최소화, 항상 위 표시, 창 불투명도 10~100%
 - 데이터 카탈로그 기반 데이지·별꽃·튤립 5단계 애니메이션과 물방울 피드백
 - 모든 꽃은 첫 물주기 후 성장, 첫 데이지 60초 튜토리얼
@@ -115,9 +115,9 @@ godot --headless --path . --script tests/ui_smoke.gd -- --demo
 
 ## Windows 실행 파일과 업데이트
 
-현재 소스의 이슈 수정: [수집 150종·바람놀이 강화·설정·Drive 오류 개선](docs/issue-resolution-2026-11-03.ko.md). 공개 배포 파일과 소스 반영은 별도입니다.
+v0.8.11 구현·검증 기록: [수집 150종·바람놀이 강화·설정·Drive 오류 개선](docs/issue-resolution-2026-11-03.ko.md).
 
-최신 [v0.8.10 Release](https://github.com/badbed7/morning-bloom/releases/tag/v0.8.10)는 상점 꽃길 뽑기 진입을 강조하고 이전 버전의 업데이트 조회 개선을 포함합니다. Python-BAT ZIP 또는 Windows-x64 ZIP을 새 폴더에 전체 압축 해제하고 그 폴더의 BAT 또는 런처를 실행하세요. 기존 정원은 별도 저장 폴더에서 유지합니다.
+최신 [v0.8.11 Release](https://github.com/badbed7/morning-bloom/releases/tag/v0.8.11)는 PR #9의 수집·강화·꽃 크기 설정·Drive 오류 처리 개선을 포함합니다. Python-BAT ZIP 또는 Windows-x64 ZIP을 새 폴더에 전체 압축 해제하고 그 폴더의 BAT 또는 런처를 실행하세요. 기존 정원은 별도 저장 폴더에서 유지합니다.
 
 Python BAT는 Python 3.12 64비트로 실행하며, EXE는 Python 설치가 필요 없습니다. 사용자 배포에는 MSIX를 사용하지 않습니다. v0.6.0 이하를 쓰던 사용자는 v0.7.0 런처로 한 번 교체하면 이후 실행부터 자동 업데이트됩니다.
 

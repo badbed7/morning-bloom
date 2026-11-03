@@ -12,6 +12,11 @@ from PySide6.QtWidgets import (
 )
 
 from .navigation import chevron_icon
+from .plant_catalog import PLANTS
+from .cosmetics import THEMES, POT_SKINS
+
+ITEM_SOURCES = {"plant": PLANTS, "garden": THEMES, "pot": POT_SKINS}
+CATEGORY_IDS = {"식물": "plant", "정원": "garden", "화분": "pot"}
 
 
 CATALOG_DIR = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parents[2])) / 'assets/catalog'
@@ -23,9 +28,15 @@ class LockedItem:
     name: str
     sheet: str
     bounds: tuple[int, int, int, int]
+    category: str
+
+    def __post_init__(self):
+        source = ITEM_SOURCES.get(self.category)
+        if source is None or self.key not in source or self.name != source[self.key].name:
+            raise ValueError('도감 분류·ID·이름이 실제 항목과 일치하지 않습니다.')
 
 
-# Sheet order is fixed. Keep these IDs when acquisition is implemented later.
+# Reference sheet order and existing item IDs remain stable.
 from .content_names import PLANT_NAMES, GARDEN_NAMES, POT_NAMES
 _GARDEN_ROWS = ((46, 90), (169, 90), (292, 90), (419, 91),
                 (546, 90), (672, 85), (789, 81), (906, 77))
@@ -36,14 +47,14 @@ _POT_CENTERS = (126, 356, 580, 795, 1011, 1225, 1447, 1670, 1897)
 # The larger garden sheet contains the patterns shown again in garden-examples.png.
 LOCKED_COLLECTIONS = {
     '식물': tuple(LockedItem(f'catalog_plant_{i:03}', name, 'plants.png',
-                         (i % 4 * 384, 20 if i < 4 else 550, 384, 440 if i < 4 else 357))
+                         (i % 4 * 384, 20 if i < 4 else 550, 384, 440 if i < 4 else 357), category="plant")
                 for i, name in enumerate(PLANT_NAMES)),
     '정원': tuple(LockedItem(f'catalog_garden_{i:03}', name, 'gardens.png',
                          (15 + i % 10 * 152, _GARDEN_ROWS[i // 10][0] + 2,
-                          139, _GARDEN_ROWS[i // 10][1] - 4))
+                          139, _GARDEN_ROWS[i // 10][1] - 4), category="garden")
                 for i, name in enumerate(GARDEN_NAMES) if i != 0),
     '화분': tuple(LockedItem(f'catalog_pot_{i:03}', name, 'pots.png',
-                         (_POT_CENTERS[i % 9] - 68, _POT_ROWS[i // 9][0], 136, _POT_ROWS[i // 9][1]))
+                         (_POT_CENTERS[i % 9] - 68, _POT_ROWS[i // 9][0], 136, _POT_ROWS[i // 9][1]), category="pot")
                 for i, name in enumerate(POT_NAMES) if i >= 4),
 }
 
@@ -57,28 +68,24 @@ def catalog_sheet(filename):
 def preview_image(item):
     from PySide6.QtGui import QPainter
     from PySide6.QtCore import QRectF
-    from .plant_catalog import PLANTS
-    from .cosmetics import THEMES, POT_SKINS
     from .flower_art import paint_collection_flower, paint_potted_flower
     from .cosmetic_icons import theme_icon
     image = QImage(160, 120, QImage.Format_ARGB32)
     image.fill(Qt.transparent)
     painter = QPainter(image)
     painter.setRenderHint(QPainter.Antialiasing)
-    if item.key in PLANTS:
+    if item.category == "plant":
         paint_collection_flower(painter, QRectF(25, 0, 110, 120), PLANTS[item.key])
-    elif item.key in THEMES:
+    elif item.category == "garden":
         painter.drawPixmap(30, 20, theme_icon(THEMES[item.key]).pixmap(100, 80))
-    else:
+    elif item.category == "pot":
         painter.translate(80 - 190 * .9, 10 - 100 * .9)
         painter.scale(.9, .9)
         paint_potted_flower(painter, PLANTS['daisy'], planted=False, skin=item.key)
     painter.end()
     return image
 
-from .plant_catalog import PLANTS
-from .cosmetics import THEMES, POT_SKINS
-COLLECTIONS = {category: tuple(LockedItem(k, v.name, '', (0, 0, 0, 0)) for k, v in source.items())
+COLLECTIONS = {category: tuple(LockedItem(k, v.name, '', (0, 0, 0, 0), CATEGORY_IDS[category]) for k, v in source.items())
                for category, source in (('식물', PLANTS), ('정원', THEMES), ('화분', POT_SKINS))}
 
 
@@ -209,7 +216,7 @@ class LockedCatalog(QWidget):
                     state = '사용 중' if item.key == equipped else '보유' if item.key in owned else '미보유'
                     state += ' · 뽑기 전용' if definition.gacha_only else ' · 햇빛 상점/기본 지급'
                 from .gacha_board import item_rarity
-                category = {'식물': 'plant', '정원': 'garden', '화분': 'pot'}[self.category]
+                category = item.category
                 tier = item_rarity(category, item.key)
                 if tier:
                     state = f'{tier} · {state}'

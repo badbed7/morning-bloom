@@ -16,7 +16,7 @@ def smoke_test():
     from morning_bloom.app import Window
     from morning_bloom.model import Garden
     from morning_bloom.storage import Store
-    from morning_bloom.locked_catalog import COLLECTIONS, preview_image
+    from morning_bloom.locked_catalog import COLLECTIONS, CATEGORY_IDS, preview_image
     print('Creating Qt application', flush=True)
     app = QApplication([])
     app.setApplicationName('MorningBloomBuildCheck')
@@ -32,8 +32,14 @@ def smoke_test():
         window.harvest_button.click()
         assert len(window.garden.collection) == 1
         assert not window.grab().isNull()
-        for items in COLLECTIONS.values():
-            assert not preview_image(items[0]).isNull(), 'Missing catalog artwork'
+        for category, items in COLLECTIONS.items():
+            for item in items:
+                assert item.category == CATEGORY_IDS[category], 'Mismatched catalog category'
+                assert not preview_image(item).isNull(), 'Missing catalog artwork'
+        for other, key in (('정원', 'lavender'), ('화분', 'rose')):
+            plant = next(item for item in COLLECTIONS['식물'] if item.key == key)
+            cosmetic = next(item for item in COLLECTIONS[other] if item.key == key)
+            assert bytes(preview_image(plant).bits()) != bytes(preview_image(cosmetic).bits()), 'Cross-category artwork collision'
         window.open_gacha_board()
         board = window._gacha_board_window
         board.category.setCurrentIndex(2)

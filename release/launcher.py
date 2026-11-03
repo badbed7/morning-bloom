@@ -13,6 +13,7 @@ import tkinter as tk
 from tkinter import messagebox
 from release_config import REPOSITORY
 from update_core import Installer, UpdateError, read_latest, manifest, download, version
+from live_update import Coordinator, ControlServer, PREFIX
 
 
 def command(executable, runtime=None):
@@ -51,7 +52,9 @@ def health_check(executable, log_path, runtime=None):
         try:
             result = subprocess.run(command(executable, runtime) + ['--smoke-test', '--startup-log', str(log_path)],
                 cwd=executable.parent, timeout=45, stdin=subprocess.DEVNULL,
-                stdout=log, stderr=log, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+                stdout=log, stderr=log, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0),
+                env={**{k: v for k, v in os.environ.items() if not k.startswith(PREFIX)},
+                     'QT_QPA_PLATFORM': 'offscreen'})
             if result.returncode == 0: return True
             reason = f'Game startup exited with code {result.returncode} (0x{result.returncode & 0xffffffff:08X})'
         except subprocess.TimeoutExpired:
@@ -91,6 +94,9 @@ def prepare(installer, bundle, report, warning=None):
         candidates.append((latest, None))
     except Exception as exc:
         errors.append(f'Update check: {exc}')
+    pending = installer.pending(REPOSITORY)
+    if pending is not None:
+        candidates.append((pending, installer.cached_archive(pending)))
     bundled_name = 'bundled-python-update.json' if installer.python_mode else 'bundled-update.json'
     bundled_manifest = bundle / bundled_name
     if bundled_manifest.is_file():
@@ -134,6 +140,59 @@ def prepare(installer, bundle, report, warning=None):
     return installer.executable(current)
 
 
+def verify_live_update(installer, data, archive, check, log_path, runtime=None):
+    """Run two actual game processes with a synthetic next Release in a sandbox."""
+    import shutil
+    import time
+    first_version = data['version']
+    major, minor, patch = version(first_version)
+    target = dict(data, version=f'{major}.{minor}.{patch + 1}')
+    asset = 'MorningBloom-python.zip' if installer.python_mode else 'MorningBloom-game.zip'
+    target['url'] = f'https://github.com/{REPOSITORY}/releases/download/v{target["version"]}/{asset}'
+    saves = installer.root / 'isolated-update-saves'
+    saves.mkdir()
+    def copy_payload(metadata, destination, report):
+        shutil.copyfile(archive, destination)
+        report('Synthetic release downloaded')
+    coordinator = Coordinator(installer, REPOSITORY, check, saves,
+        reader=lambda *args: target, downloader=copy_payload, interval=3600)
+    server = ControlServer(coordinator)
+    process = None
+    try:
+        with Path(log_path).open('a', encoding='utf-8') as log:
+            for launch in range(2):
+                current = installer.current()
+                coordinator.started = False
+                executable = installer.executable(current)
+                env = server.environment(current)
+                env[PREFIX + 'SMOKE_ROOT'] = str(saves)
+                env[PREFIX + 'SMOKE_TARGET'] = target['version']
+                process = subprocess.Popen(command(executable, runtime) + ['--live-update-smoke'],
+                    cwd=executable.parent, env=env, stdin=subprocess.DEVNULL,
+                    stdout=log, stderr=log, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+                process.wait(timeout=35)
+                if process.returncode != 0:
+                    raise UpdateError(f'Live update process {launch} failed: {process.returncode}')
+                if launch == 0:
+                    if installer.current()['version'] != first_version:
+                        raise UpdateError('Active version changed before old game exit')
+                    if coordinator.activate_after_exit(process.returncode) is None:
+                        raise UpdateError('Game did not commit an update before clean exit')
+                else:
+                    if coordinator.activate_after_exit(process.returncode) is not None:
+                        raise UpdateError('Normal game exit unexpectedly restarted again')
+            if installer.current()['version'] != target['version']:
+                raise UpdateError('Live update did not activate the prepared version')
+            if json.loads((saves / 'garden.json').read_text(encoding='utf-8'))['coins'] != 321:
+                raise UpdateError('Garden changed during the update')
+            log.write('Packaged live update, restart and garden preservation passed.\n')
+    finally:
+        if process is not None and process.poll() is None:
+            process.kill()  # Only isolated smoke processes, never a user game.
+            process.wait(timeout=5)
+        server.close()
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--python', action='store_true', dest='python_mode')
@@ -163,6 +222,9 @@ def main():
                         raise
                     return health_check(executable, log_path, runtime)
                 installer.install(bundle / archive, data, check)
+                executable = installer.executable(data)
+                runtime = python_runtime(executable, installer.root, lambda _: None) if args.python_mode else None
+                verify_live_update(installer, data, bundle / archive, check, log_path, runtime)
         except Exception as exc:
             with log_path.open('a', encoding='utf-8') as log: log.write(str(exc) + '\n')
             return 1
@@ -188,6 +250,75 @@ def main():
         root.destroy()
         return 0
     events = queue.Queue()
+    session = {'control': None, 'process': None, 'upgraded': False, 'rolled_back': False}
+
+    def finish_session(message=None):
+        if message:
+            messagebox.showerror('Morning Bloom', message)
+        if session['control']:
+            session['control'].close()
+        root.destroy()
+
+    def launch_current():
+        coordinator = session['control'].coordinator
+        data = installer.current()
+        executable = installer.executable(data)
+        coordinator.started = False
+        try:
+            runtime = python_runtime(executable, installer.root, lambda text: status.set(text)) if args.python_mode else None
+            active_args = list(game_args)
+            if coordinator.restart_demo is not None:
+                active_args = [arg for arg in active_args if arg != '--demo']
+                if coordinator.restart_demo:
+                    active_args.append('--demo')
+            session['process'] = subprocess.Popen(command(executable, runtime) + active_args,
+                cwd=str(executable.parent), env=session['control'].environment(data),
+                creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+        except (OSError, UpdateError) as error:
+            if session['upgraded'] and not session['rolled_back'] and coordinator.rollback_if_unchanged():
+                session['upgraded'] = False
+                session['rolled_back'] = True
+                messagebox.showwarning('업데이트 복구', '새 버전을 시작하지 못해 이전 버전으로 돌아갑니다. 저장은 보존했습니다.')
+                launch_current()
+                return
+            finish_session('게임 실행 실패 · ' + str(error))
+            return
+        root.withdraw()
+        root.after(250, wait_game)
+
+    def wait_game():
+        process = session['process']
+        if process.poll() is None:
+            root.after(250, wait_game)
+            return
+        coordinator = session['control'].coordinator
+        if session['upgraded'] and process.returncode and not coordinator.started:
+            if not session['rolled_back'] and coordinator.rollback_if_unchanged():
+                session['upgraded'] = False
+                session['rolled_back'] = True
+                messagebox.showwarning('업데이트 복구', '새 버전 시작에 실패해 이전 버전으로 돌아갑니다. 저장은 보존했습니다.')
+                launch_current()
+                return
+            finish_session('새 버전 시작 실패 · 저장과 업데이트 전 백업을 보존했습니다. 새 저장을 구버전에 전달하지 않았습니다.\n' + str(installer.root / 'save-backups'))
+            return
+        previous = installer.current()
+        try:
+            applied = coordinator.activate_after_exit(process.returncode)
+        except Exception as error:
+            if installer.current() == previous:
+                coordinator.control('cancel')
+                session['upgraded'] = False
+                messagebox.showwarning('업데이트 적용 실패', '정원과 이전 설치를 유지하고 게임을 다시 엽니다.\n' + str(error))
+                launch_current()
+            else:
+                finish_session('업데이트 적용 실패 · 정원과 이전 설치를 보존했습니다.\n' + str(error))
+            return
+        if applied:
+            session['upgraded'] = True
+            launch_current()
+        else:
+            finish_session(f'게임이 종료되었습니다. 종료 코드: {process.returncode}' if process.returncode else None)
+
     def worker():
         try:
             exe = prepare(installer, bundle, lambda text: events.put(('status', text)),
@@ -207,19 +338,12 @@ def main():
                     root.destroy()
                     return
                 elif kind == 'ready':
-                    try:
-                        process = subprocess.Popen(value[0], cwd=str(value[1]),
-                            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
-                    except OSError as exc:
-                        messagebox.showerror('Morning Bloom', str(exc));root.destroy();return
-                    root.withdraw()
-                    def wait_game():
-                        if process.poll() is None: root.after(500, wait_game)
-                        else:
-                            if process.returncode:
-                                messagebox.showerror('Morning Bloom', f'게임이 종료되었습니다. 종료 코드: {process.returncode}')
-                            root.destroy()
-                    wait_game()
+                    def check(executable):
+                        runtime = python_runtime(executable, installer.root, lambda text: None) if args.python_mode else None
+                        return health_check(executable, installer.root / 'startup-check.log', runtime)
+                    coordinator = Coordinator(installer, REPOSITORY, check, local / 'MorningBloomPython')
+                    session['control'] = ControlServer(coordinator)
+                    launch_current()
                     return
         except queue.Empty: pass
         root.after(100, poll)

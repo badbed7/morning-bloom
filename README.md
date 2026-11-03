@@ -4,7 +4,7 @@
 
 **목표: Python + PySide6 / 2D 전용 / Windows 우선**
 
-v0.8.11은 신규 128종의 획득·재배·꾸미기, 영구 도감 150종, 바람놀이 강화, 테스트 무한 햇빛, 바탕화면 꽃 크기와 Drive 오류 처리를 개선합니다. **게임 종료 후 BAT/런처로 다시 실행해 업데이트하세요.** [릴리스 변경 사항](release/notes/v0.8.11.md) · [업데이트 복구 안내](release/README.md).
+v0.8.12는 실행 중 업데이트 확인·백그라운드 다운로드와 저장 후 자동 재시작을 추가합니다. **최초 한 번은 새 ZIP을 새 폴더에 전체 압축 해제하고 그 폴더의 BAT/런처로 실행하세요.** 이전 런처 자체는 게임 업데이트로 교체되지 않습니다. [사용 방법](docs/live-update.ko.md) · [릴리스 변경 사항](release/notes/v0.8.12.md).
 
 **Python 실행:** Release의 Python-BAT ZIP을 풀고 `run-python.bat`으로 실행하세요. 매번 GitHub 최신 버전을 확인하고 기존 정원을 유지하며 업데이트합니다. [Python 실행 방법·구현 상태](python/README.md)를 확인하세요.
 
@@ -117,7 +117,7 @@ godot --headless --path . --script tests/ui_smoke.gd -- --demo
 
 v0.8.11 구현·검증 기록: [수집 150종·바람놀이 강화·설정·Drive 오류 개선](docs/issue-resolution-2026-11-03.ko.md).
 
-최신 [v0.8.11 Release](https://github.com/badbed7/morning-bloom/releases/tag/v0.8.11)는 PR #9의 수집·강화·꽃 크기 설정·Drive 오류 처리 개선을 포함합니다. Python-BAT ZIP 또는 Windows-x64 ZIP을 새 폴더에 전체 압축 해제하고 그 폴더의 BAT 또는 런처를 실행하세요. 기존 정원은 별도 저장 폴더에서 유지합니다.
+최신 [v0.8.12 Release](https://github.com/badbed7/morning-bloom/releases/tag/v0.8.12)는 실행 중 업데이트와 자동 재시작, 기존 PR #9의 수집·강화·설정·Drive 개선을 포함합니다. Python-BAT ZIP 또는 Windows-x64 ZIP을 새 폴더에 전체 압축 해제하고 그 폴더의 BAT 또는 런처를 실행하세요. 기존 정원은 별도 저장 폴더에서 유지합니다.
 
 Python BAT는 Python 3.12 64비트로 실행하며, EXE는 Python 설치가 필요 없습니다. 사용자 배포에는 MSIX를 사용하지 않습니다. v0.6.0 이하를 쓰던 사용자는 v0.7.0 런처로 한 번 교체하면 이후 실행부터 자동 업데이트됩니다.
 

@@ -48,6 +48,7 @@ from .navigation import SlideStack, chevron_icon
 from .plant_catalog import PLANTS, REGULAR_PLANTS, GACHA_PLANTS, VACATION_PLANTS, WEEKEND_PLANTS, RANDOM_SEED_PRICE, plant_definition
 from .seed_picker import SeedPicker
 from .storage import SaveError, Store
+from .update_client import UpdateClient
 
 POT_PAGE, SHOP_PAGE, GARDEN_PAGE, SETTINGS_PAGE = range(4)
 MAIN_PAGE_NAMES = ('화분', '상점', '정원')
@@ -161,6 +162,10 @@ class Window(QWidget):
         self._closing = False
         self._close_requested = False
         self._close_uploading = False
+        self._update_busy = self._update_closing = False
+        self._update_offer = ""
+        self.update_client = UpdateClient(self)
+        self.update_client.changed.connect(self._sync_update_controls)
         self._message_text = ''
         self.cloud = cloud
         self._cloud_future = None
@@ -593,6 +598,39 @@ class Window(QWidget):
         self.cloud_restore_button.clicked.connect(self.restore_cloud)
         cloud_row.addWidget(self.cloud_restore_button)
         layout.addLayout(cloud_row)
+        update_title = QLabel('게임 업데이트')
+        update_title.setObjectName('section')
+        layout.addWidget(update_title)
+        self.update_status = QLabel()
+        self.update_status.setWordWrap(True)
+        self.update_status.setObjectName('small')
+        layout.addWidget(self.update_status)
+        update_row = QHBoxLayout()
+        self.update_check = QPushButton('업데이트 확인')
+        self.update_check.clicked.connect(lambda: self.update_client.command('check'))
+        self.update_apply = QPushButton('지금 적용 · 자동 재시작')
+        self.update_apply.clicked.connect(self.apply_live_update)
+        update_row.addWidget(self.update_check)
+        update_row.addWidget(self.update_apply)
+        layout.addLayout(update_row)
+        self.update_banner = QFrame()
+        self.update_banner.setStyleSheet('QFrame {background:#e6f1de;border:1px solid #729760;border-radius:6px;}')
+        banner_layout = QVBoxLayout(self.update_banner)
+        self.update_banner_label = QLabel()
+        self.update_banner_label.setWordWrap(True)
+        banner_layout.addWidget(self.update_banner_label)
+        banner_buttons = QHBoxLayout()
+        now_button = QPushButton('지금 적용')
+        now_button.clicked.connect(self.apply_live_update)
+        later_button = QPushButton('나중에')
+        later_button.clicked.connect(self.update_banner.hide)
+        banner_buttons.addWidget(now_button)
+        banner_buttons.addWidget(later_button)
+        banner_layout.addLayout(banner_buttons)
+        self.update_banner.hide()
+        # Show a non-modal notice above page navigation; it also works outside Settings.
+        self.layout().insertWidget(1, self.update_banner)
+        self._sync_update_controls(self.update_client.state)
         catalog = QLabel(
             '식물 카탈로그\n'
             + '\n'.join(
@@ -635,6 +673,58 @@ class Window(QWidget):
         layout.addStretch()
         self.pages.addWidget(page)
         self._sync_cloud_controls()
+
+    def _sync_update_controls(self, state):
+        if not hasattr(self, 'update_status'):
+            return
+        current = state.get('current', '')
+        self.update_status.setText((f'현재 v{current} · ' if current else '') + state.get('message', ''))
+        ready = bool(state.get('ready')) and not self._update_busy and not self._update_closing
+        self.update_apply.setEnabled(ready)
+        self.update_check.setEnabled(self.update_client.available and not self._update_busy
+            and state.get('phase') not in ('checking', 'downloading'))
+        if ready and state.get('version') != self._update_offer:
+            self._update_offer = state['version']
+            self.update_banner_label.setText(f'v{self._update_offer} 업데이트 준비 완료 · 저장 후 자동 재시작합니다.')
+            self.update_banner.show()
+        elif not ready:
+            self.update_banner.hide()
+
+    def _cancel_update(self, message):
+        self._update_busy = self._update_closing = False
+        self._closing = self._close_requested = False
+        self.pages.setEnabled(True)
+        self.update_client.command('cancel')
+        self._sync_update_controls(self.update_client.state)
+        self.notify(message, important=True)
+
+    def apply_live_update(self):
+        state = self.update_client.state
+        if (self._update_busy or self._update_closing or self._action_busy or self._startup_cloud_syncing
+                or not self.update_client.available or not state.get('ready')):
+            return False
+        self.close_collection_picker()
+        self._cancel_fertilizer_game()
+        self._cancel_mist_game()
+        self._cancel_wind_game()
+        if self._gacha_board_window:
+            self._gacha_board_window.done(0)
+        if not self.persist():
+            self.notify('저장 실패로 업데이트 적용을 취소했습니다.', important=True)
+            return False
+        self._update_busy = True
+        self.pages.setEnabled(False)
+        self._sync_update_controls(state)
+        self.update_client.refresh_timer.stop()
+        def armed(success, _state):
+            if not success:
+                self._cancel_update('업데이트 준비 상태를 확인하지 못했습니다. 게임을 유지합니다.')
+                self.update_client.refresh_timer.start()
+                return
+            self._update_closing = True
+            self.close()
+        self.update_client.command('arm', armed, offered=state['version'])
+        return True
 
     def _cloud_state_path(self):
         path = getattr(self.store, 'path', None)
@@ -918,6 +1008,10 @@ class Window(QWidget):
         if not self._close_requested or self._cloud_busy or self._close_uploading:
             return False
         if not self.persist():
+            if self._update_closing:
+                self._cancel_update('저장 실패로 업데이트 적용을 취소했습니다.')
+                self.update_client.refresh_timer.start()
+                return False
             self._close_requested = False
             self.pages.setEnabled(True)
             self.cloud_auto.start()
@@ -1264,7 +1358,7 @@ class Window(QWidget):
         return self.set_desktop_flower(item_id, item_id not in self.garden.desktop_flowers)
 
     def act(self, callback):
-        if self._action_busy:
+        if self._action_busy or self._update_busy or self._update_closing:
             return False
         self._action_busy = True
         before = self.garden.to_dict()
@@ -1943,6 +2037,9 @@ class Window(QWidget):
         super().changeEvent(event)
 
     def closeEvent(self, event):
+        if self._update_busy and not self._update_closing:
+            event.ignore()
+            return
         if self._closing:
             event.accept()
         else:
@@ -1963,6 +2060,11 @@ class Window(QWidget):
                     return
                 event.accept()
             else:
+                if self._update_closing:
+                    event.ignore()
+                    self._cancel_update('저장 실패로 업데이트 적용을 취소했습니다.')
+                    self.update_client.refresh_timer.start()
+                    return
                 result = QMessageBox.question(
                     self,
                     '저장 실패',
@@ -1973,6 +2075,16 @@ class Window(QWidget):
                 event.accept() if result == QMessageBox.Yes else event.ignore()
             self._closing = event.isAccepted()
         if event.isAccepted():
+            if self._update_closing:
+                try:
+                    # Local loopback only, bounded to two seconds; complete before process exit.
+                    self.update_client.request('commit', self._update_offer, demo=self.demo)
+                except Exception:
+                    event.ignore()
+                    self._cancel_update('업데이트 종료 확인 실패 · 정원은 저장했고 게임을 유지합니다.')
+                    self.update_client.refresh_timer.start()
+                    return
+            self.update_client.stop()
             self.desktop.close()
             self.clock.stop()
             self.autosave.stop()

@@ -235,7 +235,7 @@ class Updating(unittest.TestCase):
                 release = dict(tag_name='v0.8.7', draft=False, prerelease=False,
                                assets=[dict(name=name, browser_download_url=feed)])
                 visited = []
-                def response(request, timeout):
+                def response(request, timeout, **kwargs):
                     # A connection that takes longer than the former 5s budget.
                     if timeout < 10: raise TimeoutError('slow connection')
                     self.assertEqual(request.get_header('Cache-control'), 'no-cache')

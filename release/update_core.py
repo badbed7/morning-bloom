@@ -10,6 +10,7 @@ import time
 import urllib.request
 import zipfile
 from pathlib import Path, PurePosixPath
+from update_tls import create_context, describe_error
 
 MAX_ARCHIVE = 512 * 1024 * 1024
 MAX_UNPACKED = 1536 * 1024 * 1024
@@ -43,7 +44,7 @@ def _read_json(url, limit=65536):
         'Accept': 'application/json',
         'Cache-Control': 'no-cache',
     })
-    with urllib.request.urlopen(request, timeout=15) as response:
+    with urllib.request.urlopen(request, timeout=15, context=create_context()) as response:
         if not response.url.startswith('https://'):
             raise UpdateError('HTTPS required')
         raw = response.read(limit + 1)
@@ -75,13 +76,13 @@ def read_latest(repository, python_mode=False):
             raise UpdateError('Release and manifest versions do not match')
         return data
     except Exception as exc:
-        errors.append(f'Release API: {exc}')
+        errors.append(f'Release API: {describe_error(exc)}')
     # Keep public, unauthenticated updating usable during API rate limits/outages.
     try:
         url = f'https://github.com/{repository}/releases/latest/download/{name}'
         return manifest(_read_json(url), repository, python_mode)
     except Exception as exc:
-        errors.append(f'Public feed: {exc}')
+        errors.append(f'Public feed: {describe_error(exc)}')
         raise UpdateError(' / '.join(errors)) from exc
 
 def verify(path, data):
@@ -95,7 +96,7 @@ def download(data, path, report=lambda _: None):
     request = urllib.request.Request(data['url'], headers={'User-Agent': 'MorningBloomLauncher/1'})
     deadline, total = time.monotonic() + 600, 0
     try:
-        with urllib.request.urlopen(request, timeout=15) as response, path.open('wb') as target:
+        with urllib.request.urlopen(request, timeout=15, context=create_context()) as response, path.open('wb') as target:
             if not response.url.startswith('https://'): raise UpdateError('HTTPS required')
             while True:
                 chunk = response.read(1024 * 1024)

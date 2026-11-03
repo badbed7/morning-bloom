@@ -12,6 +12,7 @@ from build_windows import ROOT, zip_folder
 from build_icons import generate_icons
 from build_cloud_config import validate_cloud_config
 from update_core import manifest
+from bundle_updater import copy_bat_updater
 
 
 def main():
@@ -50,8 +51,8 @@ def main():
         (bootstrap / 'release').mkdir(parents=True)
         (bootstrap / 'assets/icons').mkdir(parents=True)
         shutil.copyfile(icon, bootstrap / 'assets/icons/morning-bloom.ico')
-        for name in ('run-python.bat', 'release/launcher.py', 'release/update_core.py', 'release/live_update.py', 'release/release_config.py'):
-            shutil.copyfile(ROOT / name, bootstrap / name)
+        shutil.copyfile(ROOT / 'run-python.bat', bootstrap / 'run-python.bat')
+        copy_bat_updater(bootstrap / 'release')
         (bootstrap / 'release/release_config.py').write_text(f'REPOSITORY = {repository!r}\n', encoding='utf-8')
         shutil.copyfile(payload, bootstrap / payload.name)
         (bootstrap / 'bundled-python-update.json').write_text(json.dumps(data, indent=2), encoding='utf-8')

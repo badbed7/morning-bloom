@@ -8,7 +8,7 @@ from PySide6.QtWidgets import QApplication, QScrollArea
 
 from morning_bloom.app import SHOP_PAGE, Window
 from morning_bloom.cosmetics import POT_SKINS, THEMES
-from morning_bloom.locked_catalog import LOCKED_COLLECTIONS, catalog_sheet, preview_image
+from morning_bloom.locked_catalog import LOCKED_COLLECTIONS, COLLECTIONS, catalog_sheet, preview_image
 from morning_bloom.model import Garden
 from morning_bloom.plant_catalog import PLANTS
 from morning_bloom.storage import Store
@@ -24,7 +24,8 @@ class LockedCatalogTests(unittest.TestCase):
         for items in LOCKED_COLLECTIONS.values():
             for item in items:
                 with self.subTest(item=item.key):
-                    self.assertNotIn(item.key, seen | set(PLANTS) | set(THEMES) | set(POT_SKINS))
+                    self.assertNotIn(item.key, seen)
+                    self.assertIn(item.key, set(PLANTS) | set(THEMES) | set(POT_SKINS))
                     seen.add(item.key)
                     sheet = catalog_sheet(item.sheet)
                     self.assertFalse(sheet.isNull())
@@ -53,7 +54,7 @@ class LockedCatalogTests(unittest.TestCase):
                 for side in (320, 384, 520):
                     window.setFixedSize(side, side)
                     app.processEvents()
-                    for button, (category, items) in zip(catalog.tabs.buttons(), LOCKED_COLLECTIONS.items()):
+                    for button, (category, items) in zip(catalog.tabs.buttons(), COLLECTIONS.items()):
                         button.click()
                         self.assertEqual(catalog.page, 0)
                         self.assertFalse(catalog.previous.isEnabled())

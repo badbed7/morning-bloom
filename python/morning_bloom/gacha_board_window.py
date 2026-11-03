@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
 )
 
 from . import gacha_board as board
+from .plant_catalog import PLANTS
 from .cosmetics import POT_SKINS, THEMES
 
 
@@ -101,7 +102,7 @@ class GachaBoardWindow(QDialog):
     def __init__(self, owner):
         super().__init__(owner)
         self.owner = owner
-        self.setWindowTitle('꽃길 뽑기 · 60칸')
+        self.setWindowTitle('꽃길 뽑기')
         self.setWindowModality(Qt.WindowModal)
         self.setWindowFlag(Qt.WindowStaysOnTopHint, owner.garden.settings['topmost'])
         self.setWindowOpacity(owner.windowOpacity())
@@ -121,7 +122,7 @@ class GachaBoardWindow(QDialog):
         self.movement.finished.connect(self._reveal_reward)
 
         outer = QVBoxLayout(self)
-        title = QLabel('직사각형 꽃길 · 60칸')
+        title = QLabel('꽃길 뽑기')
         title.setStyleSheet('font-size:20px;font-weight:700;color:#466347')
         outer.addWidget(title)
         explanation = QLabel('주사위 2개의 합만큼 민들레 씨 이동 · 도착 칸에서 보상 · 11/26/41번 SR 이상 · 56번 SSR 확정')
@@ -195,7 +196,8 @@ class GachaBoardWindow(QDialog):
         self.category = QComboBox()
         self.category.addItem('화분', 'pot')
         self.category.addItem('정원', 'garden')
-        self.one = QPushButton('주사위 2개 굴리기 · 햇빛 10')
+        self.category.addItem('식물', 'plant')
+        self.one = QPushButton('주사위 굴리기 · 햇빛 10')
         self.ten = QPushButton('10회 굴리기 · 햇빛 100')
         controls.addWidget(self.category)
         controls.addWidget(self.one)
@@ -205,23 +207,32 @@ class GachaBoardWindow(QDialog):
         self.skip.setVisible(False)
         controls.addWidget(self.skip)
         outer.addLayout(controls)
-        self.result = QLabel('기존 정원·화분 꾸미기를 획득합니다. 중복은 교환잎으로 바뀝니다.')
+        self.result = QLabel('식물 재배 해금·정원·화분을 획득합니다. 중복은 교환잎으로 바뀝니다.')
         self.result.setWordWrap(True)
         outer.addWidget(self.result)
         self.history = QListWidget()
         self.history.setMaximumHeight(90)
         outer.addWidget(self.history)
+        self.probability = QLabel()
+        self.probability.setWordWrap(True)
+        self.probability.setStyleSheet('font-size:11px;')
+        outer.addWidget(self.probability)
+        self.category.currentIndexChanged.connect(self.sync)
         self.one.clicked.connect(lambda: self.draw(1))
         self.ten.clicked.connect(lambda: self.draw(10))
         self.sync()
 
     def sync(self):
         garden = self.owner.garden
+        pool = board.REWARDS[self.category.currentData()]
+        rates = ' / '.join(f'{tier}: {len(items)}종 · 개별 {100 / len(items):.2f}%' for tier, items in pool.items())
+        self.probability.setText('일반 칸 R 70% / SR 25% / SSR 5% · 등급 내 동일 확률\n' + rates
+            + '\n은색 칸·10회 보장: SR 95%/SSR 5% · 금색 칸·60회 보장: SSR 100%')
         account = garden.gacha
         state = account['board']
         position = state['position'] if self.display_position is None else self.display_position
         self.balance.setText(f"햇빛 {garden.sunlight} · 무료권 {account['tickets']} · 교환잎 {account['leaves']}")
-        self.position_label.setText(f'현재 {position or board.LENGTH} / 60')
+        self.position_label.setText(f'현재 {position or board.LENGTH}번')
         upcoming = next((number for number in sorted(board.SPECIALS) if number > position), 71)
         self.next_label.setText(f'다음 특수 칸까지 {upcoming - position}칸 · 통과 보상 없음')
         side_gate, side_step = self.display_side if self.display_side is not None else (state['side_gate'], state['side_step'])
@@ -240,15 +251,19 @@ class GachaBoardWindow(QDialog):
             color = '#f1d98d' if number == board.GOLD else '#e1e4f0' if tier else '#f6faef'
             border = '3px solid #467955' if number == position else '1px solid #c5d2bb'
             cell.setStyleSheet(f'background:{color};border:{border};border-radius:5px;color:#3d5e44;font-size:10px;font-weight:600;')
+        self.one.setText('주사위 굴리기 · 테스트' if self.owner.test_sunlight else '주사위 굴리기 · 햇빛 10')
+        self.ten.setText('10회 굴리기 · 테스트' if self.owner.test_sunlight else '10회 굴리기 · 햇빛 100')
+        if self.owner.test_sunlight:
+            self.balance.setText('햇빛 ∞ · 테스트 · 햇빛/무료권 미차감')
         busy = self.animating
-        self.one.setEnabled(not busy and (account['tickets'] >= 1 or garden.sunlight >= 10))
-        self.ten.setEnabled(not busy and (account['tickets'] >= 10 or garden.sunlight >= 100))
+        self.one.setEnabled(not busy and (self.owner.test_sunlight or account['tickets'] >= 1 or garden.sunlight >= 10))
+        self.ten.setEnabled(not busy and (self.owner.test_sunlight or account['tickets'] >= 10 or garden.sunlight >= 100))
         self.category.setEnabled(not busy)
         self.skip.setVisible(busy)
         self.history.clear()
         history = self._visible_history if busy and self._visible_history is not None else account['history']
         for item in reversed(history[-10:]):
-            catalog = POT_SKINS if item['category'] == 'pot' else THEMES
+            catalog = PLANTS if item['category'] == 'plant' else POT_SKINS if item['category'] == 'pot' else THEMES
             self.history.addItem(f"{item['position']}번 · {item['rarity']} {catalog[item['item']].name} · {'중복' if item['duplicate'] else '신규'}")
         if not self.animating or self.phase != 'moving':
             self._align_seed()
@@ -264,7 +279,7 @@ class GachaBoardWindow(QDialog):
         history = list(self.owner.garden.gacha['history'])
 
         def action():
-            outcome = self.owner.garden.draw_gacha(category, count)
+            outcome = self.owner.garden.draw_gacha(category, count, test_free=self.owner.test_sunlight)
             if outcome is False:
                 return False
             results.extend(outcome)
@@ -370,7 +385,7 @@ class GachaBoardWindow(QDialog):
         self.display_position = item['position']
         self.display_side = (item['side_gate'], item['side_step'])
         self._visible_history.append(item)
-        catalog = POT_SKINS if item['category'] == 'pot' else THEMES
+        catalog = PLANTS if item['category'] == 'plant' else POT_SKINS if item['category'] == 'pot' else THEMES
         self.result.setText(f"{item['position']}번 도착 · {item['rarity']} {catalog[item['item']].name} · {'중복' if item['duplicate'] else '신규'}")
         self.seed.sway = 0
         self.seed.update()
@@ -387,7 +402,7 @@ class GachaBoardWindow(QDialog):
             for die, face in zip(self.dice, last['dice']):
                 die.set_face(face)
             self.dice_total.setText(f'{last["dice"][0]} + {last["dice"][1]} = {last["distance"]}칸')
-            catalog = POT_SKINS if last['category'] == 'pot' else THEMES
+            catalog = PLANTS if last['category'] == 'plant' else POT_SKINS if last['category'] == 'pot' else THEMES
             self.result.setText(f"{last['position']}번 도착 · {last['rarity']} {catalog[last['item']].name} · 결과 저장 완료")
         self.animation.clear()
         self.current_result = None

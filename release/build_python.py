@@ -2,7 +2,6 @@
 import hashlib
 import json
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -11,6 +10,7 @@ from pathlib import Path
 
 from build_windows import ROOT, zip_folder
 from build_icons import generate_icons
+from build_cloud_config import validate_cloud_config
 from update_core import manifest
 
 
@@ -19,10 +19,11 @@ def main():
     repository = os.environ.get('BLOOM_RELEASE_REPO', 'badbed7/morning-bloom')
     client_id = os.environ.get('GOOGLE_OAUTH_CLIENT_ID', '').strip()
     client_secret = os.environ.get('GOOGLE_OAUTH_CLIENT_SECRET', '').strip()
-    if client_id and not re.fullmatch(r'[A-Za-z0-9_-]+\.apps\.googleusercontent\.com', client_id):
-        raise SystemExit('Invalid GOOGLE_OAUTH_CLIENT_ID')
-    if bool(client_id) != bool(client_secret):
-        raise SystemExit('GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET must be set together')
+    local_only = os.environ.get('BLOOM_CLOUD_DISABLED') == '1'
+    try:
+        validate_cloud_config(client_id, client_secret, local_only)
+    except ValueError as error:
+        raise SystemExit(str(error)) from error
     output = ROOT / 'release-output'
     output.mkdir(exist_ok=True)
     icon = generate_icons(ROOT / 'assets/icons')
@@ -55,6 +56,7 @@ def main():
         shutil.copyfile(payload, bootstrap / payload.name)
         (bootstrap / 'bundled-python-update.json').write_text(json.dumps(data, indent=2), encoding='utf-8')
         (bootstrap / 'READ-ME.txt').write_text(
+            ('Google Drive disabled: local-only build.\n' if local_only else 'Google Drive cloud support included.\n') +
             'Install Python 3.12 64-bit with Python Launcher and Tcl/Tk once.\n'
             'Extract all files, then run run-python.bat. Do not move the BAT alone.\n'
             'Each launch checks GitHub Releases, verifies and installs an update, then starts the Python game.\n'

@@ -5,7 +5,7 @@ import random
 import time
 
 from PySide6.QtCore import QPointF, QRect, QRectF, Qt, QTimer
-from PySide6.QtGui import QColor, QPainter, QPen, QRegion
+from PySide6.QtGui import QColor, QPainter, QPen, QRegion, QTransform
 from PySide6.QtWidgets import QApplication, QMenu, QWidget
 
 from .desktop_host import DesktopUnavailable, WindowsDesktopHost
@@ -48,6 +48,7 @@ class DesktopFlower(QWidget):
         self.setAttribute(Qt.WA_ShowWithoutActivating)
         self.setAttribute(Qt.WA_QuitOnClose, False)
         self.setFixedSize(256, 256)
+        self.scale = 1.0
         self.phase = 0.0
         self.suns = {}
         self.drag_start = None
@@ -61,6 +62,16 @@ class DesktopFlower(QWidget):
 
     def sync(self):
         garden = self.owner.garden
+        scale = garden.desktop_scale / 100
+        resized = scale != self.scale
+        if resized:
+            self.scale = scale
+            self.drag_start = self.pressed_sun = None
+            self.moved = False
+            self.setFixedSize(round(256 * scale), round(256 * scale))
+            if self.host.valid(int(self.winId())):
+                # Host clamps native pixel coordinates to the current virtual desktop.
+                self.host.move(self, *self.host.position(int(self.winId())))
         self.item = garden.desktop_source(self.item_id)
         self.growing = self.item is not None and 'plant_id' in self.item
         self.setToolTip('드래그로 이동 · 우클릭으로 화분에 돌려놓기' if self.growing else
@@ -75,7 +86,7 @@ class DesktopFlower(QWidget):
         region = QRegion(QRect(74, 36, 108, 173))
         for point in self.suns.values():
             region |= QRegion(QRect(round(point.x() - 15), round(point.y() - 15), 30, 30), QRegion.Ellipse)
-        self.setMask(region)
+        self.setMask(QTransform().scale(self.scale, self.scale).map(region))
         self.update()
 
     def animate(self):
@@ -88,6 +99,7 @@ class DesktopFlower(QWidget):
             return
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
+        painter.scale(self.scale, self.scale)
         paint_collection_flower(painter, QRectF(68, 32, 120, 182), plant_definition(self.item['species']),
                                 self.phase, self.owner.garden.equipped_skin,
                                 stage=growth_stage(self.item) if self.growing else 4)
@@ -102,6 +114,7 @@ class DesktopFlower(QWidget):
         painter.end()
 
     def sun_at(self, position):
+        position = position / self.scale
         return next((key for key, point in self.suns.items()
                      if math.hypot(position.x() - point.x(), position.y() - point.y()) <= 15), None)
 

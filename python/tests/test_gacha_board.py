@@ -1,3 +1,4 @@
+from legacy_fixture import v14_shape
 """Two-dice movement, persistent rewards, and board animation lifecycle checks."""
 import unittest
 import tempfile
@@ -75,6 +76,7 @@ class FlowerBoardRules(unittest.TestCase):
     def test_garden_draw_grants_existing_cosmetic_and_preserves_v13_save(self):
         garden = Garden(100)
         old = garden.to_dict()
+        old = v14_shape(old)
         old.pop('gacha')
         old['schema'] = 13
         restored = Garden.from_dict(migrate(old))
@@ -114,7 +116,7 @@ class FlowerBoardRules(unittest.TestCase):
         self.assertEqual(garden.to_dict(), before)
         garden.gacha['tickets'] = 0
         garden.gacha['board']['position'] = board.GOLD - 12
-        result = garden.draw_gacha('pot', randbelow=lambda n: n - 1)
+        result = garden.draw_gacha('pot', randbelow=lambda n: n - 1 if n in (6, 10000) else 0)
         self.assertEqual(result[0]['item'], 'rose')
         self.assertTrue(garden.equip_skin('rose'))
         restored = Garden.from_dict(garden.to_dict())
@@ -201,6 +203,7 @@ class DiceBoardInterface(unittest.TestCase):
         self.store = Store(Path(self.temp.name) / 'garden.json')
         self.garden = Garden(time.time(), sunlight=100)
         self.window = Window(self.store, self.garden, True)
+        self.window._test_sunlight = False
         self.window.clock.stop()
         self.window.autosave.stop()
         self.window.open_gacha_board()
@@ -298,7 +301,7 @@ class DiceBoardInterface(unittest.TestCase):
         self.dialog.movement.pause()
         self.dialog.movement.setCurrentTime(self.dialog.STEP_MS)
         self.assertEqual(self.dialog.display_position, 60)
-        self.assertIn('현재 60 / 60', self.dialog.position_label.text())
+        self.assertIn('현재 60번', self.dialog.position_label.text())
         self.dialog.resize(1080, 900)
         self.app.processEvents()
         self.dialog.done(0)
@@ -307,7 +310,7 @@ class DiceBoardInterface(unittest.TestCase):
         self.window.open_gacha_board()
         self.dialog = self.window._gacha_board_window
         self.app.processEvents()
-        self.assertIn('현재 1 / 60', self.dialog.position_label.text())
+        self.assertIn('현재 1번', self.dialog.position_label.text())
         self.assertEqual(self.garden.gacha, saved)
 
     def test_failed_save_does_not_start_the_dice_or_charge(self):

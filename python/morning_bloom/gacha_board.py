@@ -18,6 +18,19 @@ REWARDS = {
     'garden': {'R': ('cream',), 'SR': ('sky',), 'SSR': ('lavender',)},
 }
 
+# Explicit stable tier assignment; equal item weights within a tier.
+from .plant_catalog import GACHA_PLANTS
+from .cosmetics import POT_SKINS, THEMES
+PLANT_TIERS = ('SSR', 'SR', 'R', 'SSR', 'SR', 'SR', 'R', 'R')
+REWARDS['plant'] = {tier: tuple(k for k, t in zip(GACHA_PLANTS, PLANT_TIERS) if t == tier)
+                    for tier in ('R', 'SR', 'SSR')}
+for category, catalog, prefix in (('pot', POT_SKINS, 'catalog_pot_'), ('garden', THEMES, 'catalog_garden_')):
+    for key in catalog:
+        if key.startswith(prefix):
+            index = int(key.rsplit('_', 1)[1])
+            tier = ('R', 'SR', 'SSR')[index % 3]
+            REWARDS[category][tier] += (key,)
+
 
 def initial_state():
     return {
@@ -145,3 +158,11 @@ def simulate(state, count, sunlight, free_tickets=0, randbelow=None):
         'free_tickets': free_tickets - count if use_tickets else free_tickets,
         'payment': 'ticket' if use_tickets else 'sunlight',
     }
+
+
+def item_rarity(category, key):
+    """Return a collection tier without deriving it from a display name."""
+    for tier, pool in REWARDS.get(category, {}).items():
+        if key in pool:
+            return tier
+    return None

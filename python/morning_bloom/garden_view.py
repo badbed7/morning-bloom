@@ -150,6 +150,8 @@ class Meadow(QWidget):
         gradient.setColorAt(0, QColor(theme.top))
         gradient.setColorAt(1, QColor(theme.bottom))
         painter.fillRect(bounds, gradient)
+        from .catalog_art import paint_garden_pattern
+        paint_garden_pattern(painter, bounds, theme.key)
         # Deterministic tufts only in the visible rows, even for large collections.
         painter.setPen(QPen(QColor(theme.tuft), 1.3, Qt.SolidLine, Qt.RoundCap))
         for row in range(max(0, bounds.top() // 30), bounds.bottom() // 30 + 1):

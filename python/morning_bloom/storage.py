@@ -14,6 +14,7 @@ from .model import (
     V8_FIELDS,
     V12_FIELDS,
     V13_FIELDS,
+    V15_FIELDS,
     _number,
     _validate_legacy_collection,
     _validate_settings,
@@ -21,6 +22,9 @@ from .model import (
 )
 from .plant_catalog import LEGACY_REGULAR_PLANTS, V10_REGULAR_PLANTS, REGULAR_PLANTS, plant_definition
 from .gacha_board import initial_account
+
+
+V14_SAVE_FIELDS = frozenset(('coins', 'collection', 'desktop_flowers', 'desktop_opacity', 'equipped_skin', 'equipped_theme', 'fertilizer', 'fertilizer_reserve', 'gacha', 'last_reward_id', 'last_update', 'last_wind_reward_id', 'mystery_plants', 'mystery_seeds', 'owned_skins', 'owned_themes', 'pots', 'reward_wait', 'schema', 'seeds', 'selected', 'settings', 'sun_cursor', 'sun_elapsed', 'sun_intro_claimed', 'sun_tokens', 'sunlight', 'tutorial_reward_claimed', 'tutorial_used', 'vacation', 'wind_progress', 'wind_ring_hits', 'wind_upgrade'))
 
 
 class SaveError(Exception):
@@ -155,7 +159,7 @@ def _v4_to_v5(data):
 
 
 def _v5_to_v6(data):
-    expected = set(Garden(0).to_dict()) - V8_FIELDS - V12_FIELDS - V13_FIELDS - {'fertilizer', 'reward_wait', 'last_reward_id', 'owned_skins', 'equipped_skin', 'gacha'}
+    expected = V14_SAVE_FIELDS - V8_FIELDS - V12_FIELDS - V13_FIELDS - {'fertilizer', 'reward_wait', 'last_reward_id', 'owned_skins', 'equipped_skin', 'gacha'}
     old_pot_fields = set(empty_pot()) - set(TYCOON_POT_DEFAULTS)
     if (not isinstance(data, dict) or set(data) != expected or type(data.get('schema')) is not int
             or data['schema'] != 5 or not isinstance(data['pots'], list) or not 1 <= len(data['pots']) <= 2):
@@ -173,7 +177,7 @@ def _v5_to_v6(data):
 
 
 def _v6_to_v7(data):
-    expected = set(Garden(0).to_dict()) - V8_FIELDS - V12_FIELDS - V13_FIELDS - {'owned_skins', 'equipped_skin', 'gacha'}
+    expected = V14_SAVE_FIELDS - V8_FIELDS - V12_FIELDS - V13_FIELDS - {'owned_skins', 'equipped_skin', 'gacha'}
     if (not isinstance(data, dict) or set(data) != expected
             or type(data.get('schema')) is not int or data['schema'] != 6):
         raise ValueError('v6 저장 항목 오류')
@@ -184,7 +188,7 @@ def _v6_to_v7(data):
 
 
 def _v7_to_v8(data):
-    expected = set(Garden(0).to_dict()) - V8_FIELDS - V12_FIELDS - V13_FIELDS - {'gacha'}
+    expected = V14_SAVE_FIELDS - V8_FIELDS - V12_FIELDS - V13_FIELDS - {'gacha'}
     if not isinstance(data, dict) or set(data) != expected or type(data.get('schema')) is not int or data['schema'] != 7:
         raise ValueError('v7 저장 항목 오류')
     if type(data['fertilizer']) is not int or not 0 <= data['fertilizer'] <= 10:
@@ -205,7 +209,7 @@ def _v7_to_v8(data):
 
 def _v8_to_v9(data):
     migrated = {**deepcopy(data), 'schema': 9}
-    state = Garden.from_dict(_v13_to_v14(_v12_to_v13(_v11_to_v12(_v10_to_v11(_v9_to_v10(migrated))))))
+    state = Garden.from_dict(_v14_to_v15(_v13_to_v14(_v12_to_v13(_v11_to_v12(_v10_to_v11(_v9_to_v10(migrated)))))))
     if not set(state.desktop_flowers) <= {item['id'] for item in state.collection}:
         raise ValueError('v8 바탕화면 꽃 식별')
     return migrated
@@ -232,7 +236,7 @@ def _v10_to_v11(data):
 
 
 def _v11_to_v12(data):
-    expected = set(Garden(0).to_dict()) - V12_FIELDS - V13_FIELDS - {'gacha'}
+    expected = V14_SAVE_FIELDS - V12_FIELDS - V13_FIELDS - {'gacha'}
     if not isinstance(data, dict) or set(data) != expected or data.get('schema') != 11:
         raise ValueError('v11 저장 항목 오류')
     migrated = deepcopy(data)
@@ -244,21 +248,44 @@ def _v11_to_v12(data):
 
 
 def _v12_to_v13(data):
-    expected = set(Garden(0).to_dict()) - V13_FIELDS - {'gacha'}
+    expected = V14_SAVE_FIELDS - V13_FIELDS - {'gacha'}
     if (not isinstance(data, dict) or set(data) != expected
             or type(data.get('schema')) is not int or data['schema'] != 12
             or not _number(data['wind_progress']) or not 0 <= data['wind_progress'] <= 7200):
         raise ValueError('v12 저장 항목 오류')
     migrated = deepcopy(data)
     migrated.update(schema=13, wind_progress=float(data['wind_progress']) / 2, wind_ring_hits=0)
-    Garden.from_dict({**migrated, 'schema': 14, 'gacha': initial_account()})
+    Garden.from_dict(_v14_to_v15({**migrated, 'schema': 14, 'gacha': initial_account()}))
     return migrated
 
 
 def _v13_to_v14(data):
-    if not isinstance(data, dict) or data.get('schema') != 13 or set(data) != set(Garden(0).to_dict()) - {'gacha'}:
+    if not isinstance(data, dict) or data.get('schema') != 13 or set(data) != V14_SAVE_FIELDS - {'gacha'}:
         raise ValueError('v13 저장 항목 오류')
     migrated = {**deepcopy(data), 'schema': 14, 'gacha': initial_account()}
+    Garden.from_dict(_v14_to_v15(migrated))
+    return migrated
+
+
+def _v14_to_v15(data):
+    if (not isinstance(data, dict) or type(data.get('schema')) is not int or data['schema'] != 14
+            or set(data) != V14_SAVE_FIELDS
+            or not isinstance(data['seeds'], dict) or set(data['seeds']) != set(REGULAR_PLANTS)):
+        raise ValueError('v14 저장 항목 오류')
+    from .plant_catalog import SEED_PLANTS
+    migrated = deepcopy(data)
+    defaults = Garden(0).to_dict()
+    migrated.update({key: defaults[key] for key in V15_FIELDS})
+    migrated['schema'] = 15
+    migrated['seeds'] = {**dict.fromkeys(SEED_PLANTS, 0), **data['seeds']}
+    Garden._validate_collection(data['collection'])
+    if not isinstance(data['pots'], list):
+        raise ValueError('v14 화분 항목 오류')
+    for pot in data['pots']:
+        Garden._validate_pot(pot)
+    species = [item['species'] for item in data['collection']]
+    species += [pot['species'] for pot in data['pots'] if pot['planted'] and pot['growth'] >= pot['duration']]
+    migrated['discovered_plants'] = list(dict.fromkeys(species))
     Garden.from_dict(migrated)
     return migrated
 
@@ -303,6 +330,8 @@ def migrate(data):
         migrated = _v12_to_v13(migrated)
     if migrated.get('schema') == 13:
         migrated = _v13_to_v14(migrated)
+    if migrated.get('schema') == 14:
+        migrated = _v14_to_v15(migrated)
     return migrated
 
 

@@ -115,6 +115,8 @@ godot --headless --path . --script tests/ui_smoke.gd -- --demo
 
 ## Windows 실행 파일과 업데이트
 
+현재 소스의 이슈 수정: [수집 150종·바람놀이 강화·설정·Drive 오류 개선](docs/issue-resolution-2026-11-03.ko.md). 공개 배포 파일과 소스 반영은 별도입니다.
+
 최신 [v0.8.10 Release](https://github.com/badbed7/morning-bloom/releases/tag/v0.8.10)는 상점 꽃길 뽑기 진입을 강조하고 이전 버전의 업데이트 조회 개선을 포함합니다. Python-BAT ZIP 또는 Windows-x64 ZIP을 새 폴더에 전체 압축 해제하고 그 폴더의 BAT 또는 런처를 실행하세요. 기존 정원은 별도 저장 폴더에서 유지합니다.
 
 Python BAT는 Python 3.12 64비트로 실행하며, EXE는 Python 설치가 필요 없습니다. 사용자 배포에는 MSIX를 사용하지 않습니다. v0.6.0 이하를 쓰던 사용자는 v0.7.0 런처로 한 번 교체하면 이후 실행부터 자동 업데이트됩니다.

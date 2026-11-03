@@ -16,7 +16,7 @@ def smoke_test():
     from morning_bloom.app import Window
     from morning_bloom.model import Garden
     from morning_bloom.storage import Store
-    from morning_bloom.locked_catalog import LOCKED_COLLECTIONS, preview_image
+    from morning_bloom.locked_catalog import COLLECTIONS, preview_image
     print('Creating Qt application', flush=True)
     app = QApplication([])
     app.setApplicationName('MorningBloomBuildCheck')
@@ -32,8 +32,16 @@ def smoke_test():
         window.harvest_button.click()
         assert len(window.garden.collection) == 1
         assert not window.grab().isNull()
-        for items in LOCKED_COLLECTIONS.values():
+        for items in COLLECTIONS.values():
             assert not preview_image(items[0]).isNull(), 'Missing catalog artwork'
+        window.open_gacha_board()
+        board = window._gacha_board_window
+        board.category.setCurrentIndex(2)
+        board.draw(10)
+        board.finish_animation()
+        assert window.garden.unlocked_plants, 'Plant draw did not unlock a plant'
+        assert window.store.load(window.garden.last_update).unlocked_plants
+        board.done(0)
         window.close()
     print('Startup check passed', flush=True)
     return 0

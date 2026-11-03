@@ -644,6 +644,17 @@ class Window(QWidget):
         catalog.setObjectName('small')
         catalog.setWordWrap(True)
         layout.addWidget(catalog)
+        version = self.update_client.version
+        if not version:
+            try:
+                version = (Path(__file__).resolve().parents[2] / 'release/VERSION').read_text(encoding='utf-8').strip()
+            except OSError:
+                version = ''
+        self.game_version_label = QLabel(f'현재 게임 버전: v{version}' if version else '현재 게임 버전: 확인 불가')
+        self.game_version_label.setObjectName('small')
+        self.game_version_label.setWordWrap(True)
+        self.game_version_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        layout.addWidget(self.game_version_label)
         developer_title = QLabel('개발자 도구')
         developer_title.setObjectName('section')
         layout.addWidget(developer_title)

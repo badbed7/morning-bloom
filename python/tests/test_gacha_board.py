@@ -49,10 +49,10 @@ class FlowerBoardRules(unittest.TestCase):
         state = board.initial_state()
         state['position'] = 59
         result = board.simulate(state, 10, 100, randbelow=low_roll)
-        self.assertEqual([r['position'] for r in result['results']], [1, 3, 5, 7, 9, 11, 2, 4, 6, 8])
+        self.assertEqual([r['position'] for r in result['results']], [1, 3, 5, 7, 9, 11, 2, 4, 13, 15])
         self.assertEqual(result['results'][0]['path'], [60, 1])
-        self.assertEqual(result['state']['position'], 11)
-        self.assertTrue(result['results'][-1]['exited'])
+        self.assertEqual(result['state']['position'], 15)
+        self.assertTrue(result['results'][7]['exited'])
 
     def test_pity_and_side_route(self):
         state = board.initial_state()
@@ -60,9 +60,9 @@ class FlowerBoardRules(unittest.TestCase):
         first = board.simulate(state, 1, 10, randbelow=low_roll)
         self.assertEqual((first['results'][0]['side_gate'], first['results'][0]['side_step']), (11, 0))
         after = board.simulate(first['state'], 10, 100, randbelow=low_roll)
-        self.assertEqual([r['side_step'] for r in after['results'][:4]], [1, 2, 3, 0])
-        self.assertTrue(after['results'][3]['exited'])
-        self.assertIsNone(after['results'][4]['side_gate'])
+        self.assertEqual([r['side_step'] for r in after['results'][:2]], [1, 0])
+        self.assertTrue(after['results'][1]['exited'])
+        self.assertIsNone(after['results'][2]['side_gate'])
         state = board.initial_state()
         state.update(position=2, sr_miss=9, ssr_miss=59)
         result = board.simulate(state, 1, 10, randbelow=low_roll)

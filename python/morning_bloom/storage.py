@@ -292,7 +292,7 @@ def _v14_to_v15(data):
     species = [item['species'] for item in data['collection']]
     species += [pot['species'] for pot in data['pots'] if pot['planted'] and pot['growth'] >= pot['duration']]
     migrated['discovered_plants'] = list(dict.fromkeys(species))
-    Garden.from_dict(_v15_to_v16(migrated))
+    Garden.from_dict(migrate(_v15_to_v16(migrated)))
     return migrated
 
 
@@ -319,12 +319,27 @@ def _v15_to_v16(data):
         record['board_gate'] = None
     # Validate every old value before converting a completed marker or return position.
     state['side_step'] = min(step, 3)
-    validate_account(account)
+    validate_account(account, side_draws=4)
     if step == 4:
         state.update(side_gate=None, side_step=0)
     elif state['side_gate'] is not None:
         state['position'] = state['side_gate'] % 60
     migrated['schema'] = 16
+    Garden.from_dict(_v16_to_v17(migrated))
+    return migrated
+
+
+def _v16_to_v17(data):
+    if (not isinstance(data, dict) or type(data.get('schema')) is not int or data['schema'] != 16
+            or set(data) != set(Garden(0).to_dict())):
+        raise ValueError('v16 저장 항목 오류')
+    migrated = deepcopy(data)
+    # Check the old four-draw state before normalizing completed side trips.
+    validate_account(migrated['gacha'], side_draws=4)
+    state = migrated['gacha']['board']
+    if state['side_gate'] is not None and state['side_step'] >= 2:
+        state.update(position=state['side_gate'] % 60, side_gate=None, side_step=0, side_position=0)
+    migrated['schema'] = 17
     Garden.from_dict(migrated)
     return migrated
 
@@ -373,6 +388,8 @@ def migrate(data):
         migrated = _v14_to_v15(migrated)
     if migrated.get('schema') == 15:
         migrated = _v15_to_v16(migrated)
+    if migrated.get('schema') == 16:
+        migrated = _v16_to_v17(migrated)
     return migrated
 
 

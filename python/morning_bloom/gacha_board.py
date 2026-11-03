@@ -14,7 +14,7 @@ SILVER = frozenset((11, 26, 41))
 GOLD = 56
 SPECIALS = SILVER | {GOLD}
 SIDE_LENGTH = 12
-SIDE_DRAWS = 4
+SIDE_DRAWS = 2
 SIDE_BOARDS = {
     11: {'name': '새싹 곁길', 'ssr_cells': frozenset((6, 12))},
     26: {'name': '이슬 곁길', 'ssr_cells': frozenset((4, 8, 12))},
@@ -67,10 +67,10 @@ def initial_account():
     return {'board': initial_state(), 'tickets': 3, 'leaves': 0, 'history': []}
 
 
-def validate_account(account):
+def validate_account(account, side_draws=SIDE_DRAWS):
     if not isinstance(account, dict) or set(account) != set(initial_account()):
         raise ValueError('뽑기 저장 항목')
-    validate(account['board'])
+    validate(account['board'], side_draws)
     if any(type(account[key]) is not int or account[key] < 0 for key in ('tickets', 'leaves')):
         raise ValueError('뽑기 재화')
     history = account['history']
@@ -91,7 +91,7 @@ def validate_account(account):
             raise ValueError('뽑기 결과 지급')
 
 
-def validate(state):
+def validate(state, side_draws=SIDE_DRAWS):
     if not isinstance(state, dict) or set(state) != set(initial_state()):
         raise ValueError('보드 저장 항목')
     for key in ('position', 'total', 'sr_miss', 'ssr_miss', 'side_step', 'side_position'):
@@ -99,7 +99,7 @@ def validate(state):
             raise ValueError('보드 저장 값')
     if not 0 <= state['position'] < LENGTH or not 0 <= state['sr_miss'] <= 9:
         raise ValueError('보드 진행')
-    if not 0 <= state['ssr_miss'] <= 59 or not 0 <= state['side_step'] < SIDE_DRAWS:
+    if not 0 <= state['ssr_miss'] <= 59 or not 0 <= state['side_step'] < side_draws:
         raise ValueError('보드 보장')
     if state['side_gate'] is not None and (type(state['side_gate']) is not int or state['side_gate'] not in SPECIALS):
         raise ValueError('곁길 출입구')

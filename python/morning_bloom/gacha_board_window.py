@@ -126,7 +126,7 @@ class GachaBoardWindow(QDialog):
         title = QLabel('꽃길 뽑기')
         title.setStyleSheet('font-size:20px;font-weight:700;color:#466347')
         outer.addWidget(title)
-        explanation = QLabel('주사위 2개로 이동 · 특수 칸 도착 시 전용 곁길 진입 · 곁길 4회 후 복귀 · 매회 햇빛 10 · 곁길은 SR 이상, 황금 곁길은 SSR 전용')
+        explanation = QLabel(f'주사위 2개로 이동 · 특수 칸 도착 시 전용 곁길 진입 · 곁길 {board.SIDE_DRAWS}회 후 복귀 · 매회 햇빛 10 · 곁길은 SR 이상, 황금 곁길은 SSR 전용')
         explanation.setWordWrap(True)
         outer.addWidget(explanation)
         self.balance = QLabel()
@@ -187,7 +187,7 @@ class GachaBoardWindow(QDialog):
             gate.setMinimumWidth(75)
             side.addWidget(gate)
             self.side_cells[number] = gate
-        for step in range(1, 5):
+        for step in range(1, board.SIDE_DRAWS + 1):
             waypoint = QLabel()
             waypoint.setAlignment(Qt.AlignCenter)
             side.addWidget(waypoint)
@@ -255,7 +255,7 @@ class GachaBoardWindow(QDialog):
             cell = self.side_cells[number]
             cell.setText(f'{number}번 · {board.board_name(number)}')
             cell.setStyleSheet('background:#f1d98d;border:2px solid #467955;border-radius:5px;' if number == side_gate else 'background:#eee;border:1px solid #ccc;border-radius:5px;')
-        for step in range(1, 5):
+        for step in range(1, board.SIDE_DRAWS + 1):
             cell = self.side_cells[step]
             cell.setText(f'{step}회')
             cell.setStyleSheet('background:#cde5cc;border:2px solid #467955;border-radius:5px;' if side_gate is not None and step == side_step else 'background:#f6faef;border:1px solid #c5d2bb;border-radius:5px;')

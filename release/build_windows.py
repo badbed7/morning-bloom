@@ -50,6 +50,7 @@ def main():
             '--add-data', str(ROOT / 'assets/catalog') + ';assets/catalog', *google_args,
             'release/game_entry.py')
     run(*common, '--onefile', '--name', 'MorningBloom', '--paths', 'release',
+        '--collect-submodules', 'truststore', '--copy-metadata', 'truststore',
         '--add-data', str(icon) + ';assets/icons', 'release/launcher.py')
     game = ROOT / 'dist/MorningBloomGame'
     licenses = game / 'licenses'
@@ -57,7 +58,7 @@ def main():
     shutil.copy(ROOT / 'assets/fonts/OFL.txt', licenses / 'Noto-OFL.txt')
     # Include upstream license texts shipped with the runtime dependencies.
     import importlib.metadata
-    for package in ('PySide6', 'PySide6_Essentials', 'PySide6_Addons', 'shiboken6', 'PyInstaller'):
+    for package in ('PySide6', 'PySide6_Essentials', 'PySide6_Addons', 'shiboken6', 'PyInstaller', 'truststore'):
         distribution = importlib.metadata.distribution(package)
         for file in distribution.files or []:
             if 'license' in str(file).lower() or 'copying' in str(file).lower():

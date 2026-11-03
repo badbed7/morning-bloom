@@ -1,0 +1,46 @@
+name: Launcher TLS regression
+on:
+  push:
+    paths: ['release/**', '.github/workflows/launcher-tls.yml']
+  pull_request:
+    paths: ['release/**', '.github/workflows/launcher-tls.yml']
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          architecture: x64
+      - run: python -m pip install -r release/requirements-build.txt cryptography==46.0.3
+      - name: Reproduce missing issuer and verify native chain building
+        run: python release/tools/verify_tls.py
+        env:
+          PYTHONPATH: release
+      - name: Build actual windowed launcher and isolated BAT updater
+        run: |
+          python -m PyInstaller --noconfirm --clean --onefile --windowed --name MorningBloom --distpath tls-dist --workpath tls-build --specpath tls-build --paths release --collect-submodules truststore --copy-metadata truststore release/launcher.py
+          python -c "from bundle_updater import copy_bat_updater; copy_bat_updater('tls-bat/release')"
+        env:
+          PYTHONPATH: release
+      - name: Verify frozen launcher certificate acceptance and rejection
+        run: python release/tools/verify_tls.py --launcher tls-dist/MorningBloom.exe
+        env:
+          PYTHONPATH: release
+      - name: Verify vendored BAT updater without global packages
+        run: python release/tools/verify_tls.py --bat tls-bat
+        env:
+          PYTHONPATH: release
+      - name: Verify real public feeds and payloads from packaged EXE and BAT
+        run: |
+          python -c "import subprocess; from pathlib import Path; commands=[['tls-dist/MorningBloom.exe'],['python','-I','tls-bat/release/launcher.py']]; [(subprocess.run(c+['--diagnose-updates','--download-test','--diagnostic-log',str(Path('tls-public-'+str(i)+'.log').resolve())],check=True,timeout=240),print(Path('tls-public-'+str(i)+'.log').read_text(encoding='utf-8'))) for i,c in enumerate(commands)]"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: launcher-tls-diagnostics
+          path: tls-public-*.log
+          retention-days: 7

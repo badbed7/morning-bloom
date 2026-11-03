@@ -14,6 +14,7 @@ from tkinter import messagebox
 from release_config import REPOSITORY
 from update_core import Installer, UpdateError, read_latest, manifest, download, version
 from live_update import Coordinator, ControlServer, PREFIX
+from update_tls import backend as tls_backend, create_context, describe_error
 
 
 def command(executable, runtime=None):
@@ -119,11 +120,12 @@ def prepare(installer, bundle, report, warning=None):
                 current = installer.install(archive, data, check)
             break
         except Exception as exc:
-            errors.append(f'Install {data["version"]}: {exc}')
+            errors.append(f'Install {data["version"]}: {describe_error(exc)}')
     try:
         details = [f'Installed before: {previous_version or "none"}',
                    f'Latest verified: {latest["version"] if latest else "unavailable"}',
-                   f'Selected: {current["version"] if current else "none"}']
+                   f'Selected: {current["version"] if current else "none"}',
+                   f'TLS: {tls_backend()}']
         (installer.root / 'update.log').write_text('\n'.join(details + (errors or ['Up to date'])), encoding='utf-8')
     except OSError:
         pass
@@ -133,6 +135,8 @@ def prepare(installer, bundle, report, warning=None):
     if warning and errors and (latest is None or version(latest['version']) > version(current['version'])):
         reason = ('최신 버전을 확인하지 못했습니다.' if latest is None
                   else f'최신 v{latest["version"]} 업데이트를 적용하지 못했습니다.')
+        if any('TLS certificate verification failed' in error for error in errors):
+            reason += '\nHTTPS 인증서 발급기관을 확인하지 못했습니다. Windows 인증서·보안 프로그램·네트워크 검사를 확인하세요.'
         warning(reason + f'\n현재 설치된 v{current["version"]}로 실행합니다.'
                 + '\n인터넷 연결을 확인한 뒤 다시 실행하거나 최신 ZIP을 새 폴더에 풀어 실행하세요.'
                 + '\n진단 로그: ' + str(installer.root / 'update.log'))
@@ -193,12 +197,57 @@ def verify_live_update(installer, data, archive, check, log_path, runtime=None):
         server.close()
 
 
+def diagnose(args):
+    """Read-only checks: no game installs, save access, or launcher locks."""
+    import urllib.parse
+    import urllib.request
+    lines = [f'TLS: {tls_backend()}']
+    try:
+        if args.tls_probe:
+            url = urllib.parse.urlsplit(args.tls_probe)
+            # Local fixture only. No arbitrary remote endpoints or credentials.
+            if url.scheme != 'https' or url.hostname not in ('localhost', '127.0.0.1') or url.username or url.password:
+                raise ValueError('TLS probe is restricted to HTTPS loopback fixtures')
+            context = create_context(cafile=str(args.tls_ca) if args.tls_ca else None)
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}),
+                                                urllib.request.HTTPSHandler(context=context))
+            with opener.open(args.tls_probe, timeout=15) as response:
+                response.read(1)
+            lines.append('TLS probe: verified')
+        else:
+            create_context()  # Also proves the native backend is packaged.
+            for mode in (False, True):
+                data = read_latest(REPOSITORY, mode)
+                lines.append(f'{"BAT" if mode else "EXE"} latest: {data["version"]}')
+                if args.download_test:
+                    with tempfile.TemporaryDirectory(prefix='bloom-update-check-') as temporary:
+                        download(data, Path(temporary) / 'payload.zip')
+                    lines.append(f'Payload size and SHA-256 verified: {data["size"]} bytes')
+        result = 0
+    except Exception as error:
+        lines.append(describe_error(error))
+        result = 1
+    text = '\n'.join(lines) + '\n'
+    if args.diagnostic_log:
+        args.diagnostic_log.write_text(text, encoding='utf-8')
+    elif sys.stdout:
+        print(text, end='')
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--python', action='store_true', dest='python_mode')
     parser.add_argument('--self-test', action='store_true')
     parser.add_argument('--verify-bundle', action='store_true')
+    parser.add_argument('--diagnose-updates', action='store_true')
+    parser.add_argument('--diagnostic-log', type=Path)
+    parser.add_argument('--download-test', action='store_true')
+    parser.add_argument('--tls-probe')
+    parser.add_argument('--tls-ca', type=Path)
     args, game_args = parser.parse_known_args()
+    if args.diagnose_updates or args.tls_probe:
+        return diagnose(args)
     if args.self_test:
         version('0.3.0')
         return 0

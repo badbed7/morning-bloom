@@ -325,13 +325,13 @@ def _v15_to_v16(data):
     elif state['side_gate'] is not None:
         state['position'] = state['side_gate'] % 60
     migrated['schema'] = 16
-    Garden.from_dict(_v16_to_v17(migrated))
+    Garden.from_dict(_v17_to_v18(_v16_to_v17(migrated)))
     return migrated
 
 
 def _v16_to_v17(data):
     if (not isinstance(data, dict) or type(data.get('schema')) is not int or data['schema'] != 16
-            or set(data) != set(Garden(0).to_dict())):
+            or set(data) != set(Garden(0).to_dict()) - {'pot_skins'}):
         raise ValueError('v16 저장 항목 오류')
     migrated = deepcopy(data)
     # Check the old four-draw state before normalizing completed side trips.
@@ -340,6 +340,19 @@ def _v16_to_v17(data):
     if state['side_gate'] is not None and state['side_step'] >= 2:
         state.update(position=state['side_gate'] % 60, side_gate=None, side_step=0, side_position=0)
     migrated['schema'] = 17
+    Garden.from_dict(_v17_to_v18(migrated))
+    return migrated
+
+
+def _v17_to_v18(data):
+    if (not isinstance(data, dict) or type(data.get('schema')) is not int or data['schema'] != 17
+            or set(data) != set(Garden(0).to_dict()) - {'pot_skins'}):
+        raise ValueError('v17 저장 항목 오류')
+    if not isinstance(data['pots'], list):
+        raise ValueError('v17 화분 항목 오류')
+    migrated = deepcopy(data)
+    migrated['pot_skins'] = [data['equipped_skin'] for _ in data['pots']]
+    migrated['schema'] = 18
     Garden.from_dict(migrated)
     return migrated
 
@@ -390,6 +403,8 @@ def migrate(data):
         migrated = _v15_to_v16(migrated)
     if migrated.get('schema') == 16:
         migrated = _v16_to_v17(migrated)
+    if migrated.get('schema') == 17:
+        migrated = _v17_to_v18(migrated)
     return migrated
 
 

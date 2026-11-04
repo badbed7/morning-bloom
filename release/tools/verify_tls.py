@@ -20,6 +20,7 @@ from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import AuthorityInformationAccessOID, ExtendedKeyUsageOID, NameOID
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from update_tls import create_context
 
 
@@ -92,13 +93,16 @@ def request(url, context):
 
 
 def probe(args, url, root_file, log):
-    if args.launcher:
+    if args.game:
+        game = Path(args.game).resolve()
+        command = [sys.executable, '-I', str(game)] if game.suffix == '.py' else [str(game)]
+    elif args.launcher:
         command = [str(Path(args.launcher).resolve())]
     else:
         script = (Path(args.bat) / 'release/launcher.py' if args.bat
                   else Path(__file__).resolve().parents[1] / 'launcher.py')
         command = [sys.executable, '-I', str(script.resolve())]
-    command += ['--tls-probe', url, '--diagnostic-log', str(log)]
+    command += ['--cloud-tls-probe' if args.game else '--tls-probe', url, '--diagnostic-log', str(log)]
     if root_file:
         command += ['--tls-ca', str(root_file)]
     run = subprocess.run(command, timeout=60, stdin=subprocess.DEVNULL)
@@ -111,9 +115,10 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--launcher')
     parser.add_argument('--bat')
+    parser.add_argument('--game')
     args = parser.parse_args()
     native = sys.platform == 'win32'
-    if (args.launcher or args.bat) and not native:
+    if (args.launcher or args.bat or args.game) and not native:
         raise SystemExit('Packaged native chain checks require Windows')
     with tempfile.TemporaryDirectory(prefix='bloom-tls-') as temporary:
         folder = Path(temporary)

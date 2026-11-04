@@ -16,6 +16,7 @@ import webbrowser
 from ctypes import wintypes
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
+from .tls import create_context
 
 AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
 TOKEN_URL = 'https://oauth2.googleapis.com/token'
@@ -24,7 +25,8 @@ USERINFO_URL = 'https://openidconnect.googleapis.com/v1/userinfo'
 DRIVE_FILES_URL = 'https://www.googleapis.com/drive/v3/files'
 DRIVE_UPLOAD_URL = 'https://www.googleapis.com/upload/drive/v3/files'
 SCOPES = ('openid', 'email', 'profile', 'https://www.googleapis.com/auth/drive.appdata')
-SAVE_NAME = 'morning-bloom-save-v1.json'
+LEGACY_SAVE_NAME = 'morning-bloom-save-v1.json'
+SAVE_NAME = 'morning-bloom-save-v2.json'
 CREDENTIAL_TARGET = 'MorningBloom/GoogleDrive'
 _UNSET = object()
 
@@ -35,7 +37,7 @@ class CloudError(Exception):
         self.stage, self.status = stage, status
         self.code, self.reason, self.location = code, reason, location
         self.auth_required = code in ('invalid_grant', 'client_changed', 'login_required')
-        self.retryable = status in (408, 429, 500, 502, 503, 504) or code == 'network_error' or reason in ('rateLimitExceeded', 'userRateLimitExceeded')
+        self.retryable = status in (408, 429, 500, 502, 503, 504) or code in ('network_error', 'conflict') or reason in ('rateLimitExceeded', 'userRateLimitExceeded')
         self.guidance = ('Google 계정을 다시 연결하세요.' if self.auth_required else
                          '앱의 Google OAuth 설정을 확인하세요.' if code == 'invalid_client' else
                          'Google Drive API 활성화와 권한 설정을 확인하세요.' if status == 403 and not self.retryable else
@@ -103,7 +105,7 @@ def _request(url, method='GET', token=None, body=None, content_type=None, timeou
     stage = _stage(url, method)
     for attempt in range(3):
         try:
-            with urllib.request.urlopen(request, timeout=timeout) as response:
+            with urllib.request.urlopen(request, timeout=timeout, context=create_context()) as response:
                 return response.read()
         except urllib.error.HTTPError as exc:
             code = reason = location = ''
@@ -317,6 +319,7 @@ class GoogleDriveSync:
             self.credentials = {}
         self._access_token = ''
         self._expires_at = 0.0
+        self._observed_refs = None
         self.reauth_required = bool(self.credentials.get('reauth_required')) or bool(self.credentials.get('client_id') and self.credentials['client_id'] != self.client_id)
         self.auto_retry_allowed = not self.reauth_required
         self.last_error = '저장된 인증을 사용할 수 없습니다. Google 계정을 다시 연결하세요.' if self.reauth_required else ''
@@ -340,6 +343,7 @@ class GoogleDriveSync:
         saved = {'refresh_token': tokens['refresh_token'], 'email': tokens.get('email', ''), 'client_id': self.client_id}
         save_credentials(saved)
         self.credentials = saved
+        self._observed_refs = None
         self.reauth_required = False
         self.auto_retry_allowed = True
         self.last_error = ''
@@ -361,6 +365,7 @@ class GoogleDriveSync:
         self.last_error = ''
         self._access_token = ''
         self._expires_at = 0
+        self._observed_refs = None
 
     def _record_error(self, error):
         self.last_error = str(error) + ' ' + error.guidance
@@ -419,52 +424,137 @@ class GoogleDriveSync:
             raise CloudError('Google 로그인을 갱신하지 못했습니다.', stage='token', code='login_required')
         return self._access_token
 
-    def _file_id(self):
-        query = urllib.parse.urlencode({
-            'spaces': 'appDataFolder', 'q': f"name='{SAVE_NAME}'",
-            'orderBy': 'modifiedTime desc', 'pageSize': 1, 'fields': 'files(id)',
-        })
-        result = self._drive_call(lambda: _json_request(DRIVE_FILES_URL + '?' + query, token=self._token()))
-        files = result.get('files', [])
-        return files[0].get('id') if files else None
+    def _files(self):
+        files, page_token, seen = [], None, set()
+        while True:
+            query = {
+                'spaces': 'appDataFolder',
+                'q': f"(name='{SAVE_NAME}' or name='{LEGACY_SAVE_NAME}') and trashed=false",
+                'orderBy': 'modifiedTime desc', 'pageSize': 1000,
+                'fields': 'nextPageToken,files(id,version,size,appProperties)',
+            }
+            if page_token:
+                query['pageToken'] = page_token
+            result = self._drive_call(lambda: _json_request(
+                DRIVE_FILES_URL + '?' + urllib.parse.urlencode(query), token=self._token()))
+            page = result.get('files', [])
+            if not isinstance(page, list) or any(not isinstance(f, dict) or not isinstance(f.get('id'), str) or not f.get('id')
+                    or not isinstance(f.get('appProperties', {}), dict)
+                    or any(not isinstance(k, str) or not isinstance(v, str)
+                           for k, v in f.get('appProperties', {}).items()) for f in page):
+                raise CloudError('클라우드 저장 목록을 확인할 수 없습니다.')
+            # Old releases could create an empty file before a failed PATCH.
+            # Ignore only positively identified empty legacy files, never corrupt saves.
+            files.extend(f for f in page if not (str(f.get('size')) == '0' and not f.get('appProperties', {}).get('bloom_rev')))
+            page_token = result.get('nextPageToken')
+            if not page_token:
+                return files
+            if page_token in seen:
+                raise CloudError('클라우드 저장 목록이 반복됩니다.')
+            seen.add(page_token)
 
-    def download_save(self):
-        file_id = self._file_id()
-        if not file_id:
-            self.auto_retry_allowed = True
-            self.last_error = ''
-            return None
-        raw = self._drive_call(lambda: _request(f'{DRIVE_FILES_URL}/{urllib.parse.quote(file_id, safe="")}?alt=media', token=self._token()))
+    @staticmethod
+    def _revision(file):
+        # Legacy clients can still edit their v1 file. Treat each version as a new
+        # head, while keeping v2 journal names outside the old client's query.
+        return file.get('appProperties', {}).get('bloom_rev') or f"{file['id']}:{file.get('version', '')}"
+
+    @staticmethod
+    def _heads(files):
+        superseded = {v for f in files for k, v in f.get('appProperties', {}).items() if k.startswith('bloom_p')}
+        heads = [f for f in files if GoogleDriveSync._revision(f) not in superseded]
+        if files and not heads:
+            raise CloudError('클라우드 백업 연결이 손상되었습니다. 기존 저장을 보존했습니다.')
+        return heads
+
+    @staticmethod
+    def _refs(files):
+        return tuple(sorted((f['id'], str(f.get('version', ''))) for f in files))
+
+    def _file_id(self):
+        files = self._heads(self._files())
+        return files[0]['id'] if files else None
+
+    def _read_save(self, file):
+        file_id = urllib.parse.quote(file['id'], safe='')
+        raw = self._drive_call(lambda: _request(f'{DRIVE_FILES_URL}/{file_id}?alt=media', token=self._token()))
         try:
             envelope = json.loads(raw.decode('utf-8'))
         except (UnicodeDecodeError, ValueError) as exc:
             raise CloudError('클라우드 저장 파일이 손상되었습니다.') from exc
-        if (not isinstance(envelope, dict) or set(envelope) != {'schema', 'saved_at', 'save'}
-                or envelope['schema'] != 1 or type(envelope['saved_at']) not in (int, float)
-                or not math.isfinite(envelope['saved_at'])
+        fields = {'schema', 'saved_at', 'save'}
+        if isinstance(envelope, dict) and envelope.get('schema') == 2:
+            fields |= {'revision', 'parents'}
+        if (not isinstance(envelope, dict) or set(envelope) != fields
+                or type(envelope['schema']) is not int or envelope['schema'] not in (1, 2)
+                or type(envelope['saved_at']) not in (int, float) or not math.isfinite(envelope['saved_at'])
                 or not isinstance(envelope['save'], dict)):
             raise CloudError('지원하지 않는 클라우드 저장 형식입니다.')
+        if envelope['schema'] == 2:
+            if (envelope['revision'] != file.get('appProperties', {}).get('bloom_rev')
+                    or not isinstance(envelope['parents'], list)
+                    or any(not isinstance(p, str) for p in envelope['parents'])
+                    or set(envelope['parents']) != {v for k, v in file.get('appProperties', {}).items() if k.startswith('bloom_p')}):
+                raise CloudError('클라우드 저장 버전을 확인할 수 없습니다.')
+        from .model import Garden
+        from .storage import migrate
+        try:
+            # Future or damaged heads must block writing, including manual backup.
+            Garden.from_dict(migrate(envelope['save']))
+        except (ValueError, TypeError, KeyError) as exc:
+            raise CloudError('클라우드 정원을 읽을 수 없습니다. 새 버전 여부를 확인하세요.', code='invalid_save') from exc
+        return envelope
+
+    def download_save(self):
+        files = self._heads(self._files())
+        if len(files) > 32:
+            raise CloudError('클라우드 충돌 백업이 너무 많습니다. 로컬 정원을 보존했습니다.')
+        envelopes = [self._read_save(file) for file in files]
+        self._observed_refs = self._refs(files)
         self.auto_retry_allowed = True
         self.last_error = ''
+        if not envelopes:
+            return None
+        envelope = envelopes[0]
+        if len(envelopes) > 1:
+            envelope = {**envelope, 'alternatives': envelopes[1:]}
         return envelope
 
     def upload_save(self, save):
-        if not isinstance(save, dict):
-            raise CloudError('저장 데이터를 업로드할 수 없습니다.')
-        envelope = {'schema': 1, 'saved_at': self.clock(), 'save': save}
-        file_id = self._file_id()
-        token = self._token()
-        if not file_id:
-            created = self._drive_call(lambda: _json_request(DRIVE_FILES_URL + '?fields=id', 'POST', self._token(), {
-                'name': SAVE_NAME, 'parents': ['appDataFolder'],
-            }))
-            file_id = created.get('id')
-            if not file_id:
-                raise CloudError('Google Drive 저장 파일을 만들지 못했습니다.')
-        self._drive_call(lambda: _json_request(
-            f'{DRIVE_UPLOAD_URL}/{urllib.parse.quote(file_id, safe="")}?uploadType=media',
-            'PATCH', self._token(), envelope,
-        ))
+        from .model import Garden
+        try:
+            Garden.from_dict(save)
+        except (ValueError, TypeError) as exc:
+            raise CloudError('저장 데이터를 업로드할 수 없습니다.') from exc
+        if self._observed_refs is None:
+            self.download_save()
+        heads = self._heads(self._files())
+        if self._refs(heads) != self._observed_refs:
+            raise CloudError('다른 PC의 백업이 변경되었습니다. 다시 확인하세요.', code='conflict')
+        parents = [self._revision(f) for f in heads]
+        revision = secrets.token_hex(16)
+        envelope = {'schema': 2, 'saved_at': self.clock(), 'save': save,
+                    'revision': revision, 'parents': parents}
+        properties = {'bloom_rev': revision, **{f'bloom_p{i}': p for i, p in enumerate(parents)}}
+        metadata = {'name': SAVE_NAME, 'parents': ['appDataFolder'], 'appProperties': properties}
+        boundary = 'bloom_' + secrets.token_hex(16)
+        body = (f'--{boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n'.encode()
+                + json.dumps(metadata).encode() +
+                f'\r\n--{boundary}\r\nContent-Type: application/json\r\n\r\n'.encode()
+                + json.dumps(envelope, ensure_ascii=False).encode('utf-8') +
+                f'\r\n--{boundary}--\r\n'.encode())
+        # Append a complete snapshot in one multipart create. Never overwrite/delete
+        # another device's revision. Concurrent children remain separate conflict heads.
+        raw = self._drive_call(lambda: _request(
+            DRIVE_UPLOAD_URL + '?uploadType=multipart&fields=id', 'POST', self._token(), body,
+            f'multipart/related; boundary={boundary}'))
+        try:
+            created = json.loads(raw.decode('utf-8'))
+            if not isinstance(created.get('id'), str) or not created['id']:
+                raise ValueError('missing id')
+        except (ValueError, AttributeError, UnicodeDecodeError) as exc:
+            raise CloudError('백업 응답을 확인하지 못했습니다. 다음 주기에 다시 확인합니다.', code='network_error') from exc
+        self._observed_refs = ((created['id'], '1'),)
         self.auto_retry_allowed = True
         self.last_error = ''
         return envelope['saved_at']

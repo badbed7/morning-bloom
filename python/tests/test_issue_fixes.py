@@ -154,6 +154,7 @@ class CollectionExpansion(unittest.TestCase):
             100, sunlight=87, owned_skins=["terracotta", "rose"], equipped_skin="rose"
         )
         old = current.to_dict()
+        old.pop('pot_skins')
         for key in V15_FIELDS:
             old.pop(key)
         old["seeds"] = {k: v for k, v in old["seeds"].items() if k not in GACHA_PLANTS}

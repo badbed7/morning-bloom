@@ -21,6 +21,10 @@ jobs:
         run: python release/tools/verify_tls.py
         env:
           PYTHONPATH: release
+      - name: Verify real game cloud HTTPS transport
+        run: python release/tools/verify_tls.py --game release/game_entry.py
+        env:
+          PYTHONPATH: release
       - name: Build actual windowed launcher and isolated BAT updater
         run: |
           python -m PyInstaller --noconfirm --clean --onefile --windowed --name MorningBloom --distpath tls-dist --workpath tls-build --specpath tls-build --paths release --collect-submodules truststore --copy-metadata truststore release/launcher.py

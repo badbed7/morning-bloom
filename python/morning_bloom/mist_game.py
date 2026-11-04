@@ -32,7 +32,7 @@ class SprayCanvas(QWidget):
 
     def __init__(self, garden, parent):
         super().__init__(parent)
-        self.definition, self.stage, self.skin = garden.definition, garden.stage, garden.equipped_skin
+        self.definition, self.stage, self.skin = garden.definition, garden.stage, garden.current_skin
         self.hits = 0
         self.frame = 0
         self.spraying = False

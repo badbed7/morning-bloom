@@ -78,22 +78,22 @@ class GoogleCloudSave(unittest.TestCase):
         _wait_for_callback(server, result, 1)
         self.assertEqual(server.calls, 2)
 
-    def test_upload_creates_private_app_data_file(self):
+    def test_upload_creates_complete_private_app_data_snapshot(self):
         sync = GoogleDriveSync(CLIENT_ID, {'refresh_token': 'refresh'}, clock=lambda: 200)
-        with patch.object(sync, '_file_id', return_value=None), \
+        with patch.object(sync, '_files', return_value=[]), \
                 patch.object(sync, '_token', return_value='access'), \
-                patch('morning_bloom.google_cloud._json_request') as request:
-            request.side_effect = [{'id': 'file-id'}, {}]
-            saved_at = sync.upload_save({'schema': Garden.CURRENT_SCHEMA})
+                patch('morning_bloom.google_cloud._request', return_value=b'{"id":"file-id"}') as request:
+            saved_at = sync.upload_save(Garden(100).to_dict())
         self.assertEqual(saved_at, 200)
-        self.assertEqual(request.call_args_list[0].args[3]['parents'], ['appDataFolder'])
-        uploaded = request.call_args_list[1].args[3]
-        self.assertEqual(uploaded['save']['schema'], Garden.CURRENT_SCHEMA)
-        self.assertEqual(uploaded['saved_at'], 200)
+        self.assertEqual(request.call_args.args[1], 'POST')
+        self.assertIn('uploadType=multipart', request.call_args.args[0])
+        self.assertIn(b'appDataFolder', request.call_args.args[3])
+        self.assertIn(b'"saved_at": 200', request.call_args.args[3])
+        self.assertIn('multipart/related', request.call_args.args[4])
 
     def test_download_rejects_invalid_envelope(self):
         sync = GoogleDriveSync(CLIENT_ID, {'refresh_token': 'refresh'})
-        with patch.object(sync, '_file_id', return_value='file-id'), \
+        with patch.object(sync, '_files', return_value=[{'id': 'file-id'}]), \
                 patch.object(sync, '_token', return_value='access'), \
                 patch('morning_bloom.google_cloud._request', return_value=b'{}'):
             with self.assertRaises(CloudError):

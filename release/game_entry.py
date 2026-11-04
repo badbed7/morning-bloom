@@ -105,7 +105,34 @@ def checked_smoke_test(log_path):
                 return 1
 
 
+def cloud_tls_probe():
+    """Use the real game cloud transport in source/BAT/frozen TLS fixtures."""
+    import urllib.parse
+    from morning_bloom import google_cloud
+    from morning_bloom.tls import create_context
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--cloud-tls-probe', required=True)
+    parser.add_argument('--tls-ca', type=Path)
+    parser.add_argument('--diagnostic-log', type=Path, required=True)
+    args = parser.parse_args()
+    target = urllib.parse.urlsplit(args.cloud_tls_probe)
+    if target.scheme != 'https' or target.hostname not in ('localhost', '127.0.0.1'):
+        raise ValueError('Only local TLS fixtures are allowed')
+    google_cloud.create_context = lambda: create_context(cafile=str(args.tls_ca) if args.tls_ca else None)
+    try:
+        result = google_cloud._request(args.cloud_tls_probe)
+        if result != b'{"verified": true}':
+            raise ValueError('Unexpected probe response')
+        args.diagnostic_log.write_text('Game cloud transport: certificate verified\n', encoding='utf-8')
+        return 0
+    except Exception as error:
+        args.diagnostic_log.write_text('Game cloud transport: rejected · ' + str(error) + '\n', encoding='utf-8')
+        return 1
+
+
 if __name__ == '__main__':
+    if '--cloud-tls-probe' in sys.argv:
+        raise SystemExit(cloud_tls_probe())
     if '--live-update-smoke' in sys.argv:
         raise SystemExit(live_update_smoke())
     if '--smoke-test' in sys.argv:

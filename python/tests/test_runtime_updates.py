@@ -171,6 +171,9 @@ class RuntimeUpdates(unittest.TestCase):
             configured = connected = True
             email = "test@example.com"
 
+            def download_save(self):
+                return None
+
             def upload_save(self, data):
                 raise CloudError("offline", code="network_error")
 

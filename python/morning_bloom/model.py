@@ -175,7 +175,7 @@ def _validate_legacy_collection(items):
 @dataclass
 class Garden:
     """Shared inventory with up to four independently simulated pots."""
-    CURRENT_SCHEMA: ClassVar[int] = 17
+    CURRENT_SCHEMA: ClassVar[int] = 18
 
     last_update: float
     schema: int = CURRENT_SCHEMA
@@ -201,6 +201,7 @@ class Garden:
     equipped_theme: str = 'grass'
     owned_skins: list = field(default_factory=lambda: ['terracotta'])
     equipped_skin: str = 'terracotta'
+    pot_skins: list = field(default_factory=list)
     gacha: dict = field(default_factory=gacha_board.initial_account)
     fertilizer: int = 0
     fertilizer_reserve: int = 0
@@ -218,7 +219,17 @@ class Garden:
     def __post_init__(self):
         if not self.pots:
             self.pots = [empty_pot()]
+        if not self.pot_skins:
+            self.pot_skins = [self.equipped_skin for _ in self.pots]
         self.seeds = {**dict.fromkeys(SEED_PLANTS, 0), **self.seeds}
+
+    @property
+    def current_skin(self):
+        return self.pot_skins[self.selected]
+
+    def source_skin(self, item_id):
+        return next((self.pot_skins[i] for i, pot in enumerate(self.pots)
+                     if pot['plant_id'] == item_id), self.equipped_skin)
 
     @property
     def pot(self):
@@ -501,9 +512,12 @@ class Garden:
             return None
         return SUN_INTERVAL - self.sun_elapsed
 
-    def plant(self, now, species='daisy'):
+    def plant(self, now, species='daisy', skin_id=None):
         self.advance(now)
         if not self.can_plant(species):
+            return False
+        skin_id = self.current_skin if skin_id is None else skin_id
+        if skin_id not in self.owned_skins:
             return False
         mystery = species == 'random'
         if mystery:
@@ -527,6 +541,7 @@ class Garden:
         }
         if mystery:
             self.mystery_plants.append(self.pot['plant_id'])
+        self.pot_skins[self.selected] = skin_id
         self.tutorial_used = True
         return True
 
@@ -649,6 +664,7 @@ class Garden:
             return False
         self.coins -= price
         self.pots.append(empty_pot())
+        self.pot_skins.append(self.equipped_skin)
         return True
 
     def sell(self, item_id=None, now=None):
@@ -720,6 +736,7 @@ class Garden:
         if type(skin_id) is not str or skin_id not in self.owned_skins or skin_id not in POT_SKINS:
             return False
         self.equipped_skin = skin_id
+        self.pot_skins[self.selected] = skin_id
         return True
 
     def draw_gacha(self, category, count=1, randbelow=None, *, test_free=False):
@@ -877,6 +894,9 @@ class Garden:
         pots = data['pots']
         if not isinstance(pots, list) or not 1 <= len(pots) <= len(POT_PRICES):
             raise ValueError('화분 개수')
+        if (not isinstance(data['pot_skins'], list) or len(data['pot_skins']) != len(pots)
+                or any(type(key) is not str or key not in data['owned_skins'] for key in data['pot_skins'])):
+            raise ValueError('화분별 외형')
         if type(data['selected']) is not int or not 0 <= data['selected'] < len(pots):
             raise ValueError('선택 화분')
         active_ids = set()

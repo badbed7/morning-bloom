@@ -112,6 +112,8 @@ def probe(args, url, root_file, log):
 
 
 def main():
+    if hasattr(sys.stdout, 'reconfigure'):
+        sys.stdout.reconfigure(encoding='utf-8', errors='backslashreplace')
     parser = argparse.ArgumentParser()
     parser.add_argument('--launcher')
     parser.add_argument('--bat')

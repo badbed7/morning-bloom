@@ -1,7 +1,7 @@
 """Seed packets shared by the planting screen and the gold shop."""
 from PySide6.QtCore import QRectF, Qt
 from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
-from PySide6.QtWidgets import QPushButton
+from PySide6.QtWidgets import QLabel, QPushButton
 
 from .flower_art import paint_collection_flower
 from .icon_picker import IconPicker
@@ -43,6 +43,11 @@ class SeedPicker(IconPicker):
             self.setFixedHeight(88)
         self.page = 0
         self.page_size = 3
+        self._available_keys = list(self.buttons)
+        self.empty_state = QLabel('보유한 씨앗이 없어요', self)
+        self.empty_state.setAlignment(Qt.AlignCenter)
+        self.empty_state.setObjectName('small')
+        self.layout().insertWidget(0, self.empty_state, 1)
         self.previous = QPushButton(self)
         self.next = QPushButton(self)
         for button, direction, label in ((self.previous, -1, '이전 씨앗'), (self.next, 1, '다음 씨앗')):
@@ -58,29 +63,50 @@ class SeedPicker(IconPicker):
         self.show_page()
         self.update_counts({})
 
+    @property
+    def selected(self):
+        button = self.group.checkedButton()
+        key = button.property('choice') if button else None
+        return key if key in self._available_keys else None
+
     def show_page(self):
-        for index, button in enumerate(self.buttons.values()):
-            button.setVisible(index // self.page_size == self.page)
-        pages = (len(self.buttons) + self.page_size - 1) // self.page_size
+        pages = (len(self._available_keys) + self.page_size - 1) // self.page_size
+        self.page = max(0, min(self.page, pages - 1))
+        visible = self._available_keys[self.page * self.page_size:(self.page + 1) * self.page_size]
+        for key, button in self.buttons.items():
+            button.setVisible(key in visible)
+        self.empty_state.setVisible(not self._available_keys)
         self.previous.setEnabled(self.page > 0)
         self.next.setEnabled(self.page < pages - 1)
         for button in (self.previous, self.next):
+            button.setVisible(pages > 1)
             button.setToolTip(f'씨앗 {self.page + 1} / {pages}쪽')
 
     def change_page(self, direction):
         page = self.page + direction
-        if not 0 <= page <= (len(self.buttons) - 1) // self.page_size:
+        if not 0 <= page <= (len(self._available_keys) - 1) // self.page_size:
             return
         self.page = page
-        list(self.buttons.values())[page * self.page_size].setChecked(True)
+        self.buttons[self._available_keys[page * self.page_size]].setChecked(True)
         self.show_page()
         self.selectionChanged.emit()
 
     def reveal_selected(self):
-        self.page = list(self.buttons).index(self.selected) // self.page_size
+        selected = self.selected
+        self.page = self._available_keys.index(selected) // self.page_size if selected is not None else 0
         self.show_page()
 
     def update_counts(self, seeds):
+        selected = self.selected
+        self._available_keys = [key for key in self.buttons if self.shop or seeds.get(key, 0) > 0]
+        if selected not in self._available_keys:
+            if self._available_keys:
+                self.buttons[self._available_keys[0]].setChecked(True)
+            else:
+                self.group.setExclusive(False)
+                for button in self.buttons.values():
+                    button.setChecked(False)
+                self.group.setExclusive(True)
         for key, button in self.buttons.items():
             if key == 'random':
                 count = seeds.get(key, 0)
@@ -100,3 +126,4 @@ class SeedPicker(IconPicker):
                 + (f'\n{definition.shop_tag}\n설정의 휴가 모드는 성장을 정지합니다.'
                    if key in VACATION_PLANTS else '')
             )
+        self.reveal_selected()

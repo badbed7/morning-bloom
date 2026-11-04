@@ -1744,6 +1744,9 @@ class Window(QWidget):
             self.remaining.setText('빈 화분 · 키울 식물을 선택하세요')
             self.care_info.setText('모든 꽃은 심은 뒤 첫 물주기를 해야 성장해요')
 
+        visible_seeds = {**garden.seeds, 'random': len(garden.mystery_seeds)}
+        self.species_picker.update_counts(visible_seeds)
+        self.shop_picker.update_counts(visible_seeds)
         selected = self.species_picker.selected
         count = garden.seed_count(selected)
         self.plant_button.setText(
@@ -1767,9 +1770,6 @@ class Window(QWidget):
         self.mist_button.setVisible(caring and garden.pot['initial_watered'] and not garden.pot['is_tutorial'])
         self.fertilizer_button.setVisible(caring and garden.pot['initial_watered'] and garden.tutorial_reward_claimed)
         self.harvest_button.setVisible(garden.bloomed)
-        visible_seeds = {**garden.seeds, 'random': len(garden.mystery_seeds)}
-        self.species_picker.update_counts(visible_seeds)
-        self.shop_picker.update_counts(visible_seeds)
         self.vacation.blockSignals(True)
         self.vacation.setChecked(garden.vacation)
         self.vacation.blockSignals(False)

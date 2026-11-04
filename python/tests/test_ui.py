@@ -124,7 +124,7 @@ class UI(unittest.TestCase):
                 window.buy_seed_button.click()
                 self.assertEqual((garden.coins, garden.seed_count('starflower')), (32, 1))
                 self.assertIn('1개', window.species_picker.buttons['starflower'].text())
-                self.assertEqual(window.species_picker.selected, 'daisy')
+                self.assertEqual(window.species_picker.selected, 'starflower')
                 before = garden.to_dict()
                 with patch.object(store, 'save', side_effect=SaveError('disk full')):
                     window.buy_seed_button.click()
@@ -132,7 +132,7 @@ class UI(unittest.TestCase):
                 window.navigate(-1)
                 window.pages.finish_transition()
                 self.assertEqual(window.pages.widget(POT_PAGE).findChildren(QComboBox), [])
-                self.assertFalse(window.plant_button.isEnabled())
+                self.assertTrue(window.plant_button.isEnabled())
                 window.species_picker.buttons['starflower'].setFocus()
                 QTest.keyClick(window.species_picker.buttons['starflower'], Qt.Key_Space)
                 self.assertEqual(window.species_picker.selected, 'starflower')

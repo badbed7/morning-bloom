@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
 from . import gacha_board as board
 from .plant_catalog import PLANTS
 from .cosmetics import POT_SKINS, THEMES
+from .gacha_results import GachaResults, RewardReveal
 
 
 def coordinates(number):
@@ -116,6 +117,9 @@ class GachaBoardWindow(QDialog):
         self.current_result = None
         self._visible_history = None
         self._roll_frame = 0
+        self.batch_results = []
+        self.results_dialog = None
+        self._summary_pending = False
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._tick)
         self.movement = QVariantAnimation(self)
@@ -153,6 +157,8 @@ class GachaBoardWindow(QDialog):
         center = QWidget()
         center_layout = QVBoxLayout(center)
         center_layout.setAlignment(Qt.AlignCenter)
+        self.reward_reveal = RewardReveal(center)
+        center_layout.addWidget(self.reward_reveal)
         dice_row = QHBoxLayout()
         dice_row.setAlignment(Qt.AlignCenter)
         self.dice = [DiceFace(center), DiceFace(center)]
@@ -205,7 +211,7 @@ class GachaBoardWindow(QDialog):
         controls.addWidget(self.one)
         controls.addWidget(self.ten)
         self.skip = QPushButton('연출 건너뛰기')
-        self.skip.clicked.connect(self.finish_animation)
+        self.skip.clicked.connect(lambda: self.finish_animation())
         self.skip.setVisible(False)
         controls.addWidget(self.skip)
         outer.addLayout(controls)
@@ -288,6 +294,9 @@ class GachaBoardWindow(QDialog):
     def draw(self, count):
         if self.animating:
             return
+        if self.results_dialog is not None:
+            self.results_dialog.reject()
+            self.results_dialog = None
         results = []
         category = self.category.currentData()
         state = self.owner.garden.gacha['board']
@@ -306,7 +315,9 @@ class GachaBoardWindow(QDialog):
         if not self.owner.act(action):
             self.sync()
             return
-        self.animation = results
+        self.batch_results = list(results)
+        self._summary_pending = True
+        self.animation = list(results)
         self.animating = True
         self.display_gate = start_gate
         self.display_position = start_position
@@ -323,6 +334,8 @@ class GachaBoardWindow(QDialog):
             self.finish_animation()
             return
         self.current_result = self.animation.pop(0)
+        self.reward_reveal.effect.stop()
+        self.reward_reveal.hide()
         self.phase = 'rolling'
         self.display_gate = self.current_result['board_gate']
         self.display_position = self.current_result['start']
@@ -433,11 +446,13 @@ class GachaBoardWindow(QDialog):
         self.sync()
         self.phase = 'pause'
         self.timer.setSingleShot(True)
-        self.timer.start(self.PAUSE_MS)
+        self.timer.start(max(self.PAUSE_MS, self.reward_reveal.reveal(item)))
 
-    def finish_animation(self):
+    def finish_animation(self, show_results=True):
         self.timer.stop()
         self.movement.stop()
+        self.reward_reveal.effect.stop()
+        self.reward_reveal.hide()
         last = self.animation[-1] if self.animation else self.current_result
         if last:
             for die, face in zip(self.dice, last['dice']):
@@ -456,6 +471,12 @@ class GachaBoardWindow(QDialog):
         self.seed.sway = 0
         self.seed.update()
         self.sync()
+        if self._summary_pending:
+            self._summary_pending = False
+            if show_results:
+                self.results_dialog = GachaResults(self, self.batch_results)
+                self.results_dialog.finished.connect(lambda _: setattr(self, 'results_dialog', None))
+                self.results_dialog.open()
 
     def eventFilter(self, watched, event):
         if watched is getattr(self, 'board_widget', None) and event.type() in (QEvent.Resize, QEvent.LayoutRequest):
@@ -471,9 +492,11 @@ class GachaBoardWindow(QDialog):
         self._align_seed()
 
     def done(self, result):
-        self.finish_animation()
+        self.finish_animation(show_results=False)
+        if self.results_dialog is not None:
+            self.results_dialog.reject()
         super().done(result)
 
     def closeEvent(self, event):
-        self.finish_animation()
+        self.finish_animation(show_results=False)
         super().closeEvent(event)

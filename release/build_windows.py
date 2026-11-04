@@ -46,6 +46,7 @@ def main():
             secret.write_text(google_secret, encoding='utf-8')
             google_args = ['--add-data', str(config) + ';.', '--add-data', str(secret) + ';.']
         run(*common, '--onedir', '--name', 'MorningBloomGame', '--paths', 'python',
+            '--collect-submodules', 'truststore', '--copy-metadata', 'truststore',
             '--add-data', str(ROOT / 'assets/fonts') + ';assets/fonts',
             '--add-data', str(ROOT / 'assets/catalog') + ';assets/catalog', *google_args,
             'release/game_entry.py')
@@ -68,6 +69,7 @@ def main():
                     destination.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy(path, destination)
     run(game / 'MorningBloomGame.exe', '--smoke-test')
+    run(sys.executable, 'release/tools/verify_tls.py', '--game', game / 'MorningBloomGame.exe')
     run(ROOT / 'dist/MorningBloom.exe', '--self-test')
     output = ROOT / 'release-output'
     output.mkdir(exist_ok=True)

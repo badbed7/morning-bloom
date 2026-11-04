@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QMenu,
+    QInputDialog,
     QMessageBox,
     QProgressBar,
     QPushButton,
@@ -40,14 +41,15 @@ from .desktop_flowers import DesktopFlowers
 from .garden_view import CollectionGarden, sale_price
 from .gacha_board_window import GachaBoardWindow
 from .google_cloud import CloudError, GoogleDriveSync
-from .model import FERTILIZER_CAP, FERTILIZER_LEAF_PRICE, FERTILIZER_SECONDS, POT_PRICES, TYCOON_RULE, WIND_BASE_SECONDS
+from .model import Garden, FERTILIZER_CAP, FERTILIZER_LEAF_PRICE, FERTILIZER_SECONDS, POT_PRICES, TYCOON_RULE, WIND_BASE_SECONDS
 from .icon_picker import IconPicker
 from .cosmetic_picker import CosmeticPicker
+from .cosmetic_selection import CosmeticSelection
 from .locked_catalog import LockedCatalog
 from .navigation import SlideStack, chevron_icon
 from .plant_catalog import PLANTS, REGULAR_PLANTS, GACHA_PLANTS, VACATION_PLANTS, WEEKEND_PLANTS, RANDOM_SEED_PRICE, plant_definition
 from .seed_picker import SeedPicker
-from .storage import SaveError, Store
+from .storage import SaveError, Store, migrate
 from .update_client import UpdateClient
 
 POT_PAGE, SHOP_PAGE, GARDEN_PAGE, SETTINGS_PAGE = range(4)
@@ -137,7 +139,7 @@ class Flower(QWidget):
             painter, self.garden.definition, stage=self.garden.stage,
             phase=0 if self.garden.vacation else self.phase,
             planted=self.garden.planted, drops=self.drops,
-            skin=self.garden.equipped_skin,
+            skin=self.garden.current_skin,
         )
         painter.end()
 
@@ -156,6 +158,8 @@ class Window(QWidget):
         self._mist_game = None
         self._wind_game = None
         self._collection_picker = None
+        self._cosmetic_dialog = None
+        self._plant_skin_choices = {}
         self._gacha_board_window = None
         self._normal_position = QPointF(garden.settings['x'], garden.settings['y']).toPoint()
         self._minimized = False
@@ -309,6 +313,9 @@ class Window(QWidget):
         self._build_shop_page()
         self.collection_garden = CollectionGarden(self.garden, self.sell_flower, self.collect_sun)
         self.collection_garden.meadow.desktopRequested.connect(self.toggle_desktop_flower)
+        self.garden_style_button = QPushButton("정원 고르기")
+        self.garden_style_button.clicked.connect(lambda: self.open_cosmetic_selection("정원"))
+        self.collection_garden.layout().insertWidget(0, self.garden_style_button)
         self.pages.addWidget(self.collection_garden)
         self._build_settings_page()
 
@@ -485,6 +492,10 @@ class Window(QWidget):
         self.care_info.setFixedHeight(16)
         controls_layout.addWidget(self.care_info)
 
+        self.pot_style_button = QPushButton("심을 화분 고르기")
+        self.pot_style_button.setFixedHeight(28)
+        self.pot_style_button.clicked.connect(lambda: self.open_cosmetic_selection("화분"))
+        controls_layout.addWidget(self.pot_style_button)
         self.species_picker = SeedPicker()
         self.species_picker.selectionChanged.connect(self.refresh)
         controls_layout.addWidget(self.species_picker)
@@ -773,7 +784,7 @@ class Window(QWidget):
             if (
                 not isinstance(state, dict)
                 or set(state) != {'schema', 'account', 'saved_at', 'digest'}
-                or state['schema'] != 1
+                or state['schema'] != 2
                 or state['account'] != account
                 or type(state['saved_at']) not in (int, float)
                 or not math.isfinite(state['saved_at'])
@@ -796,7 +807,7 @@ class Window(QWidget):
             return False
         temporary = path.with_suffix(path.suffix + '.tmp')
         state = {
-            'schema': 1,
+            'schema': 2,
             'account': account,
             'saved_at': self._cloud_known_saved_at,
             'digest': self._cloud_last_uploaded_digest,
@@ -873,6 +884,7 @@ class Window(QWidget):
         self._sync_cloud_controls()
         try:
             result = future.result()
+            done(result)
         except (CloudError, OSError, ValueError) as exc:
             if isinstance(exc, CloudError):
                 if hasattr(self.cloud, '_record_error'):
@@ -905,7 +917,6 @@ class Window(QWidget):
             if self._close_requested:
                 self._start_close_upload()
             return
-        done(result)
         if (self.cloud and self.cloud.connected and not self.demo and not self._closing
                 and getattr(self.cloud, 'auto_retry_allowed', True)):
             self.cloud_auto.start()
@@ -947,15 +958,7 @@ class Window(QWidget):
         )
 
     def _finish_startup_cloud_sync(self, envelope):
-        if envelope is not None:
-            pending = self._cloud_pending_path()
-            if (pending is not None and pending.exists()
-                    and self._cloud_digest(self.garden.to_dict()) != self._cloud_digest(envelope['save'])):
-                self._consider_cloud_save(envelope, manual=True)
-            else:
-                self._apply_cloud_save(envelope)
-        else:
-            self.notify('Google Drive 저장이 없어 로컬 정원으로 시작합니다.')
+        self._consider_cloud_save(envelope, manual=False, quiet=True)
         self._complete_startup_cloud_sync()
 
     def _complete_startup_cloud_sync(self):
@@ -967,14 +970,21 @@ class Window(QWidget):
 
     @staticmethod
     def _cloud_digest(snapshot):
-        payload = json.dumps(snapshot, ensure_ascii=False, sort_keys=True, separators=(',', ':')).encode('utf-8')
+        # Ignore clock-only and window-position changes; compare validated gameplay.
+        data = migrate(snapshot)
+        data.pop('last_update', None)
+        settings = data.get('settings', {})
+        settings.pop('x', None)
+        settings.pop('y', None)
+        payload = json.dumps(data, ensure_ascii=False, sort_keys=True, separators=(',', ':')).encode('utf-8')
         return hashlib.sha256(payload).hexdigest()
 
     def auto_backup_cloud(self):
         """Upload changed local data every five minutes without overwriting a newer cloud save."""
         if self.cloud and not getattr(self.cloud, "auto_retry_allowed", True):
             return
-        if not self.cloud or not self.cloud.connected or self.demo or self._cloud_busy:
+        if (not self.cloud or not self.cloud.connected or self.demo or self._cloud_busy
+                or self._closing or self._close_requested):
             return False
         if not self.persist():
             return False
@@ -995,14 +1005,38 @@ class Window(QWidget):
             return False
         if not self.persist():
             return False
+        return self._run_cloud(self.cloud.download_save,
+            lambda envelope: self._consider_cloud_save(envelope, manual=False, quiet=silent),
+            '' if silent else 'Google Drive 저장을 확인하는 중…', silent_error=silent)
+
+    def _upload_cloud_snapshot(self, silent=True):
+        if not self.persist():
+            self._cancel_cloud_close()
+            return False
         snapshot = self.garden.to_dict()
         digest = self._cloud_digest(snapshot)
-        return self._run_cloud(
-            lambda: self.cloud.upload_save(snapshot),
-            lambda saved_at: self._after_cloud_backup(saved_at, digest, silent),
-            '' if silent else 'Google Drive에 백업하는 중…',
-            silent_error=silent,
-        )
+        if self._close_requested:
+            self._close_uploading = True
+        def done(saved_at):
+            self._after_cloud_backup(saved_at, digest, silent)
+            self._finish_cloud_cycle()
+        return self._run_cloud(lambda: self.cloud.upload_save(snapshot), done,
+                               '' if silent else 'Google Drive에 백업하는 중…', silent_error=silent)
+
+    def _finish_cloud_cycle(self):
+        if self._close_requested and not self._cloud_busy:
+            self._close_requested = self._close_uploading = False
+            self._closing = True
+            self.close()
+
+    def _cancel_cloud_close(self):
+        if self._update_closing:
+            self._cancel_update('클라우드 확인을 취소하여 게임을 유지합니다.')
+            self.update_client.refresh_timer.start()
+        self._close_requested = self._close_uploading = False
+        self.pages.setEnabled(True)
+        if self.cloud and self.cloud.connected:
+            self.cloud_auto.start()
 
     def _after_cloud_backup(self, saved_at, digest, silent):
         self._cloud_last_uploaded_digest = digest
@@ -1019,28 +1053,12 @@ class Window(QWidget):
         if not self._close_requested or self._cloud_busy or self._close_uploading:
             return False
         if not self.persist():
-            if self._update_closing:
-                self._cancel_update('저장 실패로 업데이트 적용을 취소했습니다.')
-                self.update_client.refresh_timer.start()
-                return False
-            self._close_requested = False
-            self.pages.setEnabled(True)
-            self.cloud_auto.start()
+            self._cancel_cloud_close()
             return False
-        snapshot = self.garden.to_dict()
-        digest = self._cloud_digest(snapshot)
         self._close_uploading = True
-        return self._run_cloud(
-            lambda: self.cloud.upload_save(snapshot),
-            lambda saved_at: self._finish_close_upload(saved_at, digest),
-            '종료 전 Google Drive에 백업하는 중…',
-        )
-
-    def _finish_close_upload(self, saved_at, digest):
-        self._after_cloud_backup(saved_at, digest, silent=True)
-        self._close_requested = self._close_uploading = False
-        self._closing = True
-        self.close()
+        return self._run_cloud(self.cloud.download_save,
+            lambda envelope: self._consider_cloud_save(envelope, manual=False, quiet=True),
+            '종료 전 다른 PC의 저장을 확인하는 중…')
 
     def restore_cloud(self):
         if not self.cloud or not self.cloud.connected or self.demo or self._cloud_busy:
@@ -1053,53 +1071,69 @@ class Window(QWidget):
 
     def _consider_cloud_save(self, envelope, manual, quiet=False):
         if envelope is None:
-            if manual:
-                self.notify('Google Drive에 저장된 정원이 없습니다.', important=True)
-            else:
-                self.backup_cloud(silent=True)
+            self._upload_cloud_snapshot(silent=quiet)
             return
+        candidates = [envelope] + envelope.get('alternatives', [])
+        for candidate in candidates:
+            # Future/corrupt saves are never overwritten, even after a manual click.
+            Garden.from_dict(migrate(candidate['save']))
         local_digest = self._cloud_digest(self.garden.to_dict())
         cloud_digest = self._cloud_digest(envelope['save'])
-        if not manual:
-            if cloud_digest == local_digest:
-                remote_changed = local_changed = False
-            elif self._cloud_last_uploaded_digest is None:
-                remote_changed = cloud_digest != local_digest
-                local_changed = False
-            else:
-                remote_changed = cloud_digest != self._cloud_last_uploaded_digest
-                local_changed = local_digest != self._cloud_last_uploaded_digest
-            if not remote_changed:
-                if local_changed:
-                    self.backup_cloud(silent=True)
-                else:
-                    self._cloud_last_uploaded_digest = local_digest
-                    self._cloud_known_saved_at = envelope['saved_at']
-                    self._cloud_last_backup_at = envelope['saved_at']
-                    self._cloud_auto_error = False
-                    self._save_cloud_state()
-                    self._sync_cloud_controls()
-                    if not quiet:
-                        self.notify('Google Drive와 동기화되었습니다.')
-                return
-        if self.isMinimized():
-            self._pending_cloud_prompt = (envelope, manual)
-            self.notify('Google Drive 저장을 확인하려면 창을 복원하세요.', important=True)
+        same = all(self._cloud_digest(item['save']) == local_digest for item in candidates)
+        if same and len(candidates) == 1:
+            self._after_cloud_backup(envelope['saved_at'], local_digest, silent=True)
+            self._finish_cloud_cycle()
             return
-        answer = QMessageBox.question(
-            self,
-            '클라우드 저장 복원',
-            'Google Drive의 정원으로 현재 정원을 교체할까요?\n'
-            '현재 저장은 복원 전 백업으로 보존합니다.\n'
-            '아니요를 선택하면 로컬 정원을 Google Drive에 백업합니다.',
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No,
-        )
+        if same:
+            self._upload_cloud_snapshot(silent=True)  # Resolve identical concurrent heads.
+            return
+        baseline = self._cloud_last_uploaded_digest
+        remote_changed = baseline is None or cloud_digest != baseline
+        local_changed = baseline is None or local_digest != baseline
+        if not manual and len(candidates) == 1:
+            if baseline is not None and not remote_changed:
+                self._upload_cloud_snapshot(silent=quiet)
+                return
+            if not local_changed or (baseline is None and self._local_saved_at == 0):
+                if self._apply_cloud_save(envelope):
+                    self._finish_cloud_cycle()
+                else:
+                    self._cancel_cloud_close()
+                return
+        if self.isMinimized() and not self._close_requested:
+            self._pending_cloud_prompt = (envelope, manual)
+            self.notify('다른 PC의 저장이 있습니다. 창을 복원해 정원을 선택하세요.', important=True)
+            return
+        if len(candidates) > 1:
+            labels = ['이 PC의 정원 유지'] + [
+                f"클라우드 {i+1} · {time.strftime('%m/%d %H:%M', time.localtime(item['saved_at']))} · {item['save'].get('coins', 0)}G"
+                for i, item in enumerate(candidates)]
+            choice, accepted = QInputDialog.getItem(self, '여러 PC의 백업 충돌',
+                '각 백업은 보존됩니다. 이어서 사용할 정원을 선택하세요.', labels, 0, False)
+            if not accepted:
+                self._cancel_cloud_close()
+                return
+            selected = labels.index(choice)
+            if selected:
+                if not self._apply_cloud_save(candidates[selected-1]):
+                    self._cancel_cloud_close()
+                    return
+            self._upload_cloud_snapshot(silent=True)
+            return
+        answer = QMessageBox.question(self, '클라우드 저장 선택',
+            '이 PC와 Google Drive의 정원이 다릅니다.\n클라우드 정원을 불러올까요?\n'
+            '예: 클라우드 복원 / 아니요: 이 PC의 진행 백업 / 취소: 선택 보류\n'
+            '기존 백업은 보존합니다.',
+            QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel, QMessageBox.Cancel)
         if answer == QMessageBox.Yes:
-            self._apply_cloud_save(envelope)
+            if self._apply_cloud_save(envelope):
+                self._finish_cloud_cycle()
+            else:
+                self._cancel_cloud_close()
+        elif answer == QMessageBox.No:
+            self._upload_cloud_snapshot(silent=True)
         else:
-            self.notify('로컬 정원을 유지했습니다. Google Drive에 자동 백업합니다.', important=True)
-            self.backup_cloud(silent=True)
+            self._cancel_cloud_close()
 
     def _apply_cloud_save(self, envelope):
         try:
@@ -1209,7 +1243,7 @@ class Window(QWidget):
         skin_scope.setWordWrap(True)
         layout.addWidget(skin_scope)
         self.skin_picker = CosmeticPicker((skin.key, skin.label, skin_icon(skin)) for skin in POT_SKINS.values())
-        self.skin_picker.buttons[self.garden.equipped_skin].setChecked(True)
+        self.skin_picker.buttons[self.garden.current_skin].setChecked(True)
         self.skin_picker.reveal_selected()
         layout.addWidget(self.skin_picker)
         self.skin_info = QLabel()
@@ -1347,6 +1381,8 @@ class Window(QWidget):
         self._collection_picker.activateWindow()
 
     def close_collection_picker(self):
+        if self._cosmetic_dialog is not None:
+            self._cosmetic_dialog.reject()
         if self._collection_picker is not None:
             self._collection_picker.hide()
 
@@ -1392,8 +1428,19 @@ class Window(QWidget):
         finally:
             self._action_busy = False
 
+    def open_cosmetic_selection(self, category):
+        if self._action_busy or self._startup_cloud_syncing or self._close_requested:
+            return
+        if self._cosmetic_dialog is not None:
+            self._cosmetic_dialog.raise_()
+            return
+        self._cosmetic_dialog = CosmeticSelection(self, category, planting=category == '화분')
+        self._cosmetic_dialog.finished.connect(lambda _: setattr(self, '_cosmetic_dialog', None))
+        self._cosmetic_dialog.open()
+
     def plant_selected(self):
-        return self.garden.plant(self.now(), self.species_picker.selected)
+        skin = self._plant_skin_choices.get(self.garden.selected, self.garden.current_skin)
+        return self.garden.plant(self.now(), self.species_picker.selected, skin_id=skin)
 
     def care(self, kind):
         previous_status = self.garden.water_status
@@ -1677,6 +1724,7 @@ class Window(QWidget):
             self._sync_developer_controls()
 
     def _apply_session_settings(self):
+        self._plant_skin_choices.clear()
         settings = self.garden.settings
         self.topmost.blockSignals(True)
         self.topmost.setChecked(settings['topmost'])
@@ -1747,6 +1795,15 @@ class Window(QWidget):
         visible_seeds = {**garden.seeds, 'random': len(garden.mystery_seeds)}
         self.species_picker.update_counts(visible_seeds)
         self.shop_picker.update_counts(visible_seeds)
+        skin = self._plant_skin_choices.get(garden.selected, garden.current_skin)
+        if skin not in garden.owned_skins:
+            skin = garden.current_skin
+            self._plant_skin_choices.pop(garden.selected, None)
+        self.pot_style_button.setText('심을 화분 · ' + POT_SKINS[skin].name)
+        self.pot_style_button.setVisible(not garden.planted)
+        self.pot_style_button.setEnabled(not garden.vacation)
+        if self._cosmetic_dialog is not None:
+            self._cosmetic_dialog.sync()
         selected = self.species_picker.selected
         count = garden.seed_count(selected)
         self.plant_button.setText(
@@ -1900,7 +1957,7 @@ class Window(QWidget):
             self.buy_pot_button.setToolTip(f'부족 {max(0, price - garden.coins)}G · 구매 후 {after}G' + warning)
         for picker, catalog, owned, equipped in (
             (self.theme_picker, THEMES, garden.owned_themes, garden.equipped_theme),
-            (self.skin_picker, POT_SKINS, garden.owned_skins, garden.equipped_skin),
+            (self.skin_picker, POT_SKINS, garden.owned_skins, garden.current_skin),
         ):
             for key, button in picker.buttons.items():
                 item = catalog[key]
@@ -1928,7 +1985,7 @@ class Window(QWidget):
         )
         skin = pot_skin(self.skin_picker.selected)
         owned = skin.key in garden.owned_skins
-        equipped = skin.key == garden.equipped_skin
+        equipped = skin.key == garden.current_skin
         self.skin_info.setText(skin.description)
         self.buy_skin_button.setText('보유한 스킨' if owned else ('뽑기 전용' if skin.gacha_only else '테스트 구매 · 햇빛 미차감' if self.test_sunlight else f'구매 · 햇빛 {skin.price}'))
         self.buy_skin_button.setEnabled(not owned and not skin.gacha_only and (self.test_sunlight or garden.sunlight >= skin.price))
@@ -2002,6 +2059,14 @@ class Window(QWidget):
             return False
         if getattr(self.store, 'path', None) and self.store.path.exists():
             self._local_saved_at = self.store.path.stat().st_mtime
+        if (self.cloud and self.cloud.connected and not self.demo
+                and self._cloud_digest(self.garden.to_dict()) != self._cloud_last_uploaded_digest):
+            pending = self._cloud_pending_path()
+            if pending is not None:
+                try:
+                    pending.touch()
+                except OSError:
+                    pass
         return True
 
     def resizeEvent(self, event):

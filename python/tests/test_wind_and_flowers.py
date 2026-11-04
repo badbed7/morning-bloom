@@ -90,7 +90,7 @@ class NewFlowers(unittest.TestCase):
         original['schema'] = 9
         original['seeds'] = dict(daisy=2, starflower=4, tulip=6)
         defaults = Garden(0).to_dict()
-        expected = {**{key: defaults[key] for key in ('desktop_scale', 'unlocked_plants', 'discovered_plants', 'wind_reward_upgrade')}, **original, 'schema': Garden.CURRENT_SCHEMA, 'gacha': defaults['gacha'],
+        expected = {**{key: defaults[key] for key in ('desktop_scale', 'unlocked_plants', 'discovered_plants', 'wind_reward_upgrade')}, **original, 'schema': Garden.CURRENT_SCHEMA, 'gacha': defaults['gacha'], 'pot_skins': defaults['pot_skins'],
                     'seeds': {**dict.fromkeys(SEED_PLANTS, 0), **original['seeds']},
                     **{key: defaults[key] for key in V12_FIELDS | V13_FIELDS}}
         raw = json.dumps(original)

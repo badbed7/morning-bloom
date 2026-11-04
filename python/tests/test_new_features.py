@@ -454,6 +454,7 @@ class InteractionTests(unittest.TestCase):
         self.assertIs(self.window.desktop.windows[item_id], widget)
 
         self.garden.pots.append(empty_pot())
+        self.garden.pot_skins.append(self.garden.equipped_skin)
         self.garden.selected = 1
         for ratio, stage in ((0, 0), (.1, 1), (.35, 2), (.7, 3), (1, 4)):
             self.garden.pots[0]['growth'] = self.garden.pots[0]['duration'] * ratio
@@ -542,6 +543,7 @@ class InteractionTests(unittest.TestCase):
 
     def test_cloud_restore_prompt_waits_until_window_is_restored(self):
         envelope = {'saved_at': NOW + 10, 'save': self.garden.to_dict()}
+        envelope['save']['coins'] += 1
         self.window.showMinimized()
         self.app.processEvents()
         with patch('morning_bloom.app.QMessageBox.question', return_value=QMessageBox.No) as question:
@@ -590,6 +592,7 @@ class InteractionTests(unittest.TestCase):
         remote['coins'] += 31
         cloud = FakeCloud({'saved_at': NOW + 10, 'save': remote})
         self.window.cloud = cloud
+        self.window._cloud_last_uploaded_digest = self.window._cloud_digest(self.garden.to_dict())
         pending = {}
 
         def defer(action, done, _message, silent_error=False):
@@ -673,7 +676,7 @@ class InteractionTests(unittest.TestCase):
         self.window._cloud_pending_path().touch()
 
         with patch('morning_bloom.app.QMessageBox.question', return_value=QMessageBox.No) as question, \
-                patch.object(self.window, 'backup_cloud', return_value=True) as backup:
+                patch.object(self.window, '_upload_cloud_snapshot', return_value=True) as backup:
             self.window._finish_startup_cloud_sync({'saved_at': NOW + 10, 'save': remote})
 
         question.assert_called_once()
@@ -698,7 +701,7 @@ class InteractionTests(unittest.TestCase):
                 patch('morning_bloom.app.QMessageBox.question', return_value=QMessageBox.Yes) as question:
             self.assertTrue(self.window.auto_backup_cloud())
 
-        question.assert_called_once()
+        question.assert_not_called()
         self.assertEqual(cloud.uploads, [])
         self.assertEqual(self.garden.coins, remote['coins'])
 

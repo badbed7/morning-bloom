@@ -41,6 +41,9 @@ def main():
         if client_id:
             (stage / 'python/google-oauth-client-id.txt').write_text(client_id, encoding='utf-8')
             (stage / 'python/google-oauth-client-secret.txt').write_text(client_secret, encoding='utf-8')
+        if sys.platform == 'win32':
+            subprocess.run([sys.executable, str(ROOT / 'release/tools/verify_tls.py'),
+                            '--game', str(stage / 'release/game_entry.py')], check=True)
         payload = output / 'MorningBloom-python.zip'
         zip_folder(stage, payload)
         data = manifest(dict(protocol=1, version=version, size=payload.stat().st_size,

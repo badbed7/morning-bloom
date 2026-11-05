@@ -6,7 +6,7 @@ from PySide6.QtWidgets import QLabel, QPushButton
 from .flower_art import paint_collection_flower
 from .icon_picker import IconPicker
 from .navigation import chevron_icon
-from .plant_catalog import HOUR, PLANTS, REGULAR_PLANTS, SEED_PLANTS, GACHA_PLANTS, RANDOM_SEED_PRICE, VACATION_PLANTS
+from .plant_catalog import HOUR, PLANTS, REGULAR_PLANTS, SEED_PLANTS, GACHA_PLANTS, SHOP_SEED_PLANTS, ROSE_GACHA_PLANTS, ROSE_VARIETIES, RANDOM_SEED_PRICE, VACATION_PLANTS
 
 
 def seed_packet_icon(definition=None):
@@ -37,7 +37,7 @@ def seed_packet_icon(definition=None):
 class SeedPicker(IconPicker):
     def __init__(self, shop=False):
         super().__init__([(key, PLANTS[key].name, seed_packet_icon(PLANTS[key]))
-                          for key in SEED_PLANTS] + [('random', '랜덤', seed_packet_icon())])
+                          for key in (SHOP_SEED_PLANTS if shop else SEED_PLANTS)] + [('random', '랜덤', seed_packet_icon())])
         self.shop = shop
         if shop:
             self.setFixedHeight(88)
@@ -120,9 +120,12 @@ class SeedPicker(IconPicker):
             detail = f'{definition.seed_price}G' if self.shop else f'{count}개'
             button.setText(f'{definition.name}\n{detail}')
             button.setAccessibleName(f'{definition.name} 씨앗 · {detail} · 보유 {count}개')
+            tier = f' · {ROSE_VARIETIES[key][1]}' if key in ROSE_VARIETIES else ''
+            button.setAccessibleName(button.accessibleName() + tier)
             button.setToolTip(
                 f'{definition.name} 씨앗 · 보유 {count}개\n'
-                f'성장 {definition.growth_seconds // HOUR}시간 · 가격 {definition.seed_price}G'
+                f'성장 {definition.growth_seconds // HOUR}시간'
+                + (f' · {ROSE_VARIETIES[key][1]} · 장미 씨앗 뽑기 전용' if key in ROSE_GACHA_PLANTS else f' · 가격 {definition.seed_price}G')
                 + (f'\n{definition.shop_tag}\n설정의 휴가 모드는 성장을 정지합니다.'
                    if key in VACATION_PLANTS else '')
             )

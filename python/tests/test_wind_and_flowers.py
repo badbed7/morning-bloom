@@ -1,4 +1,4 @@
-from morning_bloom.plant_catalog import SEED_PLANTS
+from morning_bloom.plant_catalog import SEED_PLANTS, SHOP_SEED_PLANTS
 from legacy_fixture import v14_shape
 import json
 import tempfile
@@ -326,7 +326,7 @@ class ContentUI(unittest.TestCase):
                 if not picker.next.isEnabled():
                     break
                 picker.next.click()
-            self.assertEqual(seen, {*SEED_PLANTS, 'random'})
+            self.assertEqual(seen, {*SHOP_SEED_PLANTS, 'random'})
         self.assertEqual(self.garden.coins, 120)
         self.assertEqual(sum(self.garden.seeds.values()), 1)
 

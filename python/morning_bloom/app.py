@@ -47,7 +47,7 @@ from .cosmetic_picker import CosmeticPicker
 from .cosmetic_selection import CosmeticSelection
 from .locked_catalog import LockedCatalog
 from .navigation import SlideStack, chevron_icon
-from .plant_catalog import PLANTS, REGULAR_PLANTS, GACHA_PLANTS, VACATION_PLANTS, WEEKEND_PLANTS, RANDOM_SEED_PRICE, plant_definition
+from .plant_catalog import PLANTS, REGULAR_PLANTS, GACHA_PLANTS, ROSE_GACHA_PLANTS, VACATION_PLANTS, WEEKEND_PLANTS, RANDOM_SEED_PRICE, plant_definition
 from .seed_picker import SeedPicker
 from .storage import SaveError, Store, migrate
 from .update_client import UpdateClient
@@ -645,7 +645,9 @@ class Window(QWidget):
         catalog = QLabel(
             '식물 카탈로그\n'
             + '\n'.join(
-                f'• {item.name}: {format_duration(item.growth_seconds)} · 씨앗 {item.seed_price}G · 판매 {item.sale_price}G'
+                f'• {item.name}: {format_duration(item.growth_seconds)} · '
+                + ('장미 씨앗 뽑기 전용' if item.key in ROSE_GACHA_PLANTS else f'씨앗 {item.seed_price}G')
+                + f' · 판매 {item.sale_price}G'
                 f' (+분무 {item.mist_bonus}G) · {item.shop_tag}'
                 for item in PLANTS.values()
             )
@@ -1944,8 +1946,10 @@ class Window(QWidget):
             self.buy_seed_button.setEnabled(garden.coins >= RANDOM_SEED_PRICE)
         for picker in (self.species_picker, self.shop_picker):
             for key in GACHA_PLANTS:
+                if key not in picker.buttons:
+                    continue
                 if key not in garden.unlocked_plants:
-                    picker.buttons[key].setToolTip('식물 뽑기로 먼저 해금하세요.')
+                    picker.buttons[key].setToolTip('장미 씨앗 뽑기에서 획득하세요.' if key in ROSE_GACHA_PLANTS else '식물 뽑기로 먼저 해금하세요.')
                     picker.buttons[key].setEnabled(False)
                 else:
                     picker.buttons[key].setEnabled(True)

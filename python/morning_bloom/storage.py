@@ -21,7 +21,7 @@ from .model import (
     _validate_settings,
     empty_pot,
 )
-from .plant_catalog import LEGACY_REGULAR_PLANTS, V10_REGULAR_PLANTS, REGULAR_PLANTS, plant_definition
+from .plant_catalog import LEGACY_REGULAR_PLANTS, V10_REGULAR_PLANTS, REGULAR_PLANTS, V19_SEED_PLANTS, SEED_PLANTS, plant_definition
 from .gacha_board import initial_account, validate_account
 
 
@@ -279,12 +279,11 @@ def _v14_to_v15(data):
             or set(data) != V14_SAVE_FIELDS
             or not isinstance(data['seeds'], dict) or set(data['seeds']) != set(REGULAR_PLANTS)):
         raise ValueError('v14 저장 항목 오류')
-    from .plant_catalog import SEED_PLANTS
     migrated = deepcopy(data)
     defaults = Garden(0).to_dict()
     migrated.update({key: defaults[key] for key in V15_FIELDS})
     migrated['schema'] = 15
-    migrated['seeds'] = {**dict.fromkeys(SEED_PLANTS, 0), **data['seeds']}
+    migrated['seeds'] = {**dict.fromkeys(V19_SEED_PLANTS, 0), **data['seeds']}
     Garden._validate_collection(data['collection'])
     if not isinstance(data['pots'], list):
         raise ValueError('v14 화분 항목 오류')
@@ -326,7 +325,7 @@ def _v15_to_v16(data):
     elif state['side_gate'] is not None:
         state['position'] = state['side_gate'] % 60
     migrated['schema'] = 16
-    Garden.from_dict(_v18_to_v19(_v17_to_v18(_v16_to_v17(migrated))))
+    Garden.from_dict(_v19_to_v20(_v18_to_v19(_v17_to_v18(_v16_to_v17(migrated)))))
     return migrated
 
 
@@ -341,7 +340,7 @@ def _v16_to_v17(data):
     if state['side_gate'] is not None and state['side_step'] >= 2:
         state.update(position=state['side_gate'] % 60, side_gate=None, side_step=0, side_position=0)
     migrated['schema'] = 17
-    Garden.from_dict(_v18_to_v19(_v17_to_v18(migrated)))
+    Garden.from_dict(_v19_to_v20(_v18_to_v19(_v17_to_v18(migrated))))
     return migrated
 
 
@@ -354,7 +353,7 @@ def _v17_to_v18(data):
     migrated = deepcopy(data)
     migrated['pot_skins'] = [data['equipped_skin'] for _ in data['pots']]
     migrated['schema'] = 18
-    Garden.from_dict(_v18_to_v19(migrated))
+    Garden.from_dict(_v19_to_v20(_v18_to_v19(migrated)))
     return migrated
 
 
@@ -369,6 +368,18 @@ def _v18_to_v19(data):
     migrated['flower_pots'] = {item['id']: {'skin': data['equipped_skin'], 'color': 'original'}
                                for item in data['collection']}
     migrated['schema'] = 19
+    Garden.from_dict(_v19_to_v20(migrated))
+    return migrated
+
+
+def _v19_to_v20(data):
+    if (not isinstance(data, dict) or type(data.get('schema')) is not int or data['schema'] != 19
+            or set(data) != set(Garden(0).to_dict()) or not isinstance(data['seeds'], dict)
+            or set(data['seeds']) != set(V19_SEED_PLANTS)):
+        raise ValueError('v19 저장 항목 오류')
+    migrated = deepcopy(data)
+    migrated['seeds'] = {**dict.fromkeys(SEED_PLANTS, 0), **data['seeds']}
+    migrated['schema'] = 20
     Garden.from_dict(migrated)
     return migrated
 
@@ -423,6 +434,8 @@ def migrate(data):
         migrated = _v17_to_v18(migrated)
     if migrated.get('schema') == 18:
         migrated = _v18_to_v19(migrated)
+    if migrated.get('schema') == 19:
+        migrated = _v19_to_v20(migrated)
     return migrated
 
 

@@ -8,7 +8,7 @@ import secrets
 
 from .cosmetics import POT_COLORS, POT_SKINS, THEMES, garden_theme, pot_skin
 from . import gacha_board
-from .plant_catalog import DAY, HOUR, PLANTS, REGULAR_PLANTS, VACATION_PLANTS, RANDOM_SEED_PRICE, SEED_PLANTS, GACHA_PLANTS, plant_definition, roll_mystery_seed
+from .plant_catalog import DAY, HOUR, PLANTS, REGULAR_PLANTS, VACATION_PLANTS, RANDOM_SEED_PRICE, SEED_PLANTS, GACHA_PLANTS, ROSE_GACHA_PLANTS, plant_definition, roll_mystery_seed
 
 OFFLINE_CAP = 3 * DAY
 MID_WATER_EARLY = 22 * HOUR
@@ -176,7 +176,7 @@ def _validate_legacy_collection(items):
 @dataclass
 class Garden:
     """Shared inventory with up to four independently simulated pots."""
-    CURRENT_SCHEMA: ClassVar[int] = 19
+    CURRENT_SCHEMA: ClassVar[int] = 20
 
     last_update: float
     schema: int = CURRENT_SCHEMA
@@ -662,7 +662,7 @@ class Garden:
         return True
 
     def buy_seed(self, species='daisy'):
-        if species not in (*SEED_PLANTS, 'random'):
+        if species not in (*SEED_PLANTS, 'random') or species in ROSE_GACHA_PLANTS:
             return False
         if species in GACHA_PLANTS and species not in self.unlocked_plants:
             return False
@@ -791,21 +791,22 @@ class Garden:
         except ValueError:
             return False
         draw_random = randbelow or secrets.randbelow
-        field = 'unlocked_plants' if category == 'plant' else 'owned_skins' if category == 'pot' else 'owned_themes'
+        field = 'unlocked_plants' if category in ('plant', 'rose') else 'owned_skins' if category == 'pot' else 'owned_themes'
         owned = list(getattr(self, field))
         seeds = dict(self.seeds)
         results = []
         for step in outcome['results']:
-            pool = gacha_board.reward_pool(category, step['rarity'], step['board_gate'])
-            index = draw_random(len(pool))
-            if type(index) is not int or not 0 <= index < len(pool):
+            try:
+                item = gacha_board.select_reward(category, step['rarity'], step['board_gate'], draw_random)
+            except ValueError:
                 return False
-            item = pool[index]
             duplicate = item in owned
             if not duplicate:
                 owned.append(item)
                 if category == 'plant':
                     seeds[item] += 1
+            if category == 'rose':
+                seeds[item] += 1
             leaves = 1 + ({'R': 1, 'SR': 3, 'SSR': 10}[step['rarity']] if duplicate else 0)
             record = {
                 'position': step['position'], 'board_gate': step['board_gate'], 'category': category,

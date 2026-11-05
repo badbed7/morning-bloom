@@ -1,5 +1,5 @@
 """Garden backgrounds and reusable pot skins with explicit acquisition routes."""
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 
 @dataclass(frozen=True)
@@ -63,6 +63,31 @@ def pot_skin(key):
         return POT_SKINS[key]
     except KeyError as exc:
         raise ValueError('알 수 없는 화분 스킨') from exc
+
+
+# Color belongs to a plant instance, independently of the owned pot shape.
+POT_COLORS = {
+    'original': ('기본', None),
+    'beige': ('베이지', '#dec8a4'),
+    'charcoal': ('차콜', '#35313d'),
+    'burgundy': ('버건디', '#542c3f'),
+    'ivory': ('아이보리', '#f0e5ce'),
+    'sage': ('세이지', '#83977b'),
+    'blue': ('더스티 블루', '#879eac'),
+}
+
+
+def colored_pot_skin(key, color='original', base_color=None):
+    style = pot_skin(key)
+    if color not in POT_COLORS:
+        raise ValueError('알 수 없는 화분 색상')
+    body = POT_COLORS[color][1] or base_color
+    if body is None:
+        return style
+    channels = [int(body[i:i+2], 16) for i in (1, 3, 5)]
+    rim = '#' + ''.join(f'{round(value + (255-value)*.23):02x}' for value in channels)
+    edge = '#' + ''.join(f'{round(value*.72):02x}' for value in channels)
+    return replace(style, body=body, rim=rim, edge=edge)
 
 
 def garden_theme(key):

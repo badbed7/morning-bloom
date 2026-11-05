@@ -4,14 +4,15 @@ import math
 from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QLinearGradient, QPainterPath, QPen
 
-from .cosmetics import pot_skin
+from .cosmetics import colored_pot_skin
 
 
-def paint_potted_flower(painter, definition, stage=4, phase=0, planted=True, drops=0, skin='terracotta'):
+def paint_potted_flower(painter, definition, stage=4, phase=0, planted=True, drops=0, skin='terracotta', pot_color='original'):
     """Draw in a 380 x 180 scene; the actual pot is centered on x=190."""
     painter.save()
     painter.setPen(Qt.NoPen)
-    style = pot_skin(skin)
+    base = definition.pot_color if skin == 'terracotta' and definition.key in ('rose', 'daisy') else None
+    style = colored_pot_skin(skin, pot_color, base_color=base)
     if style.key.startswith('catalog_pot_'):
         from .catalog_art import paint_catalog_pot
         paint_catalog_pot(painter,style)
@@ -79,13 +80,13 @@ def paint_potted_flower(painter, definition, stage=4, phase=0, planted=True, dro
     painter.restore()
 
 
-def paint_collection_flower(painter, rect, definition, phase=0, skin='terracotta', stage=4):
+def paint_collection_flower(painter, rect, definition, phase=0, skin='terracotta', stage=4, pot_color='original'):
     """Fit the flower itself, without the empty sides of the growing scene."""
     scale = min(rect.width() / (164 if definition.key.startswith('catalog_plant_') else 138), rect.height() / 190)
     painter.save()
     painter.translate(rect.center().x() - 190 * scale, rect.top() + 16 * scale)
     painter.scale(scale, scale)
-    paint_potted_flower(painter, definition, stage=stage, phase=phase, skin=skin)
+    paint_potted_flower(painter, definition, stage=stage, phase=phase, skin=skin, pot_color=pot_color)
     painter.restore()
 
 

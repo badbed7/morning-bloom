@@ -20,6 +20,7 @@ def sale_price(item):
 class Meadow(QWidget):
     dragChanged = Signal(object)
     desktopRequested = Signal(str)
+    potRequested = Signal(str)
     ROW_HEIGHT = 118
 
     def __init__(self, garden, collect_callback=None, parent=None):
@@ -94,7 +95,7 @@ class Meadow(QWidget):
     def tooltip_for(self, item):
         bonus = f' (분무 +{item["bonus_g"]}G)' if item['misted'] else ''
         desktop = '화면 맨 위에 표시 중 · 우클릭으로 복귀' if item['id'] in self.garden.desktop_flowers else '우클릭으로 화면 맨 위에 띄우기'
-        return f'{plant_definition(item["species"]).name} · 판매 {sale_price(item)}G{bonus}\n돈주머니로 드래그하면 판매 · {desktop}'
+        return f'{plant_definition(item["species"]).name} · 판매 {sale_price(item)}G{bonus}\n클릭하면 화분 꾸미기 · 드래그하면 판매 · {desktop}'
 
     def contextMenuEvent(self, event):
         item = self.item_at(event.pos())
@@ -179,7 +180,8 @@ class Meadow(QWidget):
             painter.setBrush(QColor(64, 98, 49, 48))
             painter.drawEllipse(QRectF(rect.center().x() - 23, rect.bottom() - 5, 46, 8))
             paint_collection_flower(painter, rect.adjusted(8, -3 + bob, -8, -9 + bob),
-                                    plant_definition(item['species']), phase, skin=self.garden.equipped_skin)
+                                    plant_definition(item['species']), phase, skin=self.garden.source_skin(item['id']),
+                                    pot_color=self.garden.source_color(item['id']))
             painter.restore()
             if item['id'] in self.garden.desktop_flowers:
                 painter.setPen(QColor(theme.text))
@@ -260,9 +262,14 @@ class Meadow(QWidget):
         ):
             self.bursts.append({'center': center, 'age': 0.0})
             self.update()
+        item_id = self._pressed_id
+        clicked = self.item_at(event.position())
         self._pressed_sun_id = None
         self._pressed_id = None
         super().mouseReleaseEvent(event)
+        if (event.button() == Qt.LeftButton and not token_id and item_id and clicked
+                and clicked['id'] == item_id and moved < QApplication.startDragDistance()):
+            self.potRequested.emit(item_id)
 
     def start_drag(self, item_id):
         item = next((flower for flower in self.garden.collection if flower['id'] == item_id), None)
@@ -279,7 +286,7 @@ class Meadow(QWidget):
         painter = QPainter(pixmap)
         painter.setRenderHint(QPainter.Antialiasing)
         paint_collection_flower(painter, QRectF(0, 0, 84, 108), plant_definition(item['species']),
-                                skin=self.garden.equipped_skin)
+                                skin=self.garden.source_skin(item['id']), pot_color=self.garden.source_color(item['id']))
         painter.end()
         drag.setPixmap(pixmap)
         drag.setHotSpot(QPoint(42, 70))

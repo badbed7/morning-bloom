@@ -155,6 +155,8 @@ class CollectionExpansion(unittest.TestCase):
         )
         old = current.to_dict()
         old.pop('pot_skins')
+        old.pop('pot_colors')
+        old.pop('flower_pots')
         for key in V15_FIELDS:
             old.pop(key)
         old["seeds"] = {k: v for k, v in old["seeds"].items() if k not in GACHA_PLANTS}

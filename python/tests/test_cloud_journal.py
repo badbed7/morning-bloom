@@ -163,6 +163,8 @@ class CloudJournal(unittest.TestCase):
     def test_legacy_save_restores_then_migrates_to_a_new_revision(self):
         old = Garden(100, coins=500).to_dict()
         old.pop('pot_skins')
+        old.pop('pot_colors')
+        old.pop('flower_pots')
         old['schema'] = 17
         raw = json.dumps({'schema': 1, 'saved_at': 100, 'save': old}).encode()
         self.files.append(dict(id='legacy', size=str(len(raw)), version='1', body=raw))

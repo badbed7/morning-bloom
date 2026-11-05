@@ -103,6 +103,7 @@ class PotNavigation(unittest.TestCase):
     def test_single_pot_disables_arrows_until_second_pot_is_purchased(self):
         self.garden.pots.pop()
         self.garden.pot_skins.pop()
+        self.garden.pot_colors.pop()
         self.garden.coins = 200
         self.window.refresh()
         self.assertEqual(self.window.pot_name.text(), '화분 1 / 1 · 데이지')

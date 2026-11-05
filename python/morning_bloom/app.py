@@ -29,7 +29,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .cosmetics import POT_SKINS, THEMES, garden_theme, pot_skin
+from .cosmetics import POT_COLORS, POT_SKINS, THEMES, garden_theme, pot_skin
 from .cosmetic_icons import skin_icon, theme_icon
 from .collection_picker import CollectionPicker
 from .flower_art import paint_potted_flower
@@ -139,7 +139,7 @@ class Flower(QWidget):
             painter, self.garden.definition, stage=self.garden.stage,
             phase=0 if self.garden.vacation else self.phase,
             planted=self.garden.planted, drops=self.drops,
-            skin=self.garden.current_skin,
+            skin=self.garden.current_skin, pot_color=self.garden.current_color,
         )
         painter.end()
 
@@ -159,7 +159,6 @@ class Window(QWidget):
         self._wind_game = None
         self._collection_picker = None
         self._cosmetic_dialog = None
-        self._plant_skin_choices = {}
         self._gacha_board_window = None
         self._normal_position = QPointF(garden.settings['x'], garden.settings['y']).toPoint()
         self._minimized = False
@@ -313,6 +312,7 @@ class Window(QWidget):
         self._build_shop_page()
         self.collection_garden = CollectionGarden(self.garden, self.sell_flower, self.collect_sun)
         self.collection_garden.meadow.desktopRequested.connect(self.toggle_desktop_flower)
+        self.collection_garden.meadow.potRequested.connect(self.customize_plant_pot)
         self.garden_style_button = QPushButton("정원 고르기")
         self.garden_style_button.clicked.connect(lambda: self.open_cosmetic_selection("정원"))
         self.collection_garden.layout().insertWidget(0, self.garden_style_button)
@@ -429,6 +429,10 @@ class Window(QWidget):
         self.next_pot.setAccessibleName('다음 화분')
         self.next_pot.clicked.connect(lambda: self.navigate_pot(1))
         selector.addWidget(self.next_pot)
+        self.pot_style_button = QPushButton("화분 꾸미기")
+        self.pot_style_button.setFixedSize(86, 28)
+        self.pot_style_button.clicked.connect(lambda: self.open_cosmetic_selection("화분"))
+        selector.addWidget(self.pot_style_button)
         outer.addLayout(selector)
 
         self.pot_slides = SlideStack()
@@ -492,10 +496,6 @@ class Window(QWidget):
         self.care_info.setFixedHeight(16)
         controls_layout.addWidget(self.care_info)
 
-        self.pot_style_button = QPushButton("심을 화분 고르기")
-        self.pot_style_button.setFixedHeight(28)
-        self.pot_style_button.clicked.connect(lambda: self.open_cosmetic_selection("화분"))
-        controls_layout.addWidget(self.pot_style_button)
         self.species_picker = SeedPicker()
         self.species_picker.selectionChanged.connect(self.refresh)
         controls_layout.addWidget(self.species_picker)
@@ -1428,19 +1428,25 @@ class Window(QWidget):
         finally:
             self._action_busy = False
 
-    def open_cosmetic_selection(self, category):
+    def customize_plant_pot(self, item_id):
+        self.open_cosmetic_selection("화분", item_id=item_id)
+
+    def open_cosmetic_selection(self, category, item_id=None):
         if self._action_busy or self._startup_cloud_syncing or self._close_requested:
             return
         if self._cosmetic_dialog is not None:
             self._cosmetic_dialog.raise_()
             return
-        self._cosmetic_dialog = CosmeticSelection(self, category, planting=category == '화분')
+        if category == '화분' and item_id is None and self.garden.planted:
+            item_id = self.garden.pot['plant_id']
+        if item_id is not None and self.garden.desktop_source(item_id) is None:
+            return
+        self._cosmetic_dialog = CosmeticSelection(self, category, planting=category == '화분', item_id=item_id)
         self._cosmetic_dialog.finished.connect(lambda _: setattr(self, '_cosmetic_dialog', None))
         self._cosmetic_dialog.open()
 
     def plant_selected(self):
-        skin = self._plant_skin_choices.get(self.garden.selected, self.garden.current_skin)
-        return self.garden.plant(self.now(), self.species_picker.selected, skin_id=skin)
+        return self.garden.plant(self.now(), self.species_picker.selected)
 
     def care(self, kind):
         previous_status = self.garden.water_status
@@ -1724,7 +1730,6 @@ class Window(QWidget):
             self._sync_developer_controls()
 
     def _apply_session_settings(self):
-        self._plant_skin_choices.clear()
         settings = self.garden.settings
         self.topmost.blockSignals(True)
         self.topmost.setChecked(settings['topmost'])
@@ -1795,13 +1800,9 @@ class Window(QWidget):
         visible_seeds = {**garden.seeds, 'random': len(garden.mystery_seeds)}
         self.species_picker.update_counts(visible_seeds)
         self.shop_picker.update_counts(visible_seeds)
-        skin = self._plant_skin_choices.get(garden.selected, garden.current_skin)
-        if skin not in garden.owned_skins:
-            skin = garden.current_skin
-            self._plant_skin_choices.pop(garden.selected, None)
-        self.pot_style_button.setText('심을 화분 · ' + POT_SKINS[skin].name)
-        self.pot_style_button.setVisible(not garden.planted)
-        self.pot_style_button.setEnabled(not garden.vacation)
+        self.pot_style_button.setToolTip('화분 꾸미기 · ' + POT_SKINS[garden.current_skin].name + ' · ' + POT_COLORS[garden.current_color][0])
+        self.pot_style_button.setVisible(True)
+        self.pot_style_button.setEnabled(True)
         if self._cosmetic_dialog is not None:
             self._cosmetic_dialog.sync()
         selected = self.species_picker.selected

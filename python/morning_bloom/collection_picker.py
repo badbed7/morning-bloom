@@ -81,7 +81,7 @@ class CollectionPicker(QDialog):
             painter,
             QRectF(0, 0, 72, 82),
             plant_definition(item['species']),
-            skin=self.garden.equipped_skin,
+            skin=self.garden.source_skin(item['id']), pot_color=self.garden.source_color(item['id']),
         )
         painter.end()
         return QIcon(pixmap)
@@ -93,7 +93,8 @@ class CollectionPicker(QDialog):
             tuple((item['id'], item['species']) for item in self.garden.collection),
             tuple(sorted(requested)),
             tuple(sorted(floating)),
-            self.garden.equipped_skin,
+            tuple((item['id'], self.garden.source_skin(item['id']), self.garden.source_color(item['id']))
+                  for item in self.garden.collection),
         )
         if not force and signature == self._signature:
             return

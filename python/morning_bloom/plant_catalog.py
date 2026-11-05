@@ -33,7 +33,7 @@ PLANTS = {
         shop_tag='하루 단위 재배',
         temperature_min=18, temperature_max=26,
         petal_color='#fffdf3', center_color='#e6b953',
-        leaf_color='#86a674', pot_color='#bd7e5c',
+        leaf_color='#86a674', pot_color='#dec8a4',
     ),
     'starflower': PlantDefinition(
         key='starflower', name='별꽃', growth_seconds=3 * HOUR,
@@ -57,7 +57,7 @@ LEGACY_REGULAR_PLANTS = tuple(PLANTS)
 PLANTS.update({
     'rose': PlantDefinition(
         'rose', '장미', 3 * DAY, 50, 150, 'start_only', '겹겹이 피는 붉은 꽃 · 3일',
-        18, 26, '#f27179', '#bd485b', '#719460', '#c98c67'),
+        18, 26, '#f27179', '#bd485b', '#719460', '#44303e'),
     'lily_of_the_valley': PlantDefinition(
         'lily_of_the_valley', '은방울꽃', 14 * DAY, 160, 560, 'start_only',
         '휴가용 · 14일 · 접속하지 않아도 개화까지 성장',

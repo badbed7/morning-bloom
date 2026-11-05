@@ -169,7 +169,7 @@ class ReleaseFeatures(unittest.TestCase):
     def test_planting_uses_independent_slot_skins_and_cancel_never_consumes_seed(self):
         self.assertTrue(self.window.act(self.garden.buy_pot))
         self.choose_pot('ivory')
-        self.assertEqual(self.garden.pot_skins, ['terracotta', 'terracotta'])
+        self.assertEqual(self.garden.pot_skins, ['ivory', 'terracotta'])
         self.window.plant_button.click()
         self.assertEqual(self.garden.pot_skins, ['ivory', 'terracotta'])
         self.window.navigate_pot(1)
@@ -178,6 +178,7 @@ class ReleaseFeatures(unittest.TestCase):
         self.choose_pot('sage', cancel=True)
         self.assertEqual(self.garden.to_dict(), before)
         self.choose_pot('sage')
+        before = self.garden.to_dict()
         with patch.object(self.store, 'save', side_effect=SaveError('disk full')):
             self.window.plant_button.click()
         self.assertEqual(self.garden.to_dict(), before)
@@ -192,12 +193,14 @@ class ReleaseFeatures(unittest.TestCase):
         self.garden.equip_skin('ivory')
         old = self.garden.to_dict()
         old.pop('pot_skins')
+        old.pop('pot_colors')
+        old.pop('flower_pots')
         old['schema'] = 17
         original = deepcopy(old)
         upgraded = migrate(old)
         self.assertEqual(old, original)
         self.assertEqual(upgraded['pot_skins'], ['ivory', 'ivory'])
-        self.assertEqual({k: v for k, v in upgraded.items() if k not in ('schema', 'pot_skins')},
+        self.assertEqual({k: v for k, v in upgraded.items() if k not in ('schema', 'pot_skins', 'pot_colors', 'flower_pots')},
                          {k: v for k, v in old.items() if k != 'schema'})
         for invalid in ([], ['sage'], ['terracotta', 'rose']):
             broken = deepcopy(upgraded)

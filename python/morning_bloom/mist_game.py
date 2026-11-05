@@ -33,6 +33,7 @@ class SprayCanvas(QWidget):
     def __init__(self, garden, parent):
         super().__init__(parent)
         self.definition, self.stage, self.skin = garden.definition, garden.stage, garden.current_skin
+        self.pot_color = garden.current_color
         self.hits = 0
         self.frame = 0
         self.spraying = False
@@ -79,7 +80,7 @@ class SprayCanvas(QWidget):
         scale = min(self.width() / 380, self.height() / 180)
         painter.translate((self.width() - 380 * scale) / 2, 0)
         painter.scale(scale, scale)
-        paint_potted_flower(painter, self.definition, self.stage, skin=self.skin)
+        paint_potted_flower(painter, self.definition, self.stage, skin=self.skin, pot_color=self.pot_color)
         if self.spraying:
             painter.setPen(Qt.NoPen)
             painter.setBrush(QColor(93, 178, 215, max(0, 240 - self.frame * 15)))

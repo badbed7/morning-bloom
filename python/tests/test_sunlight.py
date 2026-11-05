@@ -169,7 +169,8 @@ class CosmeticsAndMigration(unittest.TestCase):
             garden = store.load(100)
             self.assertEqual(garden.to_dict(), {**data, **additions, 'gacha': gacha, 'schema': Garden.CURRENT_SCHEMA,
                                               'seeds': {**dict.fromkeys(SEED_PLANTS, 0), **data['seeds']},
-                                              'owned_skins': ['terracotta'], 'equipped_skin': 'terracotta', 'pot_skins': ['terracotta'],
+                                              'owned_skins': ['terracotta'], 'equipped_skin': 'terracotta', 'pot_skins': ['terracotta'], 'pot_colors': ['original'],
+                                              'flower_pots': {item['id']: {'skin': 'terracotta', 'color': 'original'} for item in data['collection']},
                                               'desktop_scale': 100, 'unlocked_plants': [], 'discovered_plants': ['daisy'], 'wind_reward_upgrade': 0})
             store.save(garden)
             self.assertEqual(store.migration_backup.name, 'garden.json.v6-migration.bak')

@@ -455,6 +455,7 @@ class InteractionTests(unittest.TestCase):
 
         self.garden.pots.append(empty_pot())
         self.garden.pot_skins.append(self.garden.equipped_skin)
+        self.garden.pot_colors.append('original')
         self.garden.selected = 1
         for ratio, stage in ((0, 0), (.1, 1), (.35, 2), (.7, 3), (1, 4)):
             self.garden.pots[0]['growth'] = self.garden.pots[0]['duration'] * ratio

@@ -6,7 +6,7 @@ from uuid import uuid4
 import math
 import secrets
 
-from .cosmetics import POT_SKINS, THEMES, garden_theme, pot_skin
+from .cosmetics import POT_COLORS, POT_SKINS, THEMES, garden_theme, pot_skin
 from . import gacha_board
 from .plant_catalog import DAY, HOUR, PLANTS, REGULAR_PLANTS, VACATION_PLANTS, RANDOM_SEED_PRICE, SEED_PLANTS, GACHA_PLANTS, plant_definition, roll_mystery_seed
 
@@ -32,6 +32,7 @@ V8_FIELDS = {'fertilizer_reserve', 'mystery_seeds', 'mystery_plants', 'desktop_f
 V12_FIELDS = {'wind_progress', 'wind_upgrade', 'last_wind_reward_id'}
 V13_FIELDS = {'wind_ring_hits'}
 V15_FIELDS = {'desktop_scale', 'unlocked_plants', 'discovered_plants', 'wind_reward_upgrade'}
+V19_FIELDS = {'pot_colors', 'flower_pots'}
 TYCOON_POT_DEFAULTS = dict(water_wait=0.0, mist_wait=0.0, water_count=0,
                            mist_count=0, fertilizer_used=0, fertilizer_limit=0)
 LEGACY_SPECIES = ('daisy', 'tulip')
@@ -175,7 +176,7 @@ def _validate_legacy_collection(items):
 @dataclass
 class Garden:
     """Shared inventory with up to four independently simulated pots."""
-    CURRENT_SCHEMA: ClassVar[int] = 18
+    CURRENT_SCHEMA: ClassVar[int] = 19
 
     last_update: float
     schema: int = CURRENT_SCHEMA
@@ -202,6 +203,8 @@ class Garden:
     owned_skins: list = field(default_factory=lambda: ['terracotta'])
     equipped_skin: str = 'terracotta'
     pot_skins: list = field(default_factory=list)
+    pot_colors: list = field(default_factory=list)
+    flower_pots: dict = field(default_factory=dict)
     gacha: dict = field(default_factory=gacha_board.initial_account)
     fertilizer: int = 0
     fertilizer_reserve: int = 0
@@ -221,6 +224,8 @@ class Garden:
             self.pots = [empty_pot()]
         if not self.pot_skins:
             self.pot_skins = [self.equipped_skin for _ in self.pots]
+        if not self.pot_colors:
+            self.pot_colors = ['original' for _ in self.pots]
         self.seeds = {**dict.fromkeys(SEED_PLANTS, 0), **self.seeds}
 
     @property
@@ -228,8 +233,40 @@ class Garden:
         return self.pot_skins[self.selected]
 
     def source_skin(self, item_id):
-        return next((self.pot_skins[i] for i, pot in enumerate(self.pots)
-                     if pot['plant_id'] == item_id), self.equipped_skin)
+        return self.source_pot(item_id)['skin']
+
+    @property
+    def current_color(self):
+        return self.pot_colors[self.selected]
+
+    def source_pot(self, item_id):
+        for index, pot in enumerate(self.pots):
+            if pot['planted'] and pot['plant_id'] == item_id:
+                return {'skin': self.pot_skins[index], 'color': self.pot_colors[index]}
+        return dict(self.flower_pots.get(item_id, {'skin': self.equipped_skin, 'color': 'original'}))
+
+    def source_color(self, item_id):
+        return self.source_pot(item_id)['color']
+
+    def set_slot_pot(self, index, skin, color):
+        if (type(index) is not int or not 0 <= index < len(self.pots)
+                or type(skin) is not str or skin not in self.owned_skins
+                or type(color) is not str or color not in POT_COLORS):
+            return False
+        self.pot_skins[index], self.pot_colors[index] = skin, color
+        return True
+
+    def set_plant_pot(self, item_id, skin, color):
+        if (type(item_id) is not str or type(skin) is not str or skin not in self.owned_skins
+                or type(color) is not str or color not in POT_COLORS):
+            return False
+        for index, pot in enumerate(self.pots):
+            if pot['planted'] and pot['plant_id'] == item_id:
+                return self.set_slot_pot(index, skin, color)
+        if not any(item['id'] == item_id for item in self.collection):
+            return False
+        self.flower_pots[item_id] = {'skin': skin, 'color': color}
+        return True
 
     @property
     def pot(self):
@@ -428,6 +465,7 @@ class Garden:
             'id': str(uuid4()), 'species': 'dandelion', 'harvested_at': self.last_update,
             'base_sale_g': 1, 'misted': False, 'bonus_g': 0,
         })
+        self.flower_pots[self.collection[-1]['id']] = {'skin': self.equipped_skin, 'color': 'original'}
         if was_empty:
             self.sun_elapsed = 0.0
         # Completion grants one sunlight directly; skip the first-harvest bonus token.
@@ -604,6 +642,7 @@ class Garden:
             return False
         was_empty = not self.collection
         self.collection.append(item)
+        self.flower_pots[item['id']] = {'skin': self.current_skin, 'color': self.current_color}
         self._discover(item['species'])
         if item['id'] in self.mystery_plants:
             self.mystery_plants.remove(item['id'])
@@ -665,6 +704,7 @@ class Garden:
         self.coins -= price
         self.pots.append(empty_pot())
         self.pot_skins.append(self.equipped_skin)
+        self.pot_colors.append('original')
         return True
 
     def sell(self, item_id=None, now=None):
@@ -676,6 +716,7 @@ class Garden:
             if item['id'] == item_id:
                 self.coins += item['base_sale_g'] + item['bonus_g']
                 self.collection.pop(index)
+                self.flower_pots.pop(item_id, None)
                 self.desktop_flowers.pop(item_id, None)
                 if not self.collection:
                     self.sun_elapsed = 0.0
@@ -897,6 +938,9 @@ class Garden:
         if (not isinstance(data['pot_skins'], list) or len(data['pot_skins']) != len(pots)
                 or any(type(key) is not str or key not in data['owned_skins'] for key in data['pot_skins'])):
             raise ValueError('화분별 외형')
+        if (not isinstance(data['pot_colors'], list) or len(data['pot_colors']) != len(pots)
+                or any(type(key) is not str or key not in POT_COLORS for key in data['pot_colors'])):
+            raise ValueError('화분별 색상')
         if type(data['selected']) is not int or not 0 <= data['selected'] < len(pots):
             raise ValueError('선택 화분')
         active_ids = set()
@@ -907,6 +951,13 @@ class Garden:
                     raise ValueError('중복 재배 ID')
                 active_ids.add(pot['plant_id'])
         collection_ids = cls._validate_collection(data['collection'])
+        if not isinstance(data['flower_pots'], dict) or not set(data['flower_pots']) <= collection_ids:
+            raise ValueError('식물별 화분')
+        for style in data['flower_pots'].values():
+            if (not isinstance(style, dict) or set(style) != {'skin', 'color'}
+                    or type(style['skin']) is not str or style['skin'] not in data['owned_skins']
+                    or type(style['color']) is not str or style['color'] not in POT_COLORS):
+                raise ValueError('식물별 화분 외형·색상')
         if active_ids & collection_ids:
             raise ValueError('중복 꽃 ID')
         if not set(data['mystery_plants']) <= active_ids:

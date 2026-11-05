@@ -102,7 +102,8 @@ class DesktopFlower(QWidget):
         painter.scale(self.scale, self.scale)
         paint_collection_flower(painter, QRectF(68, 32, 120, 182), plant_definition(self.item['species']),
                                 self.phase, self.owner.garden.source_skin(self.item_id),
-                                stage=growth_stage(self.item) if self.growing else 4)
+                                stage=growth_stage(self.item) if self.growing else 4,
+                                pot_color=self.owner.garden.source_color(self.item_id))
         for point in self.suns.values():
             painter.setPen(QPen(QColor('#e4b448'), 2))
             for index in range(8):

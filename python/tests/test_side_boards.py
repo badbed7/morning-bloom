@@ -91,6 +91,8 @@ class SideBoardRules(unittest.TestCase):
             old = garden.to_dict()
             old['schema'] = 15
             old.pop('pot_skins', None)
+            old.pop('pot_colors')
+            old.pop('flower_pots')
             state = old['gacha']['board']
             state.pop('side_position')
             state.update(position=17, side_gate=26, side_step=step)
@@ -134,12 +136,16 @@ class SideBoardRules(unittest.TestCase):
                 old = garden.to_dict()
                 old['schema'] = 16
                 old.pop('pot_skins', None)
+                old.pop('pot_colors')
+                old.pop('flower_pots')
                 old['gacha']['board'].update(position=gate, side_gate=gate,
                                              side_step=step, side_position=9)
                 original = deepcopy(old)
                 expected = deepcopy(old)
                 expected['schema'] = Garden.CURRENT_SCHEMA
                 expected['pot_skins'] = [expected['equipped_skin'] for _ in expected['pots']]
+                expected['pot_colors'] = ['original' for _ in expected['pots']]
+                expected['flower_pots'] = {}
                 if step >= 2:
                     expected['gacha']['board'].update(side_gate=None, side_step=0, side_position=0)
                 self.assertEqual(migrate(old), expected)
@@ -161,6 +167,8 @@ class SideBoardRules(unittest.TestCase):
         old = Garden(100).to_dict()
         old['schema'] = 16
         old.pop('pot_skins', None)
+        old.pop('pot_colors')
+        old.pop('flower_pots')
         old['gacha']['board'].update(position=26, side_gate=26, side_step=2)
         for field, invalid in (('side_step', 4), ('side_step', True), ('side_gate', 12),
                                ('side_position', 12), ('total', -1)):
@@ -180,6 +188,8 @@ class SideBoardRules(unittest.TestCase):
         old = Garden(100).to_dict()
         old['schema'] = 15
         old.pop('pot_skins', None)
+        old.pop('pot_colors')
+        old.pop('flower_pots')
         old['gacha']['board'].pop('side_position')
         for field, invalid in (('position', 60), ('side_gate', 12), ('side_gate', []),
                                ('side_step', True), ('side_step', 5), ('total', -1)):

@@ -6,6 +6,8 @@ from morning_bloom.plant_catalog import REGULAR_PLANTS
 def v14_shape(data):
     data = deepcopy(data)
     data.pop("pot_skins", None)
+    data.pop("pot_colors", None)
+    data.pop("flower_pots", None)
     for key in V15_FIELDS:
         data.pop(key, None)
     data["seeds"] = {

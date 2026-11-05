@@ -172,28 +172,37 @@ class PlantPots(unittest.TestCase):
         self.window.pages.setCurrentIndex(GARDEN_PAGE)
         self.app.processEvents()
         meadow = self.window.collection_garden.meadow
-        with patch('morning_bloom.garden_view.paint_collection_flower', wraps=paint_collection_flower) as paint:
+        styles = []
+
+        def draw(*args, **kwargs):
+            # A Mock's call history would retain QPainter past QWidget.grab(),
+            # keeping the temporary paint device active on Windows.
+            skin = args[4] if len(args) > 4 else kwargs['skin']
+            styles.append((skin, kwargs['pot_color']))
+            return paint_collection_flower(*args, **kwargs)
+
+        with patch('morning_bloom.garden_view.paint_collection_flower', new=draw):
             meadow.grab()
-        self.assertEqual(paint.call_args_list[1].kwargs['skin'], 'sage')
-        self.assertEqual(paint.call_args_list[1].kwargs['pot_color'], 'charcoal')
-        with patch('morning_bloom.garden_view.QDrag') as drag, \
-                patch('morning_bloom.garden_view.paint_collection_flower', wraps=paint_collection_flower) as paint:
+        self.assertEqual(styles[1], ('sage', 'charcoal'))
+        styles.clear()
+        with patch('morning_bloom.garden_view.QDrag'), \
+                patch('morning_bloom.garden_view.paint_collection_flower', new=draw):
             meadow.start_drag('rose-2')
-        self.assertEqual(paint.call_args.kwargs['pot_color'], 'charcoal')
+        self.assertEqual(styles, [('sage', 'charcoal')])
+        styles.clear()
         self.window.pages.setCurrentIndex(POT_PAGE)
         self.window.open_collection_picker()
         picker = self.window._collection_picker
-        with patch('morning_bloom.collection_picker.paint_collection_flower', wraps=paint_collection_flower) as paint:
+        with patch('morning_bloom.collection_picker.paint_collection_flower', new=draw):
             picker._icon(self.garden.collection[1])
-        self.assertEqual(paint.call_args.kwargs['pot_color'], 'charcoal')
+        self.assertEqual(styles, [('sage', 'charcoal')])
+        styles.clear()
         from morning_bloom.desktop_flowers import DesktopFlower
-        host = unittest.mock.Mock()
-        widget = DesktopFlower(self.window, 'rose-2', host)
+        widget = DesktopFlower(self.window, 'rose-2', unittest.mock.Mock())
         widget.show()
-        with patch('morning_bloom.desktop_flowers.paint_collection_flower', wraps=paint_collection_flower) as paint:
+        with patch('morning_bloom.desktop_flowers.paint_collection_flower', new=draw):
             widget.grab()
-        self.assertEqual(paint.call_args.kwargs['pot_color'], 'charcoal')
-        self.assertEqual(paint.call_args.args[4], 'sage')
+        self.assertEqual(styles, [('sage', 'charcoal')])
         widget.close()
         widget.deleteLater()
 

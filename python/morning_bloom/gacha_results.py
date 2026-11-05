@@ -11,10 +11,12 @@ from .locked_catalog import COLLECTIONS, CATEGORY_IDS, preview_image
 
 COLORS = {'R': '#658465', 'SR': '#9268ba', 'SSR': '#b88319'}
 NAMES = {value: key for key, value in CATEGORY_IDS.items()}
+NAMES['rose'] = '장미 씨앗'
 
 
 def reward_item(result):
-    return next(item for item in COLLECTIONS[NAMES[result['category']]] if item.key == result['item'])
+    category = '식물' if result['category'] == 'rose' else NAMES[result['category']]
+    return next(item for item in COLLECTIONS[category] if item.key == result['item'])
 
 
 class RewardReveal(QWidget):
@@ -105,7 +107,8 @@ class GachaResults(QDialog):
             picture.setPixmap(QPixmap.fromImage(preview_image(item).scaled(QSize(80, 60), Qt.KeepAspectRatio, Qt.SmoothTransformation)))
             contents.addWidget(picture)
             text = QLabel(f"{index+1}. {result['rarity']} · {NAMES[result['category']]}\n{item.name}\n" +
-                          (f"중복 · 교환잎 +{result['leaves']}" if result['duplicate'] else '신규 획득'))
+                          ((f"중복 · 씨앗 +1 · 교환잎 +{result['leaves']}" if result['duplicate'] else '신규 · 씨앗 +1') if result['category'] == 'rose' else
+                           f"중복 · 교환잎 +{result['leaves']}" if result['duplicate'] else '신규 획득'))
             text.setAlignment(Qt.AlignCenter)
             text.setWordWrap(True)
             contents.addWidget(text)

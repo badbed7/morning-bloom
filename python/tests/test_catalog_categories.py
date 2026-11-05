@@ -84,7 +84,7 @@ class CatalogCategoryImages(unittest.TestCase):
                     bytes(preview_image(items[0]).bits()), bytes(images[0].bits())
                 )
 
-    def test_all_150_items_have_explicit_category_and_matching_metadata(self):
+    def test_all_157_items_have_explicit_category_and_matching_metadata(self):
         identities = set()
         for title, category, source in (
             ("식물", "plant", PLANTS),
@@ -96,7 +96,7 @@ class CatalogCategoryImages(unittest.TestCase):
                 self.assertEqual(item.name, source[item.key].name)
                 self.assertNotIn((item.category, item.key), identities)
                 identities.add((item.category, item.key))
-        self.assertEqual(len(identities), 150)
+        self.assertEqual(len(identities), 157)
 
     def test_invalid_category_or_mismatched_name_is_rejected(self):
         item = next(i for i in COLLECTIONS["정원"] if i.key == "lavender")

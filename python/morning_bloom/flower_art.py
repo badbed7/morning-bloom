@@ -5,14 +5,14 @@ from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QLinearGradient, QPainterPath, QPen
 
 from .cosmetics import colored_pot_skin
+from .plant_catalog import ROSE_VARIETIES
 
 
 def paint_potted_flower(painter, definition, stage=4, phase=0, planted=True, drops=0, skin='terracotta', pot_color='original'):
     """Draw in a 380 x 180 scene; the actual pot is centered on x=190."""
     painter.save()
     painter.setPen(Qt.NoPen)
-    base = definition.pot_color if skin == 'terracotta' and definition.key in ('rose', 'daisy') else None
-    style = colored_pot_skin(skin, pot_color, base_color=base)
+    style = colored_pot_skin(skin, pot_color)
     if style.key.startswith('catalog_pot_'):
         from .catalog_art import paint_catalog_pot
         paint_catalog_pot(painter,style)
@@ -399,7 +399,7 @@ def _freesia(painter, definition):
 
 
 REFERENCE_FLOWERS = {
-    'rose': _rose, 'lily_of_the_valley': _lily, 'clover': _clover,
+    **dict.fromkeys(ROSE_VARIETIES, _rose), 'lily_of_the_valley': _lily, 'clover': _clover,
     'sunflower': _sunflower, 'lavender': _lavender, 'forget_me_not': _forget_me_not,
     'pansy': _pansy, 'cosmos': _cosmos, 'freesia': _freesia,
 }

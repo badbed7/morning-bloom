@@ -1,4 +1,5 @@
 """Issue 20-23 regressions through the actual widgets and save transactions."""
+from legacy_fixture import v19_shape
 from copy import deepcopy
 from pathlib import Path
 import tempfile
@@ -10,6 +11,7 @@ from PySide6.QtWidgets import QApplication, QMessageBox
 
 from morning_bloom.app import Window
 from morning_bloom.cosmetics import POT_SKINS
+from morning_bloom.plant_catalog import SEED_PLANTS
 from morning_bloom.gacha_results import GachaResults
 from morning_bloom.model import Garden
 from morning_bloom.storage import SaveError, Store, migrate
@@ -196,12 +198,14 @@ class ReleaseFeatures(unittest.TestCase):
         old.pop('pot_colors')
         old.pop('flower_pots')
         old['schema'] = 17
+        old = v19_shape(old)
         original = deepcopy(old)
         upgraded = migrate(old)
         self.assertEqual(old, original)
         self.assertEqual(upgraded['pot_skins'], ['ivory', 'ivory'])
-        self.assertEqual({k: v for k, v in upgraded.items() if k not in ('schema', 'pot_skins', 'pot_colors', 'flower_pots')},
-                         {k: v for k, v in old.items() if k != 'schema'})
+        self.assertEqual(upgraded['seeds'], {**dict.fromkeys(SEED_PLANTS, 0), **old['seeds']})
+        self.assertEqual({k: v for k, v in upgraded.items() if k not in ('schema', 'seeds', 'pot_skins', 'pot_colors', 'flower_pots')},
+                         {k: v for k, v in old.items() if k not in ('schema', 'seeds')})
         for invalid in ([], ['sage'], ['terracotta', 'rose']):
             broken = deepcopy(upgraded)
             broken['pot_skins'] = invalid

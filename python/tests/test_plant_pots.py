@@ -1,4 +1,5 @@
 """Issue #26 and its plant-instance/repotting comment: model, migration and real UI."""
+from legacy_fixture import v19_shape
 from copy import deepcopy
 import json
 from pathlib import Path
@@ -15,7 +16,7 @@ from morning_bloom.app import GARDEN_PAGE, POT_PAGE, Window
 from morning_bloom.cosmetics import POT_COLORS, POT_SKINS
 from morning_bloom.flower_art import paint_potted_flower, paint_collection_flower
 from morning_bloom.model import Garden
-from morning_bloom.plant_catalog import PLANTS
+from morning_bloom.plant_catalog import PLANTS, SEED_PLANTS
 from morning_bloom.storage import SaveError, Store, migrate
 
 NOW = 1_700_000_000
@@ -213,13 +214,15 @@ class PlantPots(unittest.TestCase):
         old.pop('pot_colors')
         old.pop('flower_pots')
         old['schema'] = 18
+        old = v19_shape(old)
         original = deepcopy(old)
         raw = json.dumps(old, ensure_ascii=False)
         upgraded = migrate(old)
         self.assertEqual(old, original)
-        self.assertEqual({k: v for k, v in upgraded.items() if k not in ('schema', 'pot_colors', 'flower_pots')},
-                         {k: v for k, v in old.items() if k != 'schema'})
+        self.assertEqual({k: v for k, v in upgraded.items() if k not in ('schema', 'seeds', 'pot_colors', 'flower_pots')},
+                         {k: v for k, v in old.items() if k not in ('schema', 'seeds')})
         self.assertEqual(upgraded['pot_colors'], ['original', 'original'])
+        self.assertEqual(upgraded['seeds'], {**dict.fromkeys(SEED_PLANTS, 0), **old['seeds']})
         self.assertEqual(set(upgraded['flower_pots']), {'rose-1', 'rose-2', 'daisy'})
         self.store.path.write_text(raw, encoding='utf-8')
         loaded = self.store.load(NOW)
@@ -238,7 +241,7 @@ class PlantPots(unittest.TestCase):
             with self.subTest(field=field, value=value), self.assertRaises(ValueError):
                 Garden.from_dict(data)
 
-    def test_defaults_match_requested_colors_without_recoloring_petals(self):
+    def test_species_default_pot_override_is_retracted_and_custom_colors_preserve_petals(self):
         def render(species, color='original', skin='terracotta'):
             image = QImage(380, 180, QImage.Format_ARGB32)
             image.fill(Qt.transparent)
@@ -246,8 +249,8 @@ class PlantPots(unittest.TestCase):
             paint_potted_flower(painter, PLANTS[species], skin=skin, pot_color=color)
             painter.end()
             return image
-        self.assertEqual(render('rose').pixelColor(180, 150).name(), '#44303e')
-        self.assertEqual(render('daisy').pixelColor(180, 150).name(), '#dec8a4')
+        self.assertEqual(render('rose').pixelColor(180, 150).name(), '#c98c67')
+        self.assertEqual(render('daisy').pixelColor(180, 150).name(), '#bd7e5c')
         for species in ('rose', 'daisy'):
             before = render(species)
             after = render(species, 'charcoal')

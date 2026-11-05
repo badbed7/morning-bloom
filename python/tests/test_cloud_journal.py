@@ -1,4 +1,5 @@
 """Real loopback HTTP exercises complete writes and simultaneous device backups."""
+from legacy_fixture import v19_shape
 from copy import deepcopy
 from email import policy
 from email.parser import BytesParser
@@ -166,6 +167,7 @@ class CloudJournal(unittest.TestCase):
         old.pop('pot_colors')
         old.pop('flower_pots')
         old['schema'] = 17
+        old = v19_shape(old)
         raw = json.dumps({'schema': 1, 'saved_at': 100, 'save': old}).encode()
         self.files.append(dict(id='legacy', size=str(len(raw)), version='1', body=raw))
         device = self.device()

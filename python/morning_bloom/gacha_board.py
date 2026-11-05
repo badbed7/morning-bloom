@@ -6,6 +6,7 @@ save transaction must persist the complete draw result before showing animation.
 
 from copy import deepcopy
 import secrets
+from fractions import Fraction
 
 
 LENGTH = 60
@@ -28,11 +29,13 @@ REWARDS = {
 }
 
 # Explicit stable tier assignment; equal item weights within a tier.
-from .plant_catalog import GACHA_PLANTS
+from .plant_catalog import CATALOG_GACHA_PLANTS, ROSE_VARIETIES, ROSE_GACHA_PLANTS
 from .cosmetics import POT_SKINS, THEMES
 PLANT_TIERS = ('SSR', 'SR', 'R', 'SSR', 'SR', 'SR', 'R', 'R')
-REWARDS['plant'] = {tier: tuple(k for k, t in zip(GACHA_PLANTS, PLANT_TIERS) if t == tier)
+REWARDS['plant'] = {tier: tuple(k for k, t in zip(CATALOG_GACHA_PLANTS, PLANT_TIERS) if t == tier)
                     for tier in ('R', 'SR', 'SSR')}
+REWARDS['rose'] = {tier: tuple(k for k in ROSE_GACHA_PLANTS if ROSE_VARIETIES[k][1] == tier)
+                   for tier in ('R', 'SR', 'SSR')}
 for category, catalog, prefix in (('pot', POT_SKINS, 'catalog_pot_'), ('garden', THEMES, 'catalog_garden_')):
     for key in catalog:
         if key.startswith(prefix):
@@ -46,10 +49,70 @@ def board_name(gate):
 
 
 def reward_pool(category, rarity, gate=None):
-    # Side boards exclude all R rewards; category and tier weights stay uniform.
+    # Side boards exclude R; per-item weights are shared with the published rate table.
     if gate is not None and (rarity == 'R' or (gate == GOLD and rarity != 'SSR')):
         return ()
     return REWARDS[category].get(rarity, ())
+
+def reward_weight(category, item):
+    return ROSE_VARIETIES[item][4] if category == 'rose' else 1
+
+
+def select_reward(category, rarity, gate, randbelow):
+    pool = reward_pool(category, rarity, gate)
+    total = sum(reward_weight(category, key) for key in pool)
+    ticket = randbelow(total)
+    if type(ticket) is not int or not 0 <= ticket < total:
+        raise ValueError('아이템 추첨값 범위')
+    for key in pool:
+        ticket -= reward_weight(category, key)
+        if ticket < 0:
+            return key
+    raise ValueError('빈 보상 목록')
+
+
+def rarity_weights(state, position, gate):
+    forced_ssr = (position in SIDE_BOARDS[gate]['ssr_cells'] if gate is not None
+                  else position == GOLD) or state['ssr_miss'] == 59
+    forced_sr = gate is not None or position in SILVER or state['sr_miss'] == 9
+    if forced_ssr:
+        return {'R': 0, 'SR': 0, 'SSR': 10000}
+    return {'R': 0, 'SR': 9500, 'SSR': 500} if forced_sr else {'R': 7000, 'SR': 2500, 'SSR': 500}
+
+
+def next_rarity_probabilities(state):
+    """Exact next-roll rates including 36 dice pairs, board cells and pity."""
+    validate(state)
+    gate = state['side_gate']
+    start = state['side_position'] if gate is not None else state['position']
+    length = SIDE_LENGTH if gate is not None else LENGTH
+    totals = dict.fromkeys(('R', 'SR', 'SSR'), 0)
+    for first in range(1, 7):
+        for second in range(1, 7):
+            position = (start + first + second - 1) % length + 1
+            for tier, value in rarity_weights(state, position, gate).items():
+                totals[tier] += value
+    return {tier: Fraction(total, 36 * 10000) for tier, total in totals.items()}
+
+
+def _weighted_probabilities(category, tiers, gate=None):
+    result = {}
+    for tier, chance in tiers.items():
+        pool = reward_pool(category, tier, gate)
+        total = sum(reward_weight(category, key) for key in pool)
+        for key in REWARDS[category][tier]:
+            result[key] = chance * Fraction(reward_weight(category, key), total) if total else Fraction(0)
+    return result
+
+
+def ordinary_item_probabilities(category):
+    weights = rarity_weights(initial_state(), 1, None)
+    return _weighted_probabilities(category, {tier: Fraction(weight, 10000) for tier, weight in weights.items()})
+
+
+def item_probabilities(category, state):
+    return _weighted_probabilities(category, next_rarity_probabilities(state), state['side_gate'])
+
 
 def initial_state():
     return {
@@ -124,16 +187,12 @@ def _next(state, randbelow):
     position = path[-1]
     forced_ssr = (position in SIDE_BOARDS[gate]['ssr_cells'] if gate is not None
                   else position == GOLD) or state['ssr_miss'] == 59
-    forced_sr = forced_ssr or gate is not None or position in SILVER or state['sr_miss'] == 9
     roll = randbelow(10000)
     if type(roll) is not int or not 0 <= roll < 10000:
         raise ValueError('추첨값 범위')
-    if forced_ssr:
-        rarity = 'SSR'
-    elif forced_sr:
-        rarity = 'SSR' if roll < 500 else 'SR'
-    else:
-        rarity = 'SSR' if roll < 500 else 'SR' if roll < 3000 else 'R'
+    weights = rarity_weights(state, position, gate)
+    rarity = ('SSR' if roll < weights['SSR'] else
+              'SR' if roll < weights['SSR'] + weights['SR'] else 'R')
 
     exited = False
     if gate is not None:
@@ -194,6 +253,8 @@ def simulate(state, count, sunlight, free_tickets=0, randbelow=None):
 
 def item_rarity(category, key):
     """Return a collection tier without deriving it from a display name."""
+    if category in ('plant', 'rose') and key in ROSE_VARIETIES:
+        return ROSE_VARIETIES[key][1]
     for tier, pool in REWARDS.get(category, {}).items():
         if key in pool:
             return tier

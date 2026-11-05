@@ -1,4 +1,5 @@
 """High-grade routes: dice topology, guarantees, migration and saved UI transitions."""
+from legacy_fixture import v19_shape
 from copy import deepcopy
 import json
 from pathlib import Path
@@ -90,6 +91,7 @@ class SideBoardRules(unittest.TestCase):
             garden.draw_gacha('pot', randbelow=low_roll)
             old = garden.to_dict()
             old['schema'] = 15
+            old = v19_shape(old)
             old.pop('pot_skins', None)
             old.pop('pot_colors')
             old.pop('flower_pots')
@@ -135,6 +137,7 @@ class SideBoardRules(unittest.TestCase):
                 garden.draw_gacha('pot', randbelow=low_roll)
                 old = garden.to_dict()
                 old['schema'] = 16
+                old = v19_shape(old)
                 old.pop('pot_skins', None)
                 old.pop('pot_colors')
                 old.pop('flower_pots')
@@ -143,6 +146,8 @@ class SideBoardRules(unittest.TestCase):
                 original = deepcopy(old)
                 expected = deepcopy(old)
                 expected['schema'] = Garden.CURRENT_SCHEMA
+                from morning_bloom.plant_catalog import SEED_PLANTS
+                expected['seeds'] = {**dict.fromkeys(SEED_PLANTS, 0), **expected['seeds']}
                 expected['pot_skins'] = [expected['equipped_skin'] for _ in expected['pots']]
                 expected['pot_colors'] = ['original' for _ in expected['pots']]
                 expected['flower_pots'] = {}
@@ -166,6 +171,7 @@ class SideBoardRules(unittest.TestCase):
     def test_v16_migration_rejects_corrupt_progress_and_current_schema_keeps_two_draw_limit(self):
         old = Garden(100).to_dict()
         old['schema'] = 16
+        old = v19_shape(old)
         old.pop('pot_skins', None)
         old.pop('pot_colors')
         old.pop('flower_pots')
@@ -187,6 +193,7 @@ class SideBoardRules(unittest.TestCase):
     def test_corrupt_legacy_markers_and_side_history_are_rejected(self):
         old = Garden(100).to_dict()
         old['schema'] = 15
+        old = v19_shape(old)
         old.pop('pot_skins', None)
         old.pop('pot_colors')
         old.pop('flower_pots')

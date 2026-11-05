@@ -29,7 +29,7 @@ from morning_bloom.google_cloud import (
 )
 from morning_bloom.locked_catalog import COLLECTIONS, preview_image
 from morning_bloom.model import Garden, V15_FIELDS, WIND_BASE_SECONDS
-from morning_bloom.plant_catalog import PLANTS, SEED_PLANTS, GACHA_PLANTS
+from morning_bloom.plant_catalog import PLANTS, SEED_PLANTS, GACHA_PLANTS, ROSE_GACHA_PLANTS
 from morning_bloom.storage import Store, SaveError, migrate
 from morning_bloom.wind_game import WindState
 
@@ -40,7 +40,7 @@ def draw_item(garden, category, tier, index):
     garden.sunlight = 100
     garden.gacha["tickets"] = 0
     garden.gacha["board"].update(position=0, sr_miss=0, ssr_miss=0)
-    values = iter((0, 0, {"R": 9000, "SR": 1000, "SSR": 0}[tier], index))
+    values = iter((0, 0, {"R": 9000, "SR": 1000, "SSR": 0}[tier], sum(board.reward_weight(category, key) for key in board.REWARDS[category][tier][:index])))
     return garden.draw_gacha(category, randbelow=lambda n: next(values))[0]
 
 
@@ -50,9 +50,9 @@ class CollectionExpansion(unittest.TestCase):
         cls.app = QApplication.instance() or QApplication([])
 
     def test_every_reward_can_be_acquired_used_and_persisted(self):
-        self.assertEqual((len(PLANTS), len(THEMES), len(POT_SKINS)), (22, 83, 45))
+        self.assertEqual((len(PLANTS), len(THEMES), len(POT_SKINS)), (29, 83, 45))
         self.assertEqual(
-            sum(len(v) for c in board.REWARDS.values() for v in c.values()), 134
+            sum(len(v) for c in board.REWARDS.values() for v in c.values()), 141
         )
         for category, tiers in board.REWARDS.items():
             for tier, pool in tiers.items():
@@ -63,9 +63,9 @@ class CollectionExpansion(unittest.TestCase):
                         result = draw_item(garden, category, tier, index)
                         self.assertEqual(result["item"], key)
                         self.assertFalse(result["duplicate"])
-                        if category == "plant":
+                        if category in ("plant", "rose"):
                             self.assertEqual(garden.seeds[key], 1)
-                            self.assertTrue(garden.buy_seed(key))
+                            self.assertEqual(garden.buy_seed(key), category != "rose")
                             self.assertTrue(garden.plant(100, key))
                             self.assertTrue(garden.care("water", 100))
                             garden.advance(100 + PLANTS[key].growth_seconds)
@@ -77,7 +77,7 @@ class CollectionExpansion(unittest.TestCase):
                             )
                             self.assertTrue(garden.sell())
                             self.assertIn(key, garden.discovered_plants)
-                            self.assertEqual(garden.seeds[key], 1)
+                            self.assertEqual(garden.seeds[key], 0 if category == "rose" else 1)
                         elif category == "pot":
                             self.assertTrue(garden.equip_skin(key))
                         else:
@@ -86,7 +86,7 @@ class CollectionExpansion(unittest.TestCase):
                         self.assertEqual(clone.to_dict(), garden.to_dict())
                         second = draw_item(garden, category, tier, index)
                         self.assertTrue(second["duplicate"])
-                        if category == "plant":
+                        if category in ("plant", "rose"):
                             self.assertEqual(garden.seeds[key], 1)
                         self.assertEqual(
                             second["leaves"], 1 + {"R": 1, "SR": 3, "SSR": 10}[tier]

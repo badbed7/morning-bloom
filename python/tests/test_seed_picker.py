@@ -7,7 +7,7 @@ from PySide6.QtWidgets import QApplication
 
 from morning_bloom.app import POT_PAGE, Window
 from morning_bloom.model import Garden
-from morning_bloom.plant_catalog import GACHA_PLANTS, SEED_PLANTS
+from morning_bloom.plant_catalog import GACHA_PLANTS, SEED_PLANTS, SHOP_SEED_PLANTS
 from morning_bloom.seed_picker import SeedPicker
 from morning_bloom.storage import SaveError, Store
 
@@ -97,7 +97,7 @@ class OwnedSeedPicker(unittest.TestCase):
             if not picker.next.isEnabled():
                 break
             picker.next.click()
-        self.assertEqual(seen, {*SEED_PLANTS, 'random'})
+        self.assertEqual(seen, {*SHOP_SEED_PLANTS, 'random'})
         self.assertFalse(picker.empty_state.isVisible())
 
     def test_empty_inventory_purchase_consumption_and_save_failure_refresh_ui(self):

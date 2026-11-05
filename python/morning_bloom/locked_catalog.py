@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
 )
 
 from .navigation import chevron_icon
-from .plant_catalog import PLANTS
+from .plant_catalog import PLANTS, ROSE_GACHA_PLANTS
 from .cosmetics import THEMES, POT_SKINS
 
 ITEM_SOURCES = {"plant": PLANTS, "garden": THEMES, "pot": POT_SKINS}
@@ -201,7 +201,9 @@ class LockedCatalog(QWidget):
                 garden = self.garden
                 if self.category == '식물':
                     state = '발견' if garden and item.key in garden.discovered_plants else '미발견'
-                    if item.key.startswith('catalog_plant_'):
+                    if item.key in ROSE_GACHA_PLANTS:
+                        state += f' · 장미 뽑기 전용 · 씨앗 {garden.seeds[item.key] if garden else 0}개'
+                    elif item.key.startswith('catalog_plant_'):
                         state += ' · 재배 해금' if garden and item.key in garden.unlocked_plants else ' · 식물 뽑기로 해금'
                     elif item.key == 'dandelion':
                         state += ' · 홀씨 바람놀이'

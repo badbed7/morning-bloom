@@ -4,7 +4,7 @@
 
 **목표: Python + PySide6 / 2D 전용 / Windows 우선**
 
-개발 브랜치에서는 장미를 빨강·핑크·주황·하양·노랑·보라·파랑·검정 8색으로 나눕니다. 빨강은 상점에서, 나머지는 장미 씨앗 뽑기에서 획득합니다. 품종별 기본 토분 색상 지정은 철회하고 사용자가 선택한 화분 설정은 유지합니다. [장미 8색·확률 근거](docs/rose-varieties.ko.md) · [현재 배포 v0.8.19](release/notes/v0.8.19.md) · [업데이트 사용 방법](docs/live-update.ko.md).
+v0.8.20은 장미를 빨강·핑크·주황·하양·노랑·보라·파랑·검정 8색으로 나눕니다. 빨강은 상점에서, 나머지는 장미 씨앗 뽑기에서 획득합니다. 품종별 기본 토분 색상 지정은 철회하고 사용자가 선택한 화분 설정은 유지합니다. [장미 8색·확률 근거](docs/rose-varieties.ko.md) · [릴리스 변경 사항](release/notes/v0.8.20.md) · [업데이트 사용 방법](docs/live-update.ko.md).
 
 **Python 실행:** Release의 Python-BAT ZIP을 풀고 `run-python.bat`으로 실행하세요. 매번 GitHub 최신 버전을 확인하고 기존 정원을 유지하며 업데이트합니다. [Python 실행 방법·구현 상태](python/README.md)를 확인하세요.
 

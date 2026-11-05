@@ -4,7 +4,7 @@
 
 **목표: Python + PySide6 / 2D 전용 / Windows 우선**
 
-v0.8.13은 정원 라벤더·화분 로즈 도감에 식물 이미지가 표시되던 분류 연결 오류를 수정합니다. 도감 150종을 전수 점검했습니다. v0.8.12의 새 런처에서는 실행 중 업데이트를 확인해 저장 후 자동 재시작할 수 있습니다. [릴리스 변경 사항](release/notes/v0.8.13.md) · [업데이트 사용 방법](docs/live-update.ko.md).
+v0.8.19는 정원 식물을 클릭해 개체별 화분 종류와 색상을 선택하는 기능을 제공합니다. 같은 품종도 각각 꾸밀 수 있고 수확·재실행·클라우드 복원 후에도 설정을 유지합니다. 장미 기본 화분은 짙은 자주색, 데이지는 베이지색입니다. [릴리스 변경 사항](release/notes/v0.8.19.md) · [화분 꾸미기 사용 방법](docs/plant-pot-customization.ko.md) · [업데이트 사용 방법](docs/live-update.ko.md).
 
 **Python 실행:** Release의 Python-BAT ZIP을 풀고 `run-python.bat`으로 실행하세요. 매번 GitHub 최신 버전을 확인하고 기존 정원을 유지하며 업데이트합니다. [Python 실행 방법·구현 상태](python/README.md)를 확인하세요.
 

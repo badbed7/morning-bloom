@@ -1,12 +1,15 @@
 """Choose owned pot shapes and independent colors for a specific plant instance."""
 from functools import lru_cache
 
-from PySide6.QtCore import QEasingCurve, QRectF, QSize, Qt, QVariantAnimation
+from PySide6.QtCore import QSize, Qt
 from PySide6.QtGui import QColor, QIcon, QImage, QPainter, QPixmap
-from PySide6.QtWidgets import (QComboBox, QDialog, QGridLayout, QHBoxLayout, QLabel,
-                               QPushButton, QScrollArea, QToolButton, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QDialog, QGridLayout, QHBoxLayout, QLabel,
+                               QPushButton, QScrollArea, QSizePolicy, QToolButton, QVBoxLayout, QWidget)
 
-from .cosmetics import POT_COLORS, THEMES, POT_SKINS
+from .cosmetics import THEMES, POT_SKINS, colored_pot_skin
+from .pot_colors import pot_color_name, valid_pot_color, normalize_pot_color
+from .pot_preview import PotPreview
+from .pot_color_selection import PotColorSelection, swatch_icon
 from .flower_art import paint_collection_flower, paint_potted_flower
 from .locked_catalog import COLLECTIONS, preview_image
 from .plant_catalog import PLANTS, plant_definition
@@ -37,49 +40,6 @@ def choice_image(category, key, color, species, owned):
     return image
 
 
-class PotPreview(QWidget):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setFixedSize(110, 76)
-        self.choice = None
-        self.progress = 1.0
-        self.effect = QVariantAnimation(self)
-        self.effect.setDuration(240)
-        self.effect.setEasingCurve(QEasingCurve.OutCubic)
-        self.effect.valueChanged.connect(self.animate)
-
-    def animate(self, value):
-        self.progress = float(value)
-        self.update()
-
-    def show_choice(self, species, skin, color, planted, animate=False, stage=4):
-        self.choice = species, skin, color, planted, stage
-        if animate:
-            self.effect.stop()
-            self.effect.setStartValue(0.0)
-            self.effect.setEndValue(1.0)
-            self.effect.start()
-        else:
-            self.update()
-
-    def paintEvent(self, event):
-        if self.choice is None:
-            return
-        species, skin, color, planted, stage = self.choice
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
-        painter.translate(0, -(1-self.progress)*7)
-        if planted:
-            paint_collection_flower(painter, QRectF(0, 0, self.width(), self.height()), plant_definition(species),
-                                    skin=skin, pot_color=color, stage=stage)
-        else:
-            scale = .75
-            painter.translate(self.width()/2 - 190*scale, -62)
-            painter.scale(scale, scale)
-            paint_potted_flower(painter, plant_definition(species), planted=False, skin=skin, pot_color=color)
-        painter.end()
-
-
 class CosmeticSelection(QDialog):
     def __init__(self, owner, category, *, planting=False, item_id=None):
         super().__init__(owner)
@@ -93,6 +53,7 @@ class CosmeticSelection(QDialog):
         current = self.current_style()
         self.selected = current['skin'] if planting else owner.garden.equipped_theme
         self.selected_color = current['color']
+        self._color_dialog = None
         layout = QVBoxLayout(self)
         self.hint = QLabel()
         self.hint.setWordWrap(True)
@@ -109,12 +70,12 @@ class CosmeticSelection(QDialog):
             preview_row = QHBoxLayout()
             self.preview = PotPreview()
             preview_row.addWidget(self.preview)
-            self.color_picker = QComboBox()
-            for key, (name, value) in POT_COLORS.items():
-                self.color_picker.addItem('색상 · ' + name, key)
-            self.color_picker.setCurrentIndex(self.color_picker.findData(self.selected_color))
-            self.color_picker.setAccessibleName('이 식물의 화분 색상')
-            preview_row.addWidget(self.color_picker, 1)
+            self.color_button = QPushButton()
+            self.color_button.setFixedHeight(30)
+            self.color_button.setMinimumWidth(0)
+            self.color_button.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+            self.color_button.clicked.connect(self.open_colors)
+            preview_row.addWidget(self.color_button, 1)
             body.addLayout(preview_row)
             body.addWidget(self.content)
             self.scroll.setWidget(self.scroll_body)
@@ -134,8 +95,6 @@ class CosmeticSelection(QDialog):
         layout.addLayout(row)
         self.buttons = {}
         self._signature = None
-        if planting:
-            self.color_picker.currentIndexChanged.connect(self.change_color)
         self.sync()
 
     def target(self):
@@ -223,10 +182,14 @@ class CosmeticSelection(QDialog):
         catalog = POT_SKINS if self.planting else THEMES
         valid = self.selected in owned and (not self.planting or self.target_exists())
         name = catalog[self.selected].name if self.selected in catalog else ''
-        self.status.setText(name + (' · ' + POT_COLORS[self.selected_color][0] if self.planting else '') +
+        self.status.setText(name + (' · ' + pot_color_name(self.selected_color) if self.planting else '') +
                             (' · 보유' if valid else ' · 미보유 · 상점 또는 뽑기에서 획득하세요'))
         self.apply_button.setEnabled(valid)
         if self.planting:
+            self.color_button.setText('색상 · ' + pot_color_name(self.selected_color))
+            style = colored_pot_skin(self.selected, self.selected_color)
+            self.color_button.setIcon(swatch_icon(style.body or plant_definition(species).pot_color))
+            self.color_button.setToolTip('색상 선택 · ' + pot_color_name(self.selected_color))
             self.hint.setText(self.plant_name() + ' · 화분을 골라 담아 보세요')
             self.preview.show_choice(species, self.selected, self.selected_color, self.target() is not None, stage=self.preview_stage())
         else:
@@ -238,10 +201,30 @@ class CosmeticSelection(QDialog):
         if self.planting:
             self.preview.show_choice(self.species(), self.selected, self.selected_color, self.target() is not None, animate=True, stage=self.preview_stage())
 
-    def change_color(self):
-        self.selected_color = self.color_picker.currentData()
+    def open_colors(self):
+        if self._color_dialog is not None:
+            self._color_dialog.raise_()
+            return
+        dialog = PotColorSelection(self, self.selected_color, self.species(), self.selected,
+                                   self.target() is not None, self.preview_stage())
+        self._color_dialog = dialog
+        dialog.accepted.connect(lambda: self.select_color(dialog.selected_color))
+        dialog.finished.connect(lambda _: setattr(self, '_color_dialog', None))
+        dialog.open()
+
+    def select_color(self, color):
+        if not valid_pot_color(color):
+            return False
+        self.selected_color = normalize_pot_color(color)
         self.sync()
-        self.preview.show_choice(self.species(), self.selected, self.selected_color, self.target() is not None, animate=True, stage=self.preview_stage())
+        self.preview.show_choice(self.species(), self.selected, self.selected_color,
+                                 self.target() is not None, animate=True, stage=self.preview_stage())
+        return True
+
+    def done(self, result):
+        if self._color_dialog is not None:
+            self._color_dialog.reject()
+        super().done(result)
 
     def apply(self):
         garden = self.owner.garden

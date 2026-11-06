@@ -1,11 +1,31 @@
 """Shared vector flowers for the growing pot, collection and drag preview."""
 import math
+from functools import lru_cache
+import random
 
 from PySide6.QtCore import QPointF, QRectF, Qt
-from PySide6.QtGui import QColor, QLinearGradient, QPainterPath, QPen
+from PySide6.QtGui import QBrush, QColor, QImage, QLinearGradient, QPainter, QPainterPath, QPen
 
 from .cosmetics import colored_pot_skin
 from .plant_catalog import ROSE_VARIETIES
+
+
+@lru_cache(maxsize=1)
+def matte_grain():
+    """A fixed, translucent soil-grain tile; never consumes gameplay randomness."""
+    tile = QImage(48, 48, QImage.Format_ARGB32_Premultiplied)
+    tile.fill(Qt.transparent)
+    painter = QPainter(tile)
+    painter.setRenderHint(QPainter.Antialiasing)
+    painter.setPen(Qt.NoPen)
+    rng = random.Random(29)
+    for index in range(150):
+        value = 255 if index % 3 == 0 else 35
+        painter.setBrush(QColor(value, value, value, rng.randrange(10, 23)))
+        radius = rng.uniform(.35, .7)
+        painter.drawEllipse(QPointF(rng.uniform(0, 48), rng.uniform(0, 48)), radius, radius)
+    painter.end()
+    return tile
 
 
 def paint_potted_flower(painter, definition, stage=4, phase=0, planted=True, drops=0, skin='terracotta', pot_color='original'):
@@ -21,6 +41,10 @@ def paint_potted_flower(painter, definition, stage=4, phase=0, planted=True, dro
         painter.drawRoundedRect(QRectF(144, 112, 92, 49), 14, 14)
         painter.setBrush(QColor(style.body or definition.pot_color))
         painter.drawRoundedRect(QRectF(148, 119, 84, 43), 12, 12)
+        if skin == 'terracotta':
+            body = QPainterPath()
+            body.addRoundedRect(QRectF(148, 119, 84, 43), 12, 12)
+            painter.fillPath(body, QBrush(matte_grain()))
         painter.setBrush(QColor(style.rim))
         if style.pattern == 'stripes':
             for x in range(158, 225, 13):

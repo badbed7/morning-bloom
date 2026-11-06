@@ -65,23 +65,13 @@ def pot_skin(key):
         raise ValueError('알 수 없는 화분 스킨') from exc
 
 
-# Color belongs to a plant instance, independently of the owned pot shape.
-POT_COLORS = {
-    'original': ('기본', None),
-    'beige': ('베이지', '#dec8a4'),
-    'charcoal': ('차콜', '#35313d'),
-    'burgundy': ('버건디', '#542c3f'),
-    'ivory': ('아이보리', '#f0e5ce'),
-    'sage': ('세이지', '#83977b'),
-    'blue': ('더스티 블루', '#879eac'),
-}
+# Re-export the shared palette for existing catalog consumers.
+from .pot_colors import POT_COLORS, pot_color_hex
 
 
 def colored_pot_skin(key, color='original', base_color=None):
     style = pot_skin(key)
-    if color not in POT_COLORS:
-        raise ValueError('알 수 없는 화분 색상')
-    body = POT_COLORS[color][1] or base_color
+    body = pot_color_hex(color) or base_color
     if body is None:
         return style
     channels = [int(body[i:i+2], 16) for i in (1, 3, 5)]

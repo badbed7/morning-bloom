@@ -89,7 +89,11 @@ class PlantPots(unittest.TestCase):
         dialog = self.open_pot(item_id)
         self.assertEqual(dialog.preview.choice[-1], 0)
         dialog.select('sage')
-        dialog.color_picker.setCurrentIndex(dialog.color_picker.findData('burgundy'))
+        dialog.color_button.click()
+        colors = dialog._color_dialog
+        colors.category.setCurrentText('이전 색상')
+        colors.swatches['burgundy'].click()
+        colors.use_button.click()
         self.assertEqual(self.garden.to_dict(), before)
         dialog.apply()
         self.assertEqual(self.garden.pot, before['pots'][0])
@@ -113,7 +117,11 @@ class PlantPots(unittest.TestCase):
         self.assertEqual(dialog.ordered_keys[:3], ['terracotta', 'ivory', 'sage'])
         before = self.garden.to_dict()
         dialog.select('ivory')
-        dialog.color_picker.setCurrentIndex(dialog.color_picker.findData('beige'))
+        dialog.color_button.click()
+        colors = dialog._color_dialog
+        colors.category.setCurrentText('이전 색상')
+        colors.swatches['beige'].click()
+        colors.use_button.click()
         self.assertEqual(dialog.preview.choice[1:3], ('ivory', 'beige'))
         self.assertEqual(self.garden.to_dict(), before)
         dialog.reject()
@@ -123,7 +131,11 @@ class PlantPots(unittest.TestCase):
         dialog = self.open_pot()
         before = self.garden.to_dict()
         dialog.select('ivory')
-        dialog.color_picker.setCurrentIndex(dialog.color_picker.findData('charcoal'))
+        dialog.color_button.click()
+        colors = dialog._color_dialog
+        colors.category.setCurrentText('이전 색상')
+        colors.swatches['charcoal'].click()
+        colors.use_button.click()
         with patch.object(self.store, 'save', side_effect=SaveError('disk full')):
             dialog.apply()
         self.assertEqual(self.garden.to_dict(), before)

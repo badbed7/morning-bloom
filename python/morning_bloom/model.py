@@ -6,7 +6,8 @@ from uuid import uuid4
 import math
 import secrets
 
-from .cosmetics import POT_COLORS, POT_SKINS, THEMES, garden_theme, pot_skin
+from .pot_colors import valid_pot_color, normalize_pot_color
+from .cosmetics import POT_SKINS, THEMES, garden_theme, pot_skin
 from . import gacha_board
 from .plant_catalog import DAY, HOUR, PLANTS, REGULAR_PLANTS, VACATION_PLANTS, RANDOM_SEED_PRICE, SEED_PLANTS, GACHA_PLANTS, ROSE_GACHA_PLANTS, plant_definition, roll_mystery_seed
 
@@ -176,7 +177,7 @@ def _validate_legacy_collection(items):
 @dataclass
 class Garden:
     """Shared inventory with up to four independently simulated pots."""
-    CURRENT_SCHEMA: ClassVar[int] = 20
+    CURRENT_SCHEMA: ClassVar[int] = 21
 
     last_update: float
     schema: int = CURRENT_SCHEMA
@@ -251,21 +252,21 @@ class Garden:
     def set_slot_pot(self, index, skin, color):
         if (type(index) is not int or not 0 <= index < len(self.pots)
                 or type(skin) is not str or skin not in self.owned_skins
-                or type(color) is not str or color not in POT_COLORS):
+                or not valid_pot_color(color)):
             return False
-        self.pot_skins[index], self.pot_colors[index] = skin, color
+        self.pot_skins[index], self.pot_colors[index] = skin, normalize_pot_color(color)
         return True
 
     def set_plant_pot(self, item_id, skin, color):
         if (type(item_id) is not str or type(skin) is not str or skin not in self.owned_skins
-                or type(color) is not str or color not in POT_COLORS):
+                or not valid_pot_color(color)):
             return False
         for index, pot in enumerate(self.pots):
             if pot['planted'] and pot['plant_id'] == item_id:
                 return self.set_slot_pot(index, skin, color)
         if not any(item['id'] == item_id for item in self.collection):
             return False
-        self.flower_pots[item_id] = {'skin': skin, 'color': color}
+        self.flower_pots[item_id] = {'skin': skin, 'color': normalize_pot_color(color)}
         return True
 
     @property
@@ -940,7 +941,7 @@ class Garden:
                 or any(type(key) is not str or key not in data['owned_skins'] for key in data['pot_skins'])):
             raise ValueError('화분별 외형')
         if (not isinstance(data['pot_colors'], list) or len(data['pot_colors']) != len(pots)
-                or any(type(key) is not str or key not in POT_COLORS for key in data['pot_colors'])):
+                or any(not valid_pot_color(key) for key in data['pot_colors'])):
             raise ValueError('화분별 색상')
         if type(data['selected']) is not int or not 0 <= data['selected'] < len(pots):
             raise ValueError('선택 화분')
@@ -957,7 +958,7 @@ class Garden:
         for style in data['flower_pots'].values():
             if (not isinstance(style, dict) or set(style) != {'skin', 'color'}
                     or type(style['skin']) is not str or style['skin'] not in data['owned_skins']
-                    or type(style['color']) is not str or style['color'] not in POT_COLORS):
+                    or not valid_pot_color(style['color'])):
                 raise ValueError('식물별 화분 외형·색상')
         if active_ids & collection_ids:
             raise ValueError('중복 꽃 ID')

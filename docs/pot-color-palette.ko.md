@@ -1,6 +1,6 @@
 # 이슈 #29 · 화분 팔레트 요구·구현 보고
 
-2026-11-06. [이슈 #29](https://github.com/badbed7/morning-bloom/issues/29)의 색상 32개와 UI 제안을 반영한 개발 브랜치다. 현재 공개 배포는 v0.8.20이며 이번 변경은 PR에서 검토한다.
+2026-11-06. [이슈 #29](https://github.com/badbed7/morning-bloom/issues/29)의 색상 32개와 UI 제안을 v0.8.21에 반영한다. [릴리즈 변경 사항](../release/notes/v0.8.21.md).
 
 ## 요구사항과 구현
 

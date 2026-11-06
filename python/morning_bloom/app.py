@@ -29,7 +29,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .cosmetics import POT_COLORS, POT_SKINS, THEMES, garden_theme, pot_skin
+from .pot_colors import pot_color_name
+from .cosmetics import POT_SKINS, THEMES, garden_theme, pot_skin
 from .cosmetic_icons import skin_icon, theme_icon
 from .collection_picker import CollectionPicker
 from .flower_art import paint_potted_flower
@@ -1802,7 +1803,7 @@ class Window(QWidget):
         visible_seeds = {**garden.seeds, 'random': len(garden.mystery_seeds)}
         self.species_picker.update_counts(visible_seeds)
         self.shop_picker.update_counts(visible_seeds)
-        self.pot_style_button.setToolTip('화분 꾸미기 · ' + POT_SKINS[garden.current_skin].name + ' · ' + POT_COLORS[garden.current_color][0])
+        self.pot_style_button.setToolTip('화분 꾸미기 · ' + POT_SKINS[garden.current_skin].name + ' · ' + pot_color_name(garden.current_color))
         self.pot_style_button.setVisible(True)
         self.pot_style_button.setEnabled(True)
         if self._cosmetic_dialog is not None:

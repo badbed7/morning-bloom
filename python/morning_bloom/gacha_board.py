@@ -29,9 +29,9 @@ REWARDS = {
 }
 
 # Explicit stable tier assignment; equal item weights within a tier.
-from .plant_catalog import CATALOG_GACHA_PLANTS, ROSE_VARIETIES, ROSE_GACHA_PLANTS
+from .plant_catalog import CATALOG_GACHA_PLANTS, CATALOG_PLANT_TIERS, ROSE_VARIETIES, ROSE_GACHA_PLANTS
 from .cosmetics import POT_SKINS, THEMES
-PLANT_TIERS = ('SSR', 'SR', 'R', 'SSR', 'SR', 'SR', 'R', 'R')
+PLANT_TIERS = CATALOG_PLANT_TIERS
 REWARDS['plant'] = {tier: tuple(k for k, t in zip(CATALOG_GACHA_PLANTS, PLANT_TIERS) if t == tier)
                     for tier in ('R', 'SR', 'SSR')}
 REWARDS['rose'] = {tier: tuple(k for k in ROSE_GACHA_PLANTS if ROSE_VARIETIES[k][1] == tier)

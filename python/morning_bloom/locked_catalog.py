@@ -112,7 +112,7 @@ class LockedCatalog(QWidget):
         title = QLabel('수집 도감')
         title.setObjectName('section')
         layout.addWidget(title)
-        note = QLabel('식물은 개화하면 영구 기록 · 신규 식물·정원·화분은 꽃길 뽑기로 획득합니다.')
+        note = QLabel('식물은 개화하면 영구 기록 · 민들레 외 모든 식물은 랜덤 씨앗에서도 나와요.')
         note.setObjectName('small')
         note.setWordWrap(True)
         layout.addWidget(note)
@@ -202,9 +202,10 @@ class LockedCatalog(QWidget):
                 if self.category == '식물':
                     state = '발견' if garden and item.key in garden.discovered_plants else '미발견'
                     if item.key in ROSE_GACHA_PLANTS:
-                        state += f' · 장미 뽑기 전용 · 씨앗 {garden.seeds[item.key] if garden else 0}개'
+                        state += f' · 장미 뽑기/랜덤 씨앗 · 씨앗 {garden.seeds[item.key] if garden else 0}개'
                     elif item.key.startswith('catalog_plant_'):
-                        state += ' · 재배 해금' if garden and item.key in garden.unlocked_plants else ' · 식물 뽑기로 해금'
+                        state += ' · 상점 해금' if garden and item.key in garden.unlocked_plants else ' · 식물 뽑기로 상점 해금'
+                        state += ' · 랜덤 씨앗'
                     elif item.key == 'dandelion':
                         state += ' · 홀씨 바람놀이'
                     elif item.key == 'ancient':

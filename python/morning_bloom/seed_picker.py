@@ -7,6 +7,7 @@ from .flower_art import paint_collection_flower
 from .icon_picker import IconPicker
 from .navigation import chevron_icon
 from .plant_catalog import HOUR, PLANTS, REGULAR_PLANTS, SEED_PLANTS, GACHA_PLANTS, SHOP_SEED_PLANTS, ROSE_GACHA_PLANTS, ROSE_VARIETIES, RANDOM_SEED_PRICE, VACATION_PLANTS
+from .plant_catalog import MYSTERY_SEED_SUMMARY
 
 
 def seed_packet_icon(definition=None):
@@ -113,7 +114,7 @@ class SeedPicker(IconPicker):
                 detail = f'{RANDOM_SEED_PRICE}G' if self.shop else f'{count}개'
                 button.setText(f'랜덤\n{detail}')
                 button.setAccessibleName(f'랜덤 씨앗 · {detail} · 보유 {count}개')
-                button.setToolTip('개화 전에는 외관으로만 추측해 보세요.\n고대 씨앗 0.1% · 고대 꽃 기본 판매 500G')
+                button.setToolTip('개화 전에는 외관으로만 추측해 보세요.\n' + MYSTERY_SEED_SUMMARY)
                 continue
             definition = PLANTS[key]
             count = seeds.get(key, 0)
@@ -125,7 +126,7 @@ class SeedPicker(IconPicker):
             button.setToolTip(
                 f'{definition.name} 씨앗 · 보유 {count}개\n'
                 f'성장 {definition.growth_seconds // HOUR}시간'
-                + (f' · {ROSE_VARIETIES[key][1]} · 장미 씨앗 뽑기 전용' if key in ROSE_GACHA_PLANTS else f' · 가격 {definition.seed_price}G')
+                + (f' · {ROSE_VARIETIES[key][1]} · 장미 뽑기 또는 랜덤 씨앗' if key in ROSE_GACHA_PLANTS else f' · 가격 {definition.seed_price}G')
                 + (f'\n{definition.shop_tag}\n설정의 휴가 모드는 성장을 정지합니다.'
                    if key in VACATION_PLANTS else '')
             )

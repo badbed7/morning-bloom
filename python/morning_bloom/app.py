@@ -50,6 +50,8 @@ from .locked_catalog import LockedCatalog
 from .navigation import SlideStack, chevron_icon
 from .plant_catalog import PLANTS, REGULAR_PLANTS, GACHA_PLANTS, ROSE_GACHA_PLANTS, VACATION_PLANTS, WEEKEND_PLANTS, RANDOM_SEED_PRICE, plant_definition
 from .seed_picker import SeedPicker
+from .plant_catalog import MYSTERY_SEED_SUMMARY
+from .random_seed_probabilities import RandomSeedProbabilities
 from .storage import SaveError, Store, migrate
 from .update_client import UpdateClient
 
@@ -161,6 +163,7 @@ class Window(QWidget):
         self._collection_picker = None
         self._cosmetic_dialog = None
         self._gacha_board_window = None
+        self._random_seed_dialog = None
         self._normal_position = QPointF(garden.settings['x'], garden.settings['y']).toPoint()
         self._minimized = False
         self._closing = False
@@ -647,13 +650,13 @@ class Window(QWidget):
             '식물 카탈로그\n'
             + '\n'.join(
                 f'• {item.name}: {format_duration(item.growth_seconds)} · '
-                + ('장미 씨앗 뽑기 전용' if item.key in ROSE_GACHA_PLANTS else f'씨앗 {item.seed_price}G')
+                + ('장미 뽑기/랜덤 씨앗' if item.key in ROSE_GACHA_PLANTS else f'씨앗 {item.seed_price}G')
                 + f' · 판매 {item.sale_price}G'
                 f' (+분무 {item.mist_bonus}G) · {item.shop_tag}'
                 for item in PLANTS.values()
             )
             + '\n• 민들레: 홀씨 바람놀이 완료 보상 · 신규 관엽식물: 식물 뽑기 해금 후 씨앗 구매'
-            + '\n• 랜덤 씨앗 20G · 고대 0.1% · 고대 꽃 기본 판매 500G'
+            + f'\n• 랜덤 씨앗 {RANDOM_SEED_PRICE}G · {MYSTERY_SEED_SUMMARY}'
         )
         catalog.setObjectName('small')
         catalog.setWordWrap(True)
@@ -1214,6 +1217,9 @@ class Window(QWidget):
         self.shop_info.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         layout.addWidget(self.shop_info)
         self.buy_seed_button = self.button(layout, '씨앗 구매', lambda: self.garden.buy_seed(self.shop_picker.selected))
+        self.random_seed_probabilities_button = QPushButton('랜덤 씨앗 확률 보기')
+        self.random_seed_probabilities_button.clicked.connect(self.open_random_seed_probabilities)
+        layout.addWidget(self.random_seed_probabilities_button)
         layout.addWidget(QLabel('화분 확장 · 씨앗은 별도 구매'))
         self.buy_pot_button = self.button(layout, '두 번째 화분 구매 · 150G', self.garden.buy_pot)
         self.leaf_shop_info = QLabel()
@@ -1265,6 +1271,14 @@ class Window(QWidget):
         self.shop_picker.selectionChanged.connect(self.refresh)
         self.theme_picker.selectionChanged.connect(self.refresh)
         self.skin_picker.selectionChanged.connect(self.refresh)
+
+    def open_random_seed_probabilities(self):
+        if self._random_seed_dialog is not None:
+            self._random_seed_dialog.raise_()
+            return
+        self._random_seed_dialog = RandomSeedProbabilities(self)
+        self._random_seed_dialog.finished.connect(lambda _: setattr(self, '_random_seed_dialog', None))
+        self._random_seed_dialog.open()
 
     def open_gacha_board(self):
         if self._gacha_board_window is not None:
@@ -1940,9 +1954,10 @@ class Window(QWidget):
             self.shop_info.setText(self.shop_info.text() + f'\n{purpose} · 접속 없이 개화까지 성장 · 휴가 모드는 꺼 두세요')
         self.buy_seed_button.setText(f'{item.name} 씨앗 구매 · {item.seed_price}G')
         self.buy_seed_button.setEnabled(garden.coins >= item.seed_price and (species not in GACHA_PLANTS or species in garden.unlocked_plants))
+        self.random_seed_probabilities_button.setVisible(species == 'random')
         if species == 'random':
-            self.shop_info.setText('외관으로 정체를 추측해 보세요 · 개화 후 이름 공개\n고대 0.1% · 일반 3종 각 33.3% · 고대 꽃 기본 500G')
-            self.shop_info.setToolTip('구매할 때 결과가 결정·저장됩니다. 고대 꽃 분무 시 550G')
+            self.shop_info.setText('개화 후 이름 공개\n' + MYSTERY_SEED_SUMMARY)
+            self.shop_info.setToolTip('구매할 때 결과가 결정·저장됩니다. 다시 심거나 실행해도 결과는 바뀌지 않아요.')
             self.buy_seed_button.setText(f'랜덤 씨앗 구매 · {RANDOM_SEED_PRICE}G')
             self.buy_seed_button.setEnabled(garden.coins >= RANDOM_SEED_PRICE)
         for picker in (self.species_picker, self.shop_picker):
@@ -1950,7 +1965,7 @@ class Window(QWidget):
                 if key not in picker.buttons:
                     continue
                 if key not in garden.unlocked_plants:
-                    picker.buttons[key].setToolTip('장미 씨앗 뽑기에서 획득하세요.' if key in ROSE_GACHA_PLANTS else '식물 뽑기로 먼저 해금하세요.')
+                    picker.buttons[key].setToolTip('장미 뽑기 또는 랜덤 씨앗에서 획득하세요.' if key in ROSE_GACHA_PLANTS else '식물 뽑기로 상점을 해금하거나 랜덤 씨앗으로 재배하세요.')
                     picker.buttons[key].setEnabled(False)
                 else:
                     picker.buttons[key].setEnabled(True)

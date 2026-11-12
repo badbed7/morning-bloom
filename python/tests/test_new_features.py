@@ -45,12 +45,12 @@ def collected():
 class RulesAndMigration(unittest.TestCase):
     def test_every_ticket_matches_published_tier_and_item_odds(self):
         counts = Counter(roll_mystery_seed(lambda n, ticket=i: ticket) for i in range(MYSTERY_SEED_TICKETS))
-        self.assertEqual(MYSTERY_SEED_TICKETS, 120000)
-        self.assertEqual(counts['ancient'], 120)  # 0.1%, included in SSR.
+        self.assertEqual(MYSTERY_SEED_TICKETS, 15000)
+        self.assertEqual(counts['ancient'], 15)  # 0.1%, included in SSR.
         self.assertEqual(len(counts), 28)
         for key, tier in MYSTERY_SEED_RARITIES.items():
             if key != 'ancient':
-                self.assertEqual(counts[key], {'R': 7000, 'SR': 3000, 'SSR': 1176}[tier])
+                self.assertEqual(counts[key], {'R': 875, 'SR': 375, 'SSR': 147}[tier])
         self.assertNotIn('dandelion', counts)
 
     def test_random_result_survives_reload_and_ancient_sells_for_500(self):

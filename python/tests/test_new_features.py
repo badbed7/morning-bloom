@@ -21,7 +21,8 @@ from morning_bloom.desktop_flowers import DesktopFlowers, sun_positions
 from morning_bloom.desktop_host import DesktopUnavailable
 from morning_bloom.flower_art import paint_collection_flower
 from morning_bloom.model import Garden, V8_FIELDS, V12_FIELDS, V13_FIELDS, FERTILIZER_CAP, REWARD_INTERVAL, empty_pot
-from morning_bloom.plant_catalog import LEGACY_REGULAR_PLANTS, REGULAR_PLANTS, roll_mystery_seed
+from morning_bloom.plant_catalog import (LEGACY_REGULAR_PLANTS, REGULAR_PLANTS, roll_mystery_seed,
+                                         MYSTERY_SEED_TICKETS, MYSTERY_SEED_RARITIES)
 from morning_bloom.storage import SaveError, Store, migrate
 
 NOW = 1_700_000_000
@@ -42,15 +43,21 @@ def collected():
 
 
 class RulesAndMigration(unittest.TestCase):
-    def test_exact_thousand_ticket_odds(self):
-        counts = Counter(roll_mystery_seed(lambda n, ticket=i: ticket) for i in range(1000))
-        self.assertEqual(counts, {'ancient': 1, 'starflower': 333, 'daisy': 333, 'tulip': 333})
+    def test_every_ticket_matches_published_tier_and_item_odds(self):
+        counts = Counter(roll_mystery_seed(lambda n, ticket=i: ticket) for i in range(MYSTERY_SEED_TICKETS))
+        self.assertEqual(MYSTERY_SEED_TICKETS, 15000)
+        self.assertEqual(counts['ancient'], 15)  # 0.1%, included in SSR.
+        self.assertEqual(len(counts), 28)
+        for key, tier in MYSTERY_SEED_RARITIES.items():
+            if key != 'ancient':
+                self.assertEqual(counts[key], {'R': 1000, 'SR': 285, 'SSR': 27}[tier])
+        self.assertNotIn('dandelion', counts)
 
     def test_random_result_survives_reload_and_ancient_sells_for_500(self):
         garden = Garden(NOW, tutorial_used=True, tutorial_reward_claimed=True)
         with patch('morning_bloom.model.secrets.randbelow', return_value=0) as draw:
             self.assertTrue(garden.buy_seed('random'))
-            draw.assert_called_once_with(1000)
+            draw.assert_called_once_with(MYSTERY_SEED_TICKETS)
         self.assertEqual(garden.coins, 100)
         garden = Garden.from_dict(garden.to_dict())
         with patch('morning_bloom.model.secrets.randbelow', side_effect=AssertionError('reroll')):

@@ -1,5 +1,7 @@
 """Data-only plant definitions used by the model and the UI."""
 from dataclasses import dataclass
+from fractions import Fraction
+from math import lcm
 
 DAY = 86400
 HOUR = 3600
@@ -113,16 +115,17 @@ PLANTS['dandelion'] = PlantDefinition(
 )
 
 
-# Gacha unlocks are separate from ordinary shop and mystery-seed pools.
+# Direct shop unlocks remain separate from mystery-seed cultivation.
 from .content_names import PLANT_NAMES
 CATALOG_GACHA_PLANTS = tuple(f'catalog_plant_{i:03}' for i in range(8))
+CATALOG_PLANT_TIERS = ('SSR', 'SR', 'R', 'SSR', 'SR', 'SR', 'R', 'R')
 # hours, seed gold, sale gold: comparable margins to existing flowers.
 GACHA_PLANT_STATS = ((48, 35, 100), (24, 20, 50), (12, 15, 32), (72, 50, 150),
                      (48, 35, 100), (72, 50, 150), (6, 10, 20), (24, 20, 50))
 for i, (key, name, stats) in enumerate(zip(CATALOG_GACHA_PLANTS, PLANT_NAMES, GACHA_PLANT_STATS)):
     hours, price, sale = stats
     PLANTS[key] = PlantDefinition(key, name, hours * HOUR, price, sale, 'start_only',
-        '꽃길 뽑기로 영구 해금 후 씨앗 구매', 18, 26,
+        '식물 뽑기로 상점 해금 · 랜덤 씨앗에서도 재배 가능', 18, 26,
         ('#ece9cf', '#f0ccd9', '#e7dba8', '#ed9eb9', '#f3dfe6', '#40564b', '#aaa08a', '#985c6d')[i],
         '#d3bd74', '#71966a', '#b98665')
 # These are game tiers/weights, not measured natural occurrence probabilities.
@@ -143,7 +146,7 @@ for key in ROSE_GACHA_PLANTS:
     color, tier, petal, spiral, weight = ROSE_VARIETIES[key]
     detail = ' · 특수 육종 모티브' if key == 'rose_blue' else ' · 흑적색 품종 모티브' if key == 'rose_black' else ''
     PLANTS[key] = PlantDefinition(key, color + ' 장미', 3 * DAY, 50, 150, 'start_only',
-        f'{tier} · 장미 씨앗 뽑기 전용{detail}', 18, 26, petal, spiral, '#719460', '#c98c67')
+        f'{tier} · 장미 뽑기 또는 랜덤 씨앗{detail}', 18, 26, petal, spiral, '#719460', '#c98c67')
 # Freeze the old inventory shape for lossless schema-19 migration.
 V19_SEED_PLANTS = REGULAR_PLANTS + CATALOG_GACHA_PLANTS
 GACHA_PLANTS = CATALOG_GACHA_PLANTS + ROSE_GACHA_PLANTS
@@ -151,12 +154,48 @@ SEED_PLANTS = V19_SEED_PLANTS + ROSE_GACHA_PLANTS
 SHOP_SEED_PLANTS = V19_SEED_PLANTS
 
 
+# Mystery seeds include every plant except the wind-game reward. Existing gacha
+# tiers are shared; these rates are independent of board positions and pity.
+MYSTERY_SEED_RARITIES = {
+    'starflower': 'R', 'daisy': 'R', 'tulip': 'R', 'rose': 'R',
+    'clover': 'R', 'forget_me_not': 'R',
+    'pansy': 'SR', 'cosmos': 'SR', 'freesia': 'SR',
+    'sunflower': 'SR', 'lavender': 'SR', 'lily_of_the_valley': 'SSR',
+    **dict(zip(CATALOG_GACHA_PLANTS, CATALOG_PLANT_TIERS)),
+    **{key: ROSE_VARIETIES[key][1] for key in ROSE_GACHA_PLANTS},
+    'ancient': 'SSR',
+}
+MYSTERY_SEED_TIER_PROBABILITIES = {
+    'R': Fraction(80, 100), 'SR': Fraction(19, 100), 'SSR': Fraction(1, 100),
+}
+# Ancient keeps its original 0.1% of all purchases, included in the SSR 1%.
+MYSTERY_SEED_PROBABILITIES = {'ancient': Fraction(1, 1000)}
+for _tier, _chance in MYSTERY_SEED_TIER_PROBABILITIES.items():
+    _pool = tuple(key for key, tier in MYSTERY_SEED_RARITIES.items()
+                  if tier == _tier and key != 'ancient')
+    _remaining = _chance - (MYSTERY_SEED_PROBABILITIES['ancient'] if _tier == 'SSR' else 0)
+    MYSTERY_SEED_PROBABILITIES.update(dict.fromkeys(_pool, _remaining / len(_pool)))
+MYSTERY_SEED_TICKETS = lcm(*(rate.denominator for rate in MYSTERY_SEED_PROBABILITIES.values()))
+MYSTERY_SEED_WEIGHTS = {
+    key: int(rate * MYSTERY_SEED_TICKETS) for key, rate in MYSTERY_SEED_PROBABILITIES.items()
+}
+MYSTERY_SEED_SUMMARY = (
+    f'민들레 제외 {len(MYSTERY_SEED_RARITIES)}종\n'
+    + ' · '.join(f'{tier} {float(rate * 100):g}%' for tier, rate in MYSTERY_SEED_TIER_PROBABILITIES.items())
+    + '\nSSR에 고대 꽃 0.1% 포함'
+)
+
+
 def roll_mystery_seed(draw):
-    """Exactly one of 1,000 equally likely tickets is ancient."""
-    ticket = draw(1000)
-    if ticket == 0:
-        return 'ancient'
-    return ('starflower', 'daisy', 'tulip')[(ticket - 1) // 333]
+    """One exact draw at purchase, using the same rates as the public table."""
+    ticket = draw(MYSTERY_SEED_TICKETS)
+    if type(ticket) is not int or not 0 <= ticket < MYSTERY_SEED_TICKETS:
+        raise ValueError('랜덤 씨앗 추첨값 범위')
+    for key, weight in MYSTERY_SEED_WEIGHTS.items():
+        ticket -= weight
+        if ticket < 0:
+            return key
+    raise ValueError('랜덤 씨앗 확률 합계')
 
 
 def plant_definition(species: str) -> PlantDefinition:

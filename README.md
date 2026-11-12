@@ -4,6 +4,8 @@
 
 **목표: Python + PySide6 / 2D 전용 / Windows 우선**
 
+v0.8.22는 랜덤 씨앗에 민들레 제외 28종을 추가합니다. 20G로 R 80% / SR 19% / SSR 1%를 추첨하며, 고대 꽃 0.1%는 SSR에 포함됩니다. 상점에서 품종별 확률을 확인할 수 있고 기존 씨앗·재배·저장을 보존합니다. [전체 품종·확률](docs/random-seed-probabilities.ko.md) · [릴리스 변경 사항](release/notes/v0.8.22.md).
+
 v0.8.21은 뉴트럴·어스톤·파스텔·딥 32색 화분 팔레트와 색상칩·HEX 입력·컬러 피커를 제공합니다. 기존 색상과 식물별 화분 설정을 유지하며 기본 토분에 미세 입자 질감을 적용했습니다. [32색·실제 화면·사용 방법](docs/pot-color-palette.ko.md) · [릴리스 변경 사항](release/notes/v0.8.21.md) · [업데이트 사용 방법](docs/live-update.ko.md).
 
 **Python 실행:** Release의 Python-BAT ZIP을 풀고 `run-python.bat`으로 실행하세요. 매번 GitHub 최신 버전을 확인하고 기존 정원을 유지하며 업데이트합니다. [Python 실행 방법·구현 상태](python/README.md)를 확인하세요.

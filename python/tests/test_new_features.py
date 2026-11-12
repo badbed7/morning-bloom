@@ -50,7 +50,7 @@ class RulesAndMigration(unittest.TestCase):
         self.assertEqual(len(counts), 28)
         for key, tier in MYSTERY_SEED_RARITIES.items():
             if key != 'ancient':
-                self.assertEqual(counts[key], {'R': 875, 'SR': 375, 'SSR': 147}[tier])
+                self.assertEqual(counts[key], {'R': 1000, 'SR': 285, 'SSR': 27}[tier])
         self.assertNotIn('dandelion', counts)
 
     def test_random_result_survives_reload_and_ancient_sells_for_500(self):

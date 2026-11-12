@@ -166,9 +166,9 @@ MYSTERY_SEED_RARITIES = {
     'ancient': 'SSR',
 }
 MYSTERY_SEED_TIER_PROBABILITIES = {
-    'R': Fraction(70, 100), 'SR': Fraction(25, 100), 'SSR': Fraction(5, 100),
+    'R': Fraction(80, 100), 'SR': Fraction(19, 100), 'SSR': Fraction(1, 100),
 }
-# Ancient keeps its original 0.1% of all purchases, included in the SSR 5%.
+# Ancient keeps its original 0.1% of all purchases, included in the SSR 1%.
 MYSTERY_SEED_PROBABILITIES = {'ancient': Fraction(1, 1000)}
 for _tier, _chance in MYSTERY_SEED_TIER_PROBABILITIES.items():
     _pool = tuple(key for key, tier in MYSTERY_SEED_RARITIES.items()

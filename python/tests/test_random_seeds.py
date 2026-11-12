@@ -27,7 +27,7 @@ class MysterySeedRules(unittest.TestCase):
         self.assertEqual(sum(MYSTERY_SEED_PROBABILITIES.values()), 1)
         self.assertTrue(all(rate > 0 for rate in MYSTERY_SEED_PROBABILITIES.values()))
         expected_tier_counts = {'R': 12, 'SR': 10, 'SSR': 6}
-        for tier, chance in {'R': Fraction(7, 10), 'SR': Fraction(1, 4), 'SSR': Fraction(1, 20)}.items():
+        for tier, chance in {'R': Fraction(4, 5), 'SR': Fraction(19, 100), 'SSR': Fraction(1, 100)}.items():
             keys = [key for key, rarity in MYSTERY_SEED_RARITIES.items() if rarity == tier]
             self.assertEqual(len(keys), expected_tier_counts[tier])
             self.assertEqual(sum(MYSTERY_SEED_PROBABILITIES[key] for key in keys), chance)
@@ -125,9 +125,11 @@ class MysterySeedInterface(unittest.TestCase):
                 self.assertEqual(dialog.table.rowCount(), 28)
                 rows = {dialog.table.item(row, 0).text(): row for row in range(28)}
                 self.assertNotIn('민들레', rows)
+                self.assertEqual(dialog.table.item(rows['별꽃'], 2).text(), '6.6667%')
+                self.assertEqual(dialog.table.item(rows['팬지'], 2).text(), '1.9%')
                 self.assertEqual(dialog.table.item(rows['고대 꽃'], 2).text(), '0.1%')
-                self.assertEqual(dialog.table.item(rows['파랑 장미'], 2).text(), '0.98%')
-                self.assertTrue(any('SSR 5%' in label.text() for label in dialog.findChildren(QLabel)))
+                self.assertEqual(dialog.table.item(rows['파랑 장미'], 2).text(), '0.18%')
+                self.assertTrue(any('R 80% · SR 19% · SSR 1%' in label.text() for label in dialog.findChildren(QLabel)))
                 self.assertEqual(garden.to_dict(), before)
                 window.open_random_seed_probabilities()
                 self.assertIs(window._random_seed_dialog, dialog)
